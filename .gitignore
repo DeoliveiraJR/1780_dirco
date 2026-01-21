@@ -1,0 +1,55 @@
+# Ambiente Virtual
+venv/
+env/
+ENV/
+
+# Arquivos de cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribuições
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Variáveis de ambiente
+.env
+.env.local
+
+# Arquivos de dados locais
+data/raw/projecoes_financeiras.xlsx
+data/processed/
+
+# Streamlit
+.streamlit/
+
+# Log files
+*.log
+logs/
+
+# Mock data temporário
+*.tmp
