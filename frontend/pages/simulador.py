@@ -1,21 +1,20 @@
-"""
-Página de Simulador
-"""
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import json
+import sys
+import os
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from data_manager import adicionar_simulacao, get_simulacoes, deletar_simulacao
 
 def renderizar():
-    """Renderiza página do simulador"""
-    
-    st.markdown("### 🎯 Simulador de Projeções")
+    st.markdown("# 🎯 Simulador de Projecoes")
     st.markdown("---")
     
-    # Abas principais
-    tab1, tab2, tab3 = st.tabs(["➕ Nova Simulação", "📁 Minhas Simulações", "⚙️ Configurações"])
+    tab1, tab2, tab3 = st.tabs(["➕ Nova Simulacao", "📋 Minhas Simulacoes", "📊 Analise"])
     
     with tab1:
         nova_simulacao()
@@ -24,265 +23,377 @@ def renderizar():
         minhas_simulacoes()
     
     with tab3:
-        configuracoes_simulador()
+        analise_comparativa()
 
 
 def nova_simulacao():
-    """Interface para criar nova simulação"""
-    
-    col_form, col_preview = st.columns([1.5, 1])
+    """Aba para criar nova simulação"""
+    col_form, col_preview = st.columns([1, 1.5], gap="large")
     
     with col_form:
-        st.markdown("#### Dados da Simulação")
+        st.markdown("#### Dados da Simulacao")
         
-        nome_simulacao = st.text_input(
-            "Nome da Simulação",
-            placeholder="Ex: Simulação Q1 2025",
-            help="Nome descritivo para identificar a simulação"
+        nome = st.text_input(
+            "Nome da Simulacao",
+            value="Ex: Simulacao Q1 2025",
+            placeholder="Digite um nome descritivo"
         )
         
-        descricao = st.text_area(
-            "Descrição",
-            placeholder="Descreva os ajustes realizados nesta simulação",
-            height=80
+        categoria = st.selectbox(
+            "Categoria",
+            ["Credito PF", "Credito PJ", "Investimentos", "Seguros", "Cambio"]
         )
         
-        st.markdown("#### Parâmetros de Ajuste")
+        produto = st.selectbox(
+            "Produto",
+            ["Credito Pessoal", "Emprestimo", "Fundo de Investimento", "Seguro Residencial", "Dolar"]
+        )
         
-        col_param1, col_param2 = st.columns(2)
+        st.markdown("**Parametros de Simulacao**")
         
-        with col_param1:
-            categoria = st.selectbox(
-                "Categoria",
-                ["Pessoa Física", "Pessoa Jurídica", "Financiamento Imobiliário",
-                 "Cartão de Crédito", "Empréstimo Pessoal", "Renda Fixa"]
-            )
+        taxa_crescimento = st.slider(
+            "Taxa de Crescimento (%)",
+            min_value=-20,
+            max_value=50,
+            value=10,
+            step=1
+        )
         
-        with col_param2:
-            periodo = st.select_slider(
-                "Período (Meses)",
-                options=list(range(1, 13)),
-                value=(1, 12)
-            )
+        volatilidade = st.slider(
+            "Volatilidade (%)",
+            min_value=0,
+            max_value=30,
+            value=5,
+            step=1
+        )
         
-        st.markdown("#### Ajustes de Valores")
-        
-        col_adj1, col_adj2 = st.columns(2)
-        
-        with col_adj1:
-            taxa_crescimento = st.slider(
-                "Taxa de Crescimento (%)",
-                min_value=-20,
-                max_value=50,
-                value=5,
-                step=1
-            )
-        
-        with col_adj2:
-            volatilidade = st.slider(
-                "Volatilidade (%)",
-                min_value=0,
-                max_value=30,
-                value=5,
-                step=1
-            )
-        
-        st.markdown("#### Cenários")
-        
-        col_cen1, col_cen2, col_cen3 = st.columns(3)
-        
-        with col_cen1:
+        st.markdown("**Cenarios**")
+        col_c1, col_c2, col_c3 = st.columns(3)
+        with col_c1:
             otimista = st.checkbox("Otimista (+10%)", value=False)
-        
-        with col_cen2:
-            realista = st.checkbox("Realista", value=True)
-        
-        with col_cen3:
+        with col_c2:
+            realista = st.checkbox("Realista (Base)", value=True)
+        with col_c3:
             pessimista = st.checkbox("Pessimista (-10%)", value=False)
+        
+        cenarios = {
+            "Otimista": otimista,
+            "Realista": realista,
+            "Pessimista": pessimista
+        }
         
         st.markdown("---")
         
-        col_btn1, col_btn2 = st.columns(2)
-        
-        with col_btn1:
-            if st.button("✓ Salvar Simulação", use_container_width=True, type="primary"):
-                if nome_simulacao:
-                    st.success(f"✓ Simulação '{nome_simulacao}' salva com sucesso!")
-                    st.balloons()
-                else:
-                    st.error("Por favor, digite um nome para a simulação")
-        
-        with col_btn2:
-            if st.button("🔄 Limpar Formulário", use_container_width=True):
-                st.rerun()
+        if st.button("💾 Salvar Simulacao", use_container_width=True, type="primary"):
+            # Gerar dados do gráfico
+            meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun']
+            base_value = 1000
+            
+            dados_grafico = {}
+            for cenario, ativo in cenarios.items():
+                if ativo:
+                    if cenario == "Otimista":
+                        valores = [base_value * (1 + (taxa_crescimento + 10) / 100) ** (i / 6) for i in range(len(meses))]
+                    elif cenario == "Pessimista":
+                        valores = [base_value * (1 + (taxa_crescimento - 10) / 100) ** (i / 6) for i in range(len(meses))]
+                    else:  # Realista
+                        valores = [base_value * (1 + taxa_crescimento / 100) ** (i / 6) for i in range(len(meses))]
+                    
+                    dados_grafico[cenario] = [float(v) for v in valores]
+            
+            sim = adicionar_simulacao(
+                nome=nome,
+                categoria=categoria,
+                produto=produto,
+                taxa_crescimento=taxa_crescimento,
+                volatilidade=volatilidade,
+                cenarios=cenarios,
+                dados_grafico=dados_grafico
+            )
+            
+            st.success(f"✅ Simulacao '{nome}' salva com sucesso!")
+            st.balloons()
     
     with col_preview:
-        st.markdown("#### 📊 Prévia")
+        st.markdown("#### 📊 Previa da Projecao")
         
-        if nome_simulacao:
-            st.info(f"""
-            **Simulação:** {nome_simulacao}
-            
-            **Categoria:** {categoria}
-            
-            **Período:** Mês {periodo[0]} a {periodo[1]}
-            
-            **Crescimento:** {taxa_crescimento}%
-            
-            **Volatilidade:** {volatilidade}%
-            
-            **Cenários:** {'Otimista ' if otimista else ''}{'Realista ' if realista else ''}{'Pessimista' if pessimista else ''}
-            """)
-        else:
-            st.info("Preencha os dados ao lado para ver a prévia")
+        # Gerar dados para preview
+        meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun']
+        base_value = 1000
         
-        # Gráfico de simulação
-        st.markdown("#### Gráfico Simulado")
-        fig = criar_grafico_simulacao()
+        # Calcular valores para cada cenário
+        y_realista = [base_value * (1 + taxa_crescimento / 100) ** (i / 6) for i in range(len(meses))]
+        y_otimista = [base_value * (1 + (taxa_crescimento + 10) / 100) ** (i / 6) for i in range(len(meses))]
+        y_pessimista = [base_value * (1 + (taxa_crescimento - 10) / 100) ** (i / 6) for i in range(len(meses))]
+        
+        # Criar figura com Plotly
+        fig = go.Figure()
+        
+        fig.add_trace(go.Scatter(
+            x=meses, y=y_realista,
+            name='Realista',
+            line=dict(color='#06b6d4', width=3),
+            mode='lines+markers'
+        ))
+        
+        if True:  # Sempre mostrar os três cenários na preview
+            fig.add_trace(go.Scatter(
+                x=meses, y=y_otimista,
+                name='Otimista',
+                line=dict(color='#06b6d4', width=2, dash='dash'),
+                mode='lines+markers'
+            ))
+            
+            fig.add_trace(go.Scatter(
+                x=meses, y=y_pessimista,
+                name='Pessimista',
+                line=dict(color='#ec4899', width=2, dash='dot'),
+                mode='lines+markers'
+            ))
+        
+        fig.update_layout(
+            height=400,
+            margin=dict(l=0, r=0, t=20, b=0),
+            hovermode='x unified',
+            plot_bgcolor='rgba(240, 249, 252, 0.5)',
+            paper_bgcolor='rgba(255, 255, 255, 0)',
+            showlegend=True,
+            legend=dict(x=0.02, y=0.98)
+        )
+        
         st.plotly_chart(fig, use_container_width=True)
+        
+        # Tabela de valores
+        st.markdown("#### Valores Projetados")
+        
+        tabela_dados = {
+            'Mes': meses,
+            'Realista': [f'R$ {v:,.0f}' for v in y_realista],
+            'Otimista': [f'R$ {v:,.0f}' for v in y_otimista],
+            'Pessimista': [f'R$ {v:,.0f}' for v in y_pessimista]
+        }
+        
+        df_preview = pd.DataFrame(tabela_dados)
+        st.dataframe(df_preview, use_container_width=True, hide_index=True)
 
 
 def minhas_simulacoes():
-    """Exibe simulações salvas do usuário"""
+    """Aba para exibir simulações salvas"""
+    simulacoes = get_simulacoes()
     
-    st.markdown("#### Suas Simulações Salvas")
+    if not simulacoes:
+        st.info("📭 Nenhuma simulacao salva ainda. Crie uma na aba 'Nova Simulacao'")
+        return
     
-    simulacoes_exemplo = [
-        {
-            'Nome': 'Simulação Q1 2025',
-            'Data': '15/01/2025',
-            'Categoria': 'Pessoa Física',
-            'Status': '✓ Ativa'
-        },
-        {
-            'Nome': 'Simulação Cenário Pessimista',
-            'Data': '10/01/2025',
-            'Categoria': 'Cartão de Crédito',
-            'Status': '✓ Ativa'
-        },
-        {
-            'Nome': 'Simulação Baseline 2024',
-            'Data': '01/12/2024',
-            'Categoria': 'Renda Fixa',
-            'Status': 'Inativa'
-        }
-    ]
+    st.markdown(f"#### Total de Simulacoes: {len(simulacoes)}")
     
-    df_simulacoes = pd.DataFrame(simulacoes_exemplo)
+    # Criar DataFrame com simulações
+    dados_sim = []
+    for sim in simulacoes:
+        dados_sim.append({
+            'Nome': sim['nome'],
+            'Categoria': sim['categoria'],
+            'Produto': sim['produto'],
+            'Taxa': f"{sim['taxa_crescimento']}%",
+            'Volatilidade': f"{sim['volatilidade']}%",
+            'Status': sim['status'],
+            'ID': sim['id']
+        })
     
-    col_search = st.columns(1)[0]
-    with col_search:
-        busca = st.text_input("🔍 Buscar simulação", placeholder="Digite o nome da simulação")
+    df_sim = pd.DataFrame(dados_sim)
     
-    if busca:
-        df_simulacoes = df_simulacoes[df_simulacoes['Nome'].str.contains(busca, case=False)]
-    
-    if len(df_simulacoes) > 0:
-        for idx, sim in df_simulacoes.iterrows():
-            col_info, col_actions = st.columns([4, 1])
-            
-            with col_info:
-                st.markdown(f"""
-                **{sim['Nome']}**
-                
-                Data: {sim['Data']} | Categoria: {sim['Categoria']} | {sim['Status']}
-                """)
-            
-            with col_actions:
-                col_edit, col_delete = st.columns(2)
-                
-                with col_edit:
-                    if st.button("✏️", key=f"edit_{idx}"):
-                        st.info(f"Editando: {sim['Nome']}")
-                
-                with col_delete:
-                    if st.button("🗑️", key=f"delete_{idx}"):
-                        st.warning(f"Deletar: {sim['Nome']}?")
-            
-            st.markdown("---")
-    else:
-        st.info("Nenhuma simulação encontrada")
-
-
-def configuracoes_simulador():
-    """Configurações do simulador"""
-    
-    st.markdown("#### Configurações do Simulador")
-    
-    col_config1, col_config2 = st.columns(2)
-    
-    with col_config1:
-        st.markdown("##### Precisão de Cálculo")
-        precisao = st.select_slider(
-            "Nível de Precisão",
-            options=['Baixa', 'Média', 'Alta'],
-            value='Média',
-            label_visibility="collapsed"
-        )
-    
-    with col_config2:
-        st.markdown("##### Modo de Simulação")
-        modo = st.selectbox(
-            "Modo",
-            ['Simulação Rápida', 'Simulação Detalhada', 'Simulação Avançada'],
-            label_visibility="collapsed"
-        )
-    
-    st.markdown("---")
-    
-    st.markdown("##### Preferências")
-    
-    col_pref1, col_pref2 = st.columns(2)
-    
-    with col_pref1:
-        auto_salvar = st.checkbox("Auto-salvar simulações", value=True)
-    
-    with col_pref2:
-        notificacoes = st.checkbox("Ativar notificações", value=True)
-    
-    st.markdown("---")
-    
-    if st.button("💾 Salvar Configurações", use_container_width=True, type="primary"):
-        st.success("✓ Configurações salvas com sucesso!")
-
-
-def criar_grafico_simulacao():
-    """Cria gráfico de simulação"""
-    
-    meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun']
-    base = [1000, 1050, 1102, 1157, 1215, 1276]
-    otimista = [1100, 1165, 1237, 1316, 1401, 1494]
-    pessimista = [900, 935, 972, 1011, 1052, 1096]
-    
-    fig = go.Figure()
-    
-    fig.add_trace(go.Scatter(
-        x=meses, y=base,
-        mode='lines+markers',
-        name='Realista',
-        line=dict(color='#2e8b57', width=3)
-    ))
-    
-    fig.add_trace(go.Scatter(
-        x=meses, y=otimista,
-        mode='lines+markers',
-        name='Otimista',
-        line=dict(color='#1f4788', width=2, dash='dot')
-    ))
-    
-    fig.add_trace(go.Scatter(
-        x=meses, y=pessimista,
-        mode='lines+markers',
-        name='Pessimista',
-        line=dict(color='#ff6b6b', width=2, dash='dash')
-    ))
-    
-    fig.update_layout(
-        hovermode='x unified',
-        template='plotly_white',
-        height=300,
-        font=dict(size=10),
-        margin=dict(l=0, r=0, t=0, b=0)
+    # Exibir tabela
+    st.dataframe(
+        df_sim.drop('ID', axis=1),
+        use_container_width=True,
+        hide_index=True
     )
     
-    return fig
+    st.markdown("---")
+    
+    # Selecionar simulação para deletar
+    sim_para_deletar = st.selectbox(
+        "Selecione uma simulacao para deletar:",
+        [f"{sim['nome']} (ID: {sim['id']})" for sim in simulacoes],
+        key="select_delete"
+    )
+    
+    if st.button("🗑️ Deletar Simulacao", type="secondary"):
+        sim_id = int(sim_para_deletar.split('(ID: ')[1].rstrip(')'))
+        deletar_simulacao(sim_id)
+        st.success("✅ Simulacao deletada com sucesso!")
+        st.rerun()
+
+
+def analise_comparativa():
+    """Aba para análise comparativa com gráfico interativo"""
+    st.markdown("#### 📊 Análise Comparativa - Gráfico Interativo")
+    
+    col_grafico, col_tabela = st.columns([1.5, 1], gap="large")
+    
+    with col_grafico:
+        st.markdown("**Gráfico Interativo - Zoom, Pan e Análise**")
+        
+        # Dados iniciais
+        meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun']
+        
+        # Valores iniciais
+        y_realista = [1000, 1100, 1210, 1331, 1464, 1610]
+        y_otimista = [1000, 1150, 1322, 1521, 1750, 2013]
+        y_pessimista = [1000, 950, 902, 857, 814, 773]
+        
+        # Criar figura com Plotly (funciona melhor no Streamlit)
+        fig = go.Figure()
+        
+        # Linha Realista
+        fig.add_trace(go.Scatter(
+            x=meses, y=y_realista,
+            name='Realista',
+            line=dict(color='#06b6d4', width=4),
+            mode='lines+markers',
+            marker=dict(size=10)
+        ))
+        
+        # Linha Otimista (tracejada)
+        fig.add_trace(go.Scatter(
+            x=meses, y=y_otimista,
+            name='Otimista',
+            line=dict(color='#06b6d4', width=2, dash='dash'),
+            mode='lines+markers',
+            marker=dict(size=8)
+        ))
+        
+        # Linha Pessimista (pontilhada)
+        fig.add_trace(go.Scatter(
+            x=meses, y=y_pessimista,
+            name='Pessimista',
+            line=dict(color='#ec4899', width=2, dash='dot'),
+            mode='lines+markers',
+            marker=dict(size=8)
+        ))
+        
+        # Customizar layout
+        fig.update_layout(
+            title="Projeção de Valores - Cenários (Arrastar para Zoom, Duplo-clique para Reset)",
+            height=450,
+            hovermode='x unified',
+            plot_bgcolor='rgba(240, 249, 252, 0.5)',
+            paper_bgcolor='rgba(255, 255, 255, 0)',
+            font=dict(family="Arial, sans-serif", size=12),
+            xaxis=dict(
+                showgrid=True,
+                gridwidth=1,
+                gridcolor='rgba(200, 200, 200, 0.2)'
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridwidth=1,
+                gridcolor='rgba(200, 200, 200, 0.2)'
+            ),
+            legend=dict(
+                x=0.02,
+                y=0.98,
+                bgcolor='rgba(255, 255, 255, 0.8)',
+                bordercolor='#06b6d4',
+                borderwidth=1
+            )
+        )
+        
+        # Exibir figura
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.info("💡 **Dica Interativa:** \n"
+                "- 🔍 Arraste para fazer zoom\n"
+                "- 📍 Duplo-clique para resetar\n"
+                "- 👆 Passe o mouse para ver valores exatos")
+    
+    with col_tabela:
+        st.markdown("**Valores Projetados**")
+        
+        tabela_comp = {
+            'Mes': meses,
+            'Realista': y_realista,
+            'Otimista': y_otimista,
+            'Pessimista': y_pessimista
+        }
+        
+        df_comp = pd.DataFrame(tabela_comp)
+        
+        # Formatar com cores
+        st.dataframe(
+            df_comp,
+            use_container_width=True,
+            hide_index=True,
+            height=400
+        )
+        
+        st.markdown("---")
+        st.markdown("**Estatísticas**")
+        
+        col_stat1, col_stat2 = st.columns(2)
+        with col_stat1:
+            st.metric(
+                "Variação Realista",
+                f"{((y_realista[-1] - y_realista[0]) / y_realista[0] * 100):.1f}%",
+                delta=f"+R$ {y_realista[-1] - y_realista[0]:,.0f}"
+            )
+            st.metric(
+                "Variação Otimista",
+                f"{((y_otimista[-1] - y_otimista[0]) / y_otimista[0] * 100):.1f}%",
+                delta=f"+R$ {y_otimista[-1] - y_otimista[0]:,.0f}"
+            )
+        
+        with col_stat2:
+            st.metric(
+                "Variação Pessimista",
+                f"{((y_pessimista[-1] - y_pessimista[0]) / y_pessimista[0] * 100):.1f}%",
+                delta=f"+R$ {y_pessimista[-1] - y_pessimista[0]:,.0f}"
+            )
+            st.metric(
+                "Diferenca O/P",
+                f"R$ {y_otimista[-1] - y_pessimista[-1]:,.0f}",
+                delta=f"{((y_otimista[-1] - y_pessimista[-1]) / y_pessimista[-1] * 100):.1f}%"
+            )
+    
+    st.markdown("---")
+    
+    st.markdown("#### 💾 Salvar Simulacao Editada")
+    
+    col_save1, col_save2 = st.columns([2, 1])
+    
+    with col_save1:
+        nome_salvar = st.text_input(
+            "Nome para salvar esta simulacao",
+            value="Simulacao Analise Q1",
+            key="nome_save"
+        )
+    
+    with col_save2:
+        if st.button("💾 Salvar", use_container_width=True, type="primary"):
+            dados_grafico = {
+                "Realista": y_realista,
+                "Otimista": y_otimista,
+                "Pessimista": y_pessimista
+            }
+            
+            sim = adicionar_simulacao(
+                nome=nome_salvar,
+                categoria="Analise Comparativa",
+                produto="Multiplo",
+                taxa_crescimento=10,
+                volatilidade=5,
+                cenarios={"Realista": True, "Otimista": True, "Pessimista": True},
+                dados_grafico=dados_grafico
+            )
+            
+            st.success(f"✅ Simulacao salva com sucesso!")
+            
+            # Salvar no localStorage
+            js_code = f"""
+            <script>
+                const simulacao = {json.dumps(sim, default=str)};
+                localStorage.setItem('ultima_simulacao', JSON.stringify(simulacao));
+                console.log('Simulação salva no localStorage:', simulacao.nome);
+            </script>
+            """
+            st.components.v1.html(js_code, height=0)

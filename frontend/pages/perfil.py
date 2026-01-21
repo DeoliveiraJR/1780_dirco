@@ -4,6 +4,9 @@ Página de Perfil do Usuário
 
 import streamlit as st
 from datetime import datetime
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def renderizar():
