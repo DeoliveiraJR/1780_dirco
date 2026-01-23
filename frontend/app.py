@@ -46,70 +46,51 @@ else:
         <style>
             [data-testid="stSidebarNav"] {display: none;}
             [data-testid="collapsedControl"] {display: none;}
+            section[data-testid="stSidebar"] > div {padding-top: 2rem;}
         </style>
         """, unsafe_allow_html=True)
         
-        # ============== HEADER COM LOGO E TITULO ==============
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #0c3a66 0%, #06b6d4 100%); 
-                    padding: 30px 20px; 
-                    border-radius: 16px; 
-                    margin-bottom: 25px;
-                    text-align: center;
-                    box-shadow: 0 8px 16px rgba(0,0,0,0.15);">
-        """, unsafe_allow_html=True)
+        # ============== HEADER CLEAN ==============
+        st.markdown('<div style="text-align: center; margin-bottom: 30px;">', unsafe_allow_html=True)
         
-        # Logo centralizada
+        # Logo
         if logo_image:
-            col_center = st.columns([0.25, 0.5, 0.25])
-            with col_center[1]:
+            col_logo = st.columns([0.2, 0.6, 0.2])
+            with col_logo[1]:
                 st.image(logo_image, use_container_width=True)
         else:
-            st.markdown("""
-            <div style="font-size: 48px; margin: 0;">
-                🏢
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown('<div style="font-size: 64px; margin: 20px 0;">🏢</div>', unsafe_allow_html=True)
         
         st.markdown("""
-            <h2 style="margin: 20px 0 8px 0; color: white; font-size: 26px; font-weight: 700; letter-spacing: 1px;">
+            <h1 style="margin: 20px 0 8px 0; color: #0c3a66; font-size: 28px; font-weight: 800; letter-spacing: 2px;">
                 UAN DASHBOARD
-            </h2>
-            <p style="margin: 0; color: rgba(255,255,255,0.9); font-size: 14px; font-weight: 400;">
+            </h1>
+            <p style="margin: 0 0 20px 0; color: #475569; font-size: 13px; font-weight: 500;">
                 Sistema de Análise Financeira
             </p>
         </div>
         """, unsafe_allow_html=True)
         
         if not logo_image:
-            st.info("💡 **Logo:** Adicione um arquivo `logo.png` em `/frontend/images/`")
+            st.caption("💡 Adicione logo.png em /frontend/images/")
         
-        st.markdown("")
+        st.markdown('<div style="height: 10px;"></div>', unsafe_allow_html=True)
         
-        # ============== SEÇÃO DO USUÁRIO COM AVATAR ==============
+        # ============== USUÁRIO ==============
         st.markdown("""
-        <div style="background: linear-gradient(135deg, #ecf0f1 0%, #bdc3c7 100%); 
-                    padding: 15px; 
-                    border-radius: 10px;
-                    border-left: 4px solid #06b6d4;
-                    margin-bottom: 20px;
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;">
-            <div style="width: 50px; height: 50px; background: linear-gradient(135deg, #06b6d4, #a855f7); 
-                        border-radius: 50%; 
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        font-size: 24px;
-                        color: white;
-                        font-weight: bold;
-                        flex-shrink: 0;">
+        <div style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); 
+                    padding: 16px; border-radius: 12px; border-left: 4px solid #06b6d4;
+                    margin-bottom: 25px; display: flex; align-items: center; gap: 14px;">
+            <div style="width: 52px; height: 52px; 
+                        background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); 
+                        border-radius: 50%; display: flex; align-items: center;
+                        justify-content: center; font-size: 26px; flex-shrink: 0;
+                        box-shadow: 0 4px 6px rgba(6, 182, 212, 0.3);">
                 👤
             </div>
             <div>
-                <p style="margin: 0; font-size: 11px; color: #7f8c8d; font-weight: 600;">USUÁRIO LOGADO</p>
-                <p style="margin: 5px 0 0 0; font-size: 14px; color: #0c3a66; font-weight: 700;">
+                <p style="margin: 0; font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">USUÁRIO</p>
+                <p style="margin: 4px 0 0 0; font-size: 15px; color: #0c3a66; font-weight: 700;">
         """ + st.session_state.usuario.split("@")[0].capitalize() + """
                 </p>
             </div>
@@ -118,52 +99,53 @@ else:
         
         st.markdown("---")
         
-        # ============== MENU DE NAVEGAÇÃO COM ÍCONES SVG ==============
+        # ============== NAVEGAÇÃO ==============
         st.markdown("""
         <style>
-            /* Esconder radio buttons padrão */
-            div[role="radiogroup"] label {
-                padding: 12px 16px !important;
-                border-radius: 8px !important;
-                margin: 4px 0 !important;
-                cursor: pointer !important;
-                transition: all 0.3s ease !important;
+            div[data-testid="stRadio"] > div {gap: 8px !important;}
+            div[data-testid="stRadio"] label {
                 background: transparent !important;
+                padding: 14px 18px !important;
+                border-radius: 10px !important;
+                border: 2px solid transparent !important;
+                cursor: pointer !important;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                font-size: 15px !important;
+                font-weight: 500 !important;
+                color: #475569 !important;
+                margin: 0 !important;
             }
-            div[role="radiogroup"] label:hover {
-                background: rgba(6, 182, 212, 0.1) !important;
+            div[data-testid="stRadio"] label:hover {
+                background: rgba(6, 182, 212, 0.08) !important;
+                border-color: rgba(6, 182, 212, 0.3) !important;
+                transform: translateX(4px);
             }
-            div[role="radiogroup"] label[data-checked="true"] {
+            div[data-testid="stRadio"] label[data-checked="true"] {
                 background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%) !important;
                 color: white !important;
                 font-weight: 600 !important;
+                border-color: #06b6d4 !important;
+                box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3) !important;
             }
-            /* Esconder círculos dos radio buttons */
-            div[role="radiogroup"] label > div:first-child {
-                display: none !important;
-            }
+            div[data-testid="stRadio"] label > div:first-child {display: none !important;}
         </style>
+        <p style='font-size: 11px; font-weight: 700; color: #94a3b8; 
+                   margin: 0 0 12px 4px; letter-spacing: 1.5px; text-transform: uppercase;'>
+            ◆ Navegação
+        </p>
         """, unsafe_allow_html=True)
         
-        st.markdown("<p style='font-size: 11px; font-weight: 600; color: #6b7280; margin: 0 0 8px 0; letter-spacing: 0.5px;'>📍 NAVEGAÇÃO</p>", unsafe_allow_html=True)
-        
-        # Mapeamento de páginas com ícones SVG inline
-        opcoes_menu = [
-            ("📊", "Dashboard", "Dashboard"),
-            ("🎯", "Simulador", "Simulador"),
-            ("👤", "Perfil", "Perfil"),
-            ("📤", "Upload", "Upload de Dados")
-        ]
-        
-        # Criar labels formatados
-        opcoes_display = {}
-        for icone, label, valor in opcoes_menu:
-            opcoes_display[f"{icone} {label}"] = valor
+        opcoes_menu = {
+            "◆ Dashboard": "Dashboard",
+            "◇ Simulador": "Simulador",
+            "◈ Perfil": "Perfil",
+            "◉ Upload": "Upload de Dados"
+        }
         
         pagina = st.radio(
             "Menu Principal",
-            list(opcoes_display.values()),
-            format_func=lambda x: [k for k, v in opcoes_display.items() if v == x][0],
+            list(opcoes_menu.values()),
+            format_func=lambda x: [k for k, v in opcoes_menu.items() if v == x][0],
             label_visibility="collapsed",
             key="nav_radio"
         )
