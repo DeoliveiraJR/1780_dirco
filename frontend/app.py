@@ -73,9 +73,9 @@ else:
                        font-weight: 800; letter-spacing: 2px; text-align: center;">
                 UAN DASHBOARD
             </h1>
-            <p style="margin: 0; color: rgba(255,255,255,0.95); font-size: 14px; 
-                      font-weight: 500; text-align: center;">
-                Sistema de Análise Financeira
+            <p style="margin: 0; color: #FFD100; font-size: 14px; 
+                      font-weight: 600; text-align: center;">
+                sistema Arquitetura de projeções - Dirco
             </p>
         </div>
         """, unsafe_allow_html=True)

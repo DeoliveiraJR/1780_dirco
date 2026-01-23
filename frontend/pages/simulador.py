@@ -6,12 +6,16 @@ import sys
 import os
 import plotly.graph_objects as go
 from bokeh.plotting import figure
-from bokeh.models import HoverTool, ColumnDataSource, Circle
-from bokeh.palettes import Category10
-from bokeh.transform import transform
+from bokeh.models import (
+    ColumnDataSource, PointDrawTool, CustomJS, Button, Div
+)
 from bokeh.layouts import column, row
-from bokeh.models import Slider, Select, Button, TextInput
-from bokeh.io import curdoc
+try:
+    from streamlit_bokeh import streamlit_bokeh
+    BOKEH_AVAILABLE = True
+except ImportError:
+    BOKEH_AVAILABLE = False
+    st.warning("⚠️ streamlit-bokeh não instalado. Instalando...")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -124,119 +128,132 @@ def nova_simulacao_bokeh():
             st.balloons()
     
     with col_preview:
-        st.markdown("#### 📊 Previa da Projecao")
+        st.markdown("#### 📊 Previa da Projecao - Arraste a Curva")
         
-        # Inicializar dados editáveis na session_state
-        if 'valores_editaveis' not in st.session_state:
-            meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun']
-            base_value = 1000
-            st.session_state.valores_editaveis = {
-                'meses': meses,
-                'realista': [base_value * (1 + taxa_crescimento / 100) ** (i / 6) for i in range(len(meses))],
-                'otimista': [base_value * (1 + (taxa_crescimento + 10) / 100) ** (i / 6) for i in range(len(meses))],
-                'pessimista': [base_value * (1 + (taxa_crescimento - 10) / 100) ** (i / 6) for i in range(len(meses))]
-            }
+        if not BOKEH_AVAILABLE:
+            st.error("🚫 streamlit-bokeh não está instalado. Execute: pip install streamlit-bokeh")
+            return
         
-        # Atualizar valores baseado nos sliders (recalcular)
-        meses = st.session_state.valores_editaveis['meses']
+        # Cores corporativas
+        COR_REALISTA = "#06b6d4"
+        COR_OTIMISTA = "#10b981"
+        COR_PESSIMISTA = "#ef4444"
+        
+        # Dados base
+        meses_num = [1, 2, 3, 4, 5, 6]
+        meses_label = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun']
         base_value = 1000
-        st.session_state.valores_editaveis['realista'] = [base_value * (1 + taxa_crescimento / 100) ** (i / 6) for i in range(len(meses))]
-        st.session_state.valores_editaveis['otimista'] = [base_value * (1 + (taxa_crescimento + 10) / 100) ** (i / 6) for i in range(len(meses))]
-        st.session_state.valores_editaveis['pessimista'] = [base_value * (1 + (taxa_crescimento - 10) / 100) ** (i / 6) for i in range(len(meses))]
         
-        y_realista = st.session_state.valores_editaveis['realista']
-        y_otimista = st.session_state.valores_editaveis['otimista']
-        y_pessimista = st.session_state.valores_editaveis['pessimista']
+        # Inicializar valores editáveis
+        if 'bokeh_valores_realista' not in st.session_state:
+            st.session_state.bokeh_valores_realista = [
+                base_value * (1 + taxa_crescimento / 100) ** (i / 6) for i in range(6)
+            ]
         
-        # Criar figura com Plotly EDITÁVEL (drag points)
-        fig = go.Figure()
+        # Recalcular baseado nos sliders
+        valores_realista = [base_value * (1 + taxa_crescimento / 100) ** (i / 6) for i in range(6)]
+        valores_otimista = [base_value * (1 + (taxa_crescimento + 10) / 100) ** (i / 6) for i in range(6)]
+        valores_pessimista = [base_value * (1 + (taxa_crescimento - 10) / 100) ** (i / 6) for i in range(6)]
         
-        fig.add_trace(go.Scatter(
-            x=meses, y=y_realista,
-            name='Realista',
-            line=dict(color='#06b6d4', width=3),
-            mode='lines+markers',
-            marker=dict(size=12, line=dict(width=2, color='white')),
-            hovertemplate='<b>%{x}</b><br>R$ %{y:,.0f}<extra></extra>'
+        # ColumnDataSource para a curva EDITÁVEL (Realista)
+        source_realista = ColumnDataSource(data=dict(
+            x=meses_num,
+            y=valores_realista[:]
         ))
         
-        fig.add_trace(go.Scatter(
-            x=meses, y=y_otimista,
-            name='Otimista',
-            line=dict(color='#10b981', width=2, dash='dash'),
-            mode='lines+markers',
-            marker=dict(size=10, line=dict(width=2, color='white')),
-            hovertemplate='<b>%{x}</b><br>R$ %{y:,.0f}<extra></extra>'
-        ))
+        # ColumnDataSources para as curvas estáticas
+        source_otimista = ColumnDataSource(data=dict(x=meses_num, y=valores_otimista))
+        source_pessimista = ColumnDataSource(data=dict(x=meses_num, y=valores_pessimista))
         
-        fig.add_trace(go.Scatter(
-            x=meses, y=y_pessimista,
-            name='Pessimista',
-            line=dict(color='#ef4444', width=2, dash='dot'),
-            mode='lines+markers',
-            marker=dict(size=10, line=dict(width=2, color='white')),
-            hovertemplate='<b>%{x}</b><br>R$ %{y:,.0f}<extra></extra>'
-        ))
-        
-        fig.update_layout(
+        # Criar figura Bokeh
+        p = figure(
+            title="Arraste os pontos azuis para ajustar a projeção Realista",
+            x_axis_label="Mês",
+            y_axis_label="Valor (R$)",
+            width=900,
             height=450,
-            margin=dict(l=10, r=10, t=40, b=10),
-            hovermode='x unified',
-            plot_bgcolor='rgba(240, 249, 252, 0.5)',
-            paper_bgcolor='rgba(255, 255, 255, 0)',
-            showlegend=True,
-            legend=dict(x=0.02, y=0.98, bgcolor='rgba(255,255,255,0.8)'),
-            dragmode='pan',
-            xaxis=dict(fixedrange=False),
-            yaxis=dict(fixedrange=False, tickformat=',.0f', tickprefix='R$ '),
-            title=dict(
-                text='<b>Arraste os pontos para editar valores</b>',
-                font=dict(size=14, color='#64748b'),
-                x=0.5,
-                xanchor='center'
-            )
+            toolbar_location="right",
+            x_range=(0.5, 6.5),
+            y_range=(min(valores_pessimista) * 0.9, max(valores_otimista) * 1.1)
         )
         
-        # Renderizar gráfico com config editável
-        config = {
-            'editable': True,
-            'edits': {'shapePosition': True},
-            'displayModeBar': True,
-            'displaylogo': False,
-            'modeBarButtonsToAdd': ['drawopenpath', 'eraseshape'],
-            'modeBarButtonsToRemove': ['lasso2d', 'select2d']
-        }
+        # Linhas estáticas (Otimista e Pessimista)
+        p.line('x', 'y', source=source_otimista, color=COR_OTIMISTA, 
+               line_width=2, line_dash='dashed', legend_label='Otimista (+10%)', alpha=0.7)
+        p.line('x', 'y', source=source_pessimista, color=COR_PESSIMISTA, 
+               line_width=2, line_dash='dotted', legend_label='Pessimista (-10%)', alpha=0.7)
         
-        st.plotly_chart(fig, use_container_width=True, config=config, key='grafico_interativo')
+        # Linha e pontos EDITÁVEIS (Realista)
+        p.line('x', 'y', source=source_realista, color=COR_REALISTA, 
+               line_width=4, legend_label='Realista (Editável)', alpha=0.9)
+        pts_renderer = p.circle('x', 'y', source=source_realista, size=14, 
+                                color=COR_REALISTA, alpha=0.8, line_color='white', line_width=2)
         
-        st.info("💡 **Dica:** Use o mouse para arrastar os pontos do gráfico e ajustar as projeções em tempo real!")
+        # Ferramenta de arrasto
+        draw_tool = PointDrawTool(renderers=[pts_renderer], empty_value='nan')
+        p.add_tools(draw_tool)
+        p.toolbar.active_tap = draw_tool
         
-        # Tabela de valores atualizada
+        # Estilo
+        p.legend.location = "top_left"
+        p.legend.click_policy = "hide"
+        p.background_fill_color = "#f0f9fc"
+        p.background_fill_alpha = 0.5
+        p.border_fill_color = "white"
+        p.outline_line_color = None
+        p.grid.grid_line_alpha = 0.3
+        
+        # Botão de reset
+        btn_reset = Button(label="🔄 Resetar Valores", button_type="warning", width=200)
+        btn_reset.js_on_click(CustomJS(args=dict(
+            src=source_realista, 
+            defaults=valores_realista
+        ), code="""
+            for (let i = 0; i < src.data['y'].length; i++) {
+                src.data['y'][i] = defaults[i];
+            }
+            src.change.emit();
+        """))
+        
+        # Info
+        info_div = Div(text="""
+        <div style="background: #dbeafe; padding: 10px 15px; border-radius: 8px; 
+                    border-left: 4px solid #06b6d4; margin: 10px 0;">
+            <b>💡 Como usar:</b> Clique e arraste os pontos <span style="color:#06b6d4; font-weight:bold;">azuis</span> 
+            para ajustar os valores da projeção Realista em tempo real!
+        </div>
+        """)
+        
+        # Layout Bokeh
+        bokeh_layout = column(p, row(btn_reset, info_div), sizing_mode="scale_width")
+        
+        # Renderizar com streamlit-bokeh
+        streamlit_bokeh(bokeh_layout, width='stretch', theme="streamlit", key="simulador_bokeh")
+        
+        # Tabela sincronizada
         st.markdown("#### 📋 Valores Projetados")
         
-        col_tab1, col_tab2 = st.columns([2, 1])
+        col_tab, col_resume = st.columns([2.5, 1.5])
         
-        with col_tab1:
+        with col_tab:
+            # Obter valores atuais do source (caso tenham sido editados)
+            y_realista_atual = source_realista.data['y']
+            
             tabela_dados = {
-                'Mês': meses,
-                'Realista': [f'R$ {v:,.0f}' for v in y_realista],
-                'Otimista': [f'R$ {v:,.0f}' for v in y_otimista],
-                'Pessimista': [f'R$ {v:,.0f}' for v in y_pessimista]
+                'Mês': meses_label,
+                'Realista': [f'R$ {v:,.0f}' for v in y_realista_atual],
+                'Otimista': [f'R$ {v:,.0f}' for v in valores_otimista],
+                'Pessimista': [f'R$ {v:,.0f}' for v in valores_pessimista]
             }
             
             df_preview = pd.DataFrame(tabela_dados)
-            st.dataframe(
-                df_preview, 
-                use_container_width=True, 
-                hide_index=True,
-                height=250
-            )
+            st.dataframe(df_preview, use_container_width=True, hide_index=True, height=250)
         
-        with col_tab2:
-            st.markdown("**Resumo**")
-            st.metric("Média Realista", f"R$ {np.mean(y_realista):,.0f}")
-            st.metric("Total 6 Meses", f"R$ {sum(y_realista):,.0f}")
-            variacao = ((y_realista[-1] - y_realista[0]) / y_realista[0]) * 100
+        with col_resume:
+            st.markdown("**📊 Resumo Realista**")
+            st.metric("Média", f"R$ {np.mean(y_realista_atual):,.0f}")
+            st.metric("Total 6 Meses", f"R$ {sum(y_realista_atual):,.0f}")
+            variacao = ((y_realista_atual[-1] - y_realista_atual[0]) / y_realista_atual[0]) * 100
             st.metric("Variação", f"{variacao:.1f}%", delta=f"{variacao:.1f}%")
 
 
