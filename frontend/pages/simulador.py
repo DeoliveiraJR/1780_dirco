@@ -1,23 +1,29 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
 import json
 import sys
 import os
+from bokeh.plotting import figure
+from bokeh.models import HoverTool, ColumnDataSource, Circle
+from bokeh.palettes import Category10
+from bokeh.transform import transform
+from bokeh.layouts import column, row
+from bokeh.models import Slider, Select, Button, TextInput
+from bokeh.io import curdoc
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from data_manager import adicionar_simulacao, get_simulacoes, deletar_simulacao
 
 def renderizar():
-    st.markdown("# 🎯 Simulador de Projecoes")
+    st.markdown("# 🎯 Simulador de Projeções")
     st.markdown("---")
     
-    tab1, tab2, tab3 = st.tabs(["➕ Nova Simulacao", "📋 Minhas Simulacoes", "📊 Analise"])
+    tab1, tab2, tab3 = st.tabs(["➕ Nova Simulação", "📋 Minhas Simulações", "📊 Análise"])
     
     with tab1:
-        nova_simulacao()
+        nova_simulacao_bokeh()
     
     with tab2:
         minhas_simulacoes()
@@ -26,12 +32,14 @@ def renderizar():
         analise_comparativa()
 
 
-def nova_simulacao():
-    """Aba para criar nova simulação"""
-    col_form, col_preview = st.columns([1, 1.5], gap="large")
+def nova_simulacao_bokeh():
+    """Aba para criar nova simulação COM INTERATIVIDADE DE ARRASTO"""
+    
+    col_form, col_preview = st.columns([1.2, 1.8], gap="large")
     
     with col_form:
-        st.markdown("#### Dados da Simulacao")
+        st.markdown("#### 📝 Dados da Simulação")
+        st.markdown("*Formulário desabilitado - Em desenvolvimento*")
         
         nome = st.text_input(
             "Nome da Simulacao",
