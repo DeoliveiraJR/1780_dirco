@@ -111,35 +111,54 @@ else:
         # ============== MENU DE NAVEGAÇÃO ==============
         st.markdown("""
         <style>
+            /* Container dos radio buttons */
+            div[role="radiogroup"] {
+                gap: 0px !important;
+            }
+            
+            /* Estilo dos botões */
             div[role="radiogroup"] label {
-                padding: 16px 20px !important;
-                border-radius: 10px !important;
-                margin: 6px 0 !important;
+                background: white !important;
+                padding: 14px 18px !important;
+                border-radius: 8px !important;
+                margin: 0 0 8px 0 !important;
                 cursor: pointer !important;
-                transition: all 0.3s ease !important;
-                background: transparent !important;
-                font-size: 16px !important;
+                transition: all 0.2s ease !important;
+                font-size: 15px !important;
                 font-weight: 500 !important;
+                color: #334155 !important;
                 border: 2px solid #e5e7eb !important;
+                display: flex !important;
+                align-items: center !important;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
             }
+            
+            /* Hover */
             div[role="radiogroup"] label:hover {
-                background: rgba(6, 182, 212, 0.1) !important;
+                background: #f0f9ff !important;
                 border-color: #06b6d4 !important;
+                transform: translateX(3px) !important;
+                box-shadow: 0 2px 4px rgba(6, 182, 212, 0.1) !important;
             }
+            
+            /* Selecionado */
             div[role="radiogroup"] label[data-checked="true"] {
                 background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%) !important;
                 color: white !important;
                 font-weight: 600 !important;
                 border-color: #06b6d4 !important;
-                box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4) !important;
+                box-shadow: 0 4px 12px rgba(6, 182, 212, 0.35) !important;
+                transform: translateX(0px) !important;
             }
+            
+            /* Esconder círculos */
             div[role="radiogroup"] label > div:first-child {
                 display: none !important;
             }
         </style>
         """, unsafe_allow_html=True)
         
-        st.markdown("<p style='font-size: 11px; font-weight: 700; color: #94a3b8; margin: 0 0 10px 4px; letter-spacing: 1.5px; text-transform: uppercase;'>📍 NAVEGAÇÃO</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 11px; font-weight: 700; color: #94a3b8; margin: 0 0 12px 4px; letter-spacing: 1.5px; text-transform: uppercase;'>📍 NAVEGAÇÃO</p>", unsafe_allow_html=True)
         
         # Mapeamento de páginas com ícones
         opcoes_menu = [

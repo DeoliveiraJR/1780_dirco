@@ -351,6 +351,8 @@ def analise_comparativa():
     """Aba para análise comparativa com gráfico interativo"""
     st.markdown("#### 📊 Análise Comparativa - Gráfico Interativo")
     
+    st.info("💡 **Esta é a aba de visualização e zoom!** Para editar valores com sliders, vá para a aba **'Nova Simulação'** (primeira aba).")
+    
     col_grafico, col_tabela = st.columns([1.5, 1], gap="large")
     
     with col_grafico:
