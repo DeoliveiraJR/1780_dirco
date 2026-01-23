@@ -108,56 +108,56 @@ else:
         
         st.markdown("---")
         
-        # ============== NAVEGAÇÃO ==============
+        # ============== MENU DE NAVEGAÇÃO ==============
         st.markdown("""
         <style>
-            div[data-testid="stRadio"] > div {gap: 10px !important;}
-            div[data-testid="stRadio"] label {
-                background: transparent !important;
-                padding: 18px 22px !important;
-                border-radius: 12px !important;
-                border: 2px solid #e2e8f0 !important;
+            div[role="radiogroup"] label {
+                padding: 16px 20px !important;
+                border-radius: 10px !important;
+                margin: 6px 0 !important;
                 cursor: pointer !important;
-                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                transition: all 0.3s ease !important;
+                background: transparent !important;
                 font-size: 16px !important;
-                font-weight: 600 !important;
-                color: #334155 !important;
-                margin: 0 !important;
-                min-height: 56px !important;
-                display: flex !important;
-                align-items: center !important;
+                font-weight: 500 !important;
+                border: 2px solid #e5e7eb !important;
             }
-            div[data-testid="stRadio"] label:hover {
+            div[role="radiogroup"] label:hover {
                 background: rgba(6, 182, 212, 0.1) !important;
                 border-color: #06b6d4 !important;
-                transform: translateX(5px);
             }
-            div[data-testid="stRadio"] label[data-checked="true"] {
+            div[role="radiogroup"] label[data-checked="true"] {
                 background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%) !important;
                 color: white !important;
-                font-weight: 700 !important;
+                font-weight: 600 !important;
                 border-color: #06b6d4 !important;
-                box-shadow: 0 6px 16px rgba(6, 182, 212, 0.4) !important;
+                box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4) !important;
             }
-            div[data-testid="stRadio"] label > div:first-child {display: none !important;}
+            div[role="radiogroup"] label > div:first-child {
+                display: none !important;
+            }
         </style>
-        <p style='font-size: 12px; font-weight: 800; color: #94a3b8; 
-                   margin: 0 0 14px 6px; letter-spacing: 2px; text-transform: uppercase;'>
-            ◆ NAVEGAÇÃO
-        </p>
         """, unsafe_allow_html=True)
         
-        opcoes_menu = {
-            "◆ Dashboard": "Dashboard",
-            "◇ Simulador": "Simulador",
-            "◈ Perfil": "Perfil",
-            "◉ Upload": "Upload de Dados"
-        }
+        st.markdown("<p style='font-size: 11px; font-weight: 700; color: #94a3b8; margin: 0 0 10px 4px; letter-spacing: 1.5px; text-transform: uppercase;'>📍 NAVEGAÇÃO</p>", unsafe_allow_html=True)
+        
+        # Mapeamento de páginas com ícones
+        opcoes_menu = [
+            ("📊", "Dashboard", "Dashboard"),
+            ("🎯", "Simulador", "Simulador"),
+            ("👤", "Perfil", "Perfil"),
+            ("📤", "Upload", "Upload de Dados")
+        ]
+        
+        # Criar labels formatados
+        opcoes_display = {}
+        for icone, label, valor in opcoes_menu:
+            opcoes_display[f"{icone} {label}"] = valor
         
         pagina = st.radio(
             "Menu Principal",
-            list(opcoes_menu.values()),
-            format_func=lambda x: [k for k, v in opcoes_menu.items() if v == x][0],
+            list(opcoes_display.values()),
+            format_func=lambda x: [k for k, v in opcoes_display.items() if v == x][0],
             label_visibility="collapsed",
             key="nav_radio"
         )
