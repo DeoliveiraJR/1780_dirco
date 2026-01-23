@@ -50,22 +50,31 @@ else:
         </style>
         """, unsafe_allow_html=True)
         
-        # ============== HEADER CLEAN ==============
-        st.markdown('<div style="text-align: center; margin-bottom: 30px;">', unsafe_allow_html=True)
+        # ============== HEADER COM BARRA AZUL GRADIENTE ==============
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, #0c3a66 0%, #06b6d4 100%); 
+                    padding: 35px 20px; 
+                    border-radius: 16px; 
+                    margin-bottom: 25px;
+                    text-align: center;
+                    box-shadow: 0 8px 16px rgba(0,0,0,0.15);">
+        """, unsafe_allow_html=True)
         
-        # Logo
+        # Logo centralizada
         if logo_image:
-            col_logo = st.columns([0.2, 0.6, 0.2])
+            col_logo = st.columns([0.15, 0.7, 0.15])
             with col_logo[1]:
                 st.image(logo_image, use_container_width=True)
         else:
-            st.markdown('<div style="font-size: 64px; margin: 20px 0;">🏢</div>', unsafe_allow_html=True)
+            st.markdown('<div style="font-size: 52px; margin: 0;">🏢</div>', unsafe_allow_html=True)
         
         st.markdown("""
-            <h1 style="margin: 20px 0 8px 0; color: #0c3a66; font-size: 28px; font-weight: 800; letter-spacing: 2px;">
+            <h1 style="margin: 22px 0 10px 0; color: white; font-size: 28px; 
+                       font-weight: 800; letter-spacing: 2px; text-align: center;">
                 UAN DASHBOARD
             </h1>
-            <p style="margin: 0 0 20px 0; color: #475569; font-size: 13px; font-weight: 500;">
+            <p style="margin: 0; color: rgba(255,255,255,0.95); font-size: 14px; 
+                      font-weight: 500; text-align: center;">
                 Sistema de Análise Financeira
             </p>
         </div>
@@ -74,7 +83,7 @@ else:
         if not logo_image:
             st.caption("💡 Adicione logo.png em /frontend/images/")
         
-        st.markdown('<div style="height: 10px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
         
         # ============== USUÁRIO ==============
         st.markdown("""
@@ -102,36 +111,39 @@ else:
         # ============== NAVEGAÇÃO ==============
         st.markdown("""
         <style>
-            div[data-testid="stRadio"] > div {gap: 8px !important;}
+            div[data-testid="stRadio"] > div {gap: 10px !important;}
             div[data-testid="stRadio"] label {
                 background: transparent !important;
-                padding: 14px 18px !important;
-                border-radius: 10px !important;
-                border: 2px solid transparent !important;
+                padding: 18px 22px !important;
+                border-radius: 12px !important;
+                border: 2px solid #e2e8f0 !important;
                 cursor: pointer !important;
                 transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-                font-size: 15px !important;
-                font-weight: 500 !important;
-                color: #475569 !important;
+                font-size: 16px !important;
+                font-weight: 600 !important;
+                color: #334155 !important;
                 margin: 0 !important;
+                min-height: 56px !important;
+                display: flex !important;
+                align-items: center !important;
             }
             div[data-testid="stRadio"] label:hover {
-                background: rgba(6, 182, 212, 0.08) !important;
-                border-color: rgba(6, 182, 212, 0.3) !important;
-                transform: translateX(4px);
+                background: rgba(6, 182, 212, 0.1) !important;
+                border-color: #06b6d4 !important;
+                transform: translateX(5px);
             }
             div[data-testid="stRadio"] label[data-checked="true"] {
                 background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%) !important;
                 color: white !important;
-                font-weight: 600 !important;
+                font-weight: 700 !important;
                 border-color: #06b6d4 !important;
-                box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3) !important;
+                box-shadow: 0 6px 16px rgba(6, 182, 212, 0.4) !important;
             }
             div[data-testid="stRadio"] label > div:first-child {display: none !important;}
         </style>
-        <p style='font-size: 11px; font-weight: 700; color: #94a3b8; 
-                   margin: 0 0 12px 4px; letter-spacing: 1.5px; text-transform: uppercase;'>
-            ◆ Navegação
+        <p style='font-size: 12px; font-weight: 800; color: #94a3b8; 
+                   margin: 0 0 14px 6px; letter-spacing: 2px; text-transform: uppercase;'>
+            ◆ NAVEGAÇÃO
         </p>
         """, unsafe_allow_html=True)
         

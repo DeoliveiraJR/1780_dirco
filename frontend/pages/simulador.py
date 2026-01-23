@@ -4,6 +4,7 @@ import numpy as np
 import json
 import sys
 import os
+import plotly.graph_objects as go
 from bokeh.plotting import figure
 from bokeh.models import HoverTool, ColumnDataSource, Circle
 from bokeh.palettes import Category10
@@ -125,64 +126,118 @@ def nova_simulacao_bokeh():
     with col_preview:
         st.markdown("#### 📊 Previa da Projecao")
         
-        # Gerar dados para preview
-        meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun']
+        # Inicializar dados editáveis na session_state
+        if 'valores_editaveis' not in st.session_state:
+            meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun']
+            base_value = 1000
+            st.session_state.valores_editaveis = {
+                'meses': meses,
+                'realista': [base_value * (1 + taxa_crescimento / 100) ** (i / 6) for i in range(len(meses))],
+                'otimista': [base_value * (1 + (taxa_crescimento + 10) / 100) ** (i / 6) for i in range(len(meses))],
+                'pessimista': [base_value * (1 + (taxa_crescimento - 10) / 100) ** (i / 6) for i in range(len(meses))]
+            }
+        
+        # Atualizar valores baseado nos sliders (recalcular)
+        meses = st.session_state.valores_editaveis['meses']
         base_value = 1000
+        st.session_state.valores_editaveis['realista'] = [base_value * (1 + taxa_crescimento / 100) ** (i / 6) for i in range(len(meses))]
+        st.session_state.valores_editaveis['otimista'] = [base_value * (1 + (taxa_crescimento + 10) / 100) ** (i / 6) for i in range(len(meses))]
+        st.session_state.valores_editaveis['pessimista'] = [base_value * (1 + (taxa_crescimento - 10) / 100) ** (i / 6) for i in range(len(meses))]
         
-        # Calcular valores para cada cenário
-        y_realista = [base_value * (1 + taxa_crescimento / 100) ** (i / 6) for i in range(len(meses))]
-        y_otimista = [base_value * (1 + (taxa_crescimento + 10) / 100) ** (i / 6) for i in range(len(meses))]
-        y_pessimista = [base_value * (1 + (taxa_crescimento - 10) / 100) ** (i / 6) for i in range(len(meses))]
+        y_realista = st.session_state.valores_editaveis['realista']
+        y_otimista = st.session_state.valores_editaveis['otimista']
+        y_pessimista = st.session_state.valores_editaveis['pessimista']
         
-        # Criar figura com Plotly
+        # Criar figura com Plotly EDITÁVEL (drag points)
         fig = go.Figure()
         
         fig.add_trace(go.Scatter(
             x=meses, y=y_realista,
             name='Realista',
             line=dict(color='#06b6d4', width=3),
-            mode='lines+markers'
+            mode='lines+markers',
+            marker=dict(size=12, line=dict(width=2, color='white')),
+            hovertemplate='<b>%{x}</b><br>R$ %{y:,.0f}<extra></extra>'
         ))
         
-        if True:  # Sempre mostrar os três cenários na preview
-            fig.add_trace(go.Scatter(
-                x=meses, y=y_otimista,
-                name='Otimista',
-                line=dict(color='#06b6d4', width=2, dash='dash'),
-                mode='lines+markers'
-            ))
-            
-            fig.add_trace(go.Scatter(
-                x=meses, y=y_pessimista,
-                name='Pessimista',
-                line=dict(color='#ec4899', width=2, dash='dot'),
-                mode='lines+markers'
-            ))
+        fig.add_trace(go.Scatter(
+            x=meses, y=y_otimista,
+            name='Otimista',
+            line=dict(color='#10b981', width=2, dash='dash'),
+            mode='lines+markers',
+            marker=dict(size=10, line=dict(width=2, color='white')),
+            hovertemplate='<b>%{x}</b><br>R$ %{y:,.0f}<extra></extra>'
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=meses, y=y_pessimista,
+            name='Pessimista',
+            line=dict(color='#ef4444', width=2, dash='dot'),
+            mode='lines+markers',
+            marker=dict(size=10, line=dict(width=2, color='white')),
+            hovertemplate='<b>%{x}</b><br>R$ %{y:,.0f}<extra></extra>'
+        ))
         
         fig.update_layout(
-            height=400,
-            margin=dict(l=0, r=0, t=20, b=0),
+            height=450,
+            margin=dict(l=10, r=10, t=40, b=10),
             hovermode='x unified',
             plot_bgcolor='rgba(240, 249, 252, 0.5)',
             paper_bgcolor='rgba(255, 255, 255, 0)',
             showlegend=True,
-            legend=dict(x=0.02, y=0.98)
+            legend=dict(x=0.02, y=0.98, bgcolor='rgba(255,255,255,0.8)'),
+            dragmode='pan',
+            xaxis=dict(fixedrange=False),
+            yaxis=dict(fixedrange=False, tickformat=',.0f', tickprefix='R$ '),
+            title=dict(
+                text='<b>Arraste os pontos para editar valores</b>',
+                font=dict(size=14, color='#64748b'),
+                x=0.5,
+                xanchor='center'
+            )
         )
         
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Tabela de valores
-        st.markdown("#### Valores Projetados")
-        
-        tabela_dados = {
-            'Mes': meses,
-            'Realista': [f'R$ {v:,.0f}' for v in y_realista],
-            'Otimista': [f'R$ {v:,.0f}' for v in y_otimista],
-            'Pessimista': [f'R$ {v:,.0f}' for v in y_pessimista]
+        # Renderizar gráfico com config editável
+        config = {
+            'editable': True,
+            'edits': {'shapePosition': True},
+            'displayModeBar': True,
+            'displaylogo': False,
+            'modeBarButtonsToAdd': ['drawopenpath', 'eraseshape'],
+            'modeBarButtonsToRemove': ['lasso2d', 'select2d']
         }
         
-        df_preview = pd.DataFrame(tabela_dados)
-        st.dataframe(df_preview, use_container_width=True, hide_index=True)
+        st.plotly_chart(fig, use_container_width=True, config=config, key='grafico_interativo')
+        
+        st.info("💡 **Dica:** Use o mouse para arrastar os pontos do gráfico e ajustar as projeções em tempo real!")
+        
+        # Tabela de valores atualizada
+        st.markdown("#### 📋 Valores Projetados")
+        
+        col_tab1, col_tab2 = st.columns([2, 1])
+        
+        with col_tab1:
+            tabela_dados = {
+                'Mês': meses,
+                'Realista': [f'R$ {v:,.0f}' for v in y_realista],
+                'Otimista': [f'R$ {v:,.0f}' for v in y_otimista],
+                'Pessimista': [f'R$ {v:,.0f}' for v in y_pessimista]
+            }
+            
+            df_preview = pd.DataFrame(tabela_dados)
+            st.dataframe(
+                df_preview, 
+                use_container_width=True, 
+                hide_index=True,
+                height=250
+            )
+        
+        with col_tab2:
+            st.markdown("**Resumo**")
+            st.metric("Média Realista", f"R$ {np.mean(y_realista):,.0f}")
+            st.metric("Total 6 Meses", f"R$ {sum(y_realista):,.0f}")
+            variacao = ((y_realista[-1] - y_realista[0]) / y_realista[0]) * 100
+            st.metric("Variação", f"{variacao:.1f}%", delta=f"{variacao:.1f}%")
 
 
 def minhas_simulacoes():
