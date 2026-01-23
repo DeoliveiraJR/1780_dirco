@@ -5,6 +5,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import streamlit as st
 from styles import CORES, CSS_CUSTOM, aplicar_tema
 from pages import autenticacao, dashboard, simulador, perfil, upload
+from data_manager import init_data_state
+
+# Inicializar data state logo no início
+init_data_state()
 
 st.set_page_config(
     page_title="UAN Dashboard",
@@ -47,25 +51,31 @@ else:
         
         # ============== HEADER COM LOGO E TITULO ==============
         st.markdown("""
-        <div style="background: linear-gradient(135deg, #0c3a66 0%, #1e3a8a 100%); 
-                    padding: 25px 15px; 
-                    border-radius: 12px; 
+        <div style="background: linear-gradient(135deg, #0c3a66 0%, #06b6d4 100%); 
+                    padding: 30px 20px; 
+                    border-radius: 16px; 
                     margin-bottom: 25px;
                     text-align: center;
-                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    box-shadow: 0 8px 16px rgba(0,0,0,0.15);">
         """, unsafe_allow_html=True)
         
-        # Logo
+        # Logo centralizada
         if logo_image:
-            col_logo = st.columns([1])[0]
-            with col_logo:
-                st.image(logo_image, width=100, use_column_width=False)
+            col_center = st.columns([0.25, 0.5, 0.25])
+            with col_center[1]:
+                st.image(logo_image, use_container_width=True)
+        else:
+            st.markdown("""
+            <div style="font-size: 48px; margin: 0;">
+                🏢
+            </div>
+            """, unsafe_allow_html=True)
         
         st.markdown("""
-            <h2 style="margin: 15px 0 5px 0; color: white; font-size: 22px; font-weight: 700;">
-                UAN Dashboard
+            <h2 style="margin: 20px 0 8px 0; color: white; font-size: 26px; font-weight: 700; letter-spacing: 1px;">
+                UAN DASHBOARD
             </h2>
-            <p style="margin: 0; color: #e0f2fe; font-size: 13px;">
+            <p style="margin: 0; color: rgba(255,255,255,0.9); font-size: 14px; font-weight: 400;">
                 Sistema de Análise Financeira
             </p>
         </div>
@@ -108,20 +118,52 @@ else:
         
         st.markdown("---")
         
-        # ============== MENU DE NAVEGAÇÃO ELEGANTE ==============
-        st.markdown("<p style='font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 10px;'>📍 NAVEGAÇÃO</p>", unsafe_allow_html=True)
+        # ============== MENU DE NAVEGAÇÃO COM ÍCONES SVG ==============
+        st.markdown("""
+        <style>
+            /* Esconder radio buttons padrão */
+            div[role="radiogroup"] label {
+                padding: 12px 16px !important;
+                border-radius: 8px !important;
+                margin: 4px 0 !important;
+                cursor: pointer !important;
+                transition: all 0.3s ease !important;
+                background: transparent !important;
+            }
+            div[role="radiogroup"] label:hover {
+                background: rgba(6, 182, 212, 0.1) !important;
+            }
+            div[role="radiogroup"] label[data-checked="true"] {
+                background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%) !important;
+                color: white !important;
+                font-weight: 600 !important;
+            }
+            /* Esconder círculos dos radio buttons */
+            div[role="radiogroup"] label > div:first-child {
+                display: none !important;
+            }
+        </style>
+        """, unsafe_allow_html=True)
         
-        opcoes = {
-            "📊 Dashboard": "Dashboard",
-            "🎯 Simulador": "Simulador", 
-            "👤 Perfil": "Perfil",
-            "📤 Upload": "Upload de Dados"
-        }
+        st.markdown("<p style='font-size: 11px; font-weight: 600; color: #6b7280; margin: 0 0 8px 0; letter-spacing: 0.5px;'>📍 NAVEGAÇÃO</p>", unsafe_allow_html=True)
+        
+        # Mapeamento de páginas com ícones SVG inline
+        opcoes_menu = [
+            ("📊", "Dashboard", "Dashboard"),
+            ("🎯", "Simulador", "Simulador"),
+            ("👤", "Perfil", "Perfil"),
+            ("📤", "Upload", "Upload de Dados")
+        ]
+        
+        # Criar labels formatados
+        opcoes_display = {}
+        for icone, label, valor in opcoes_menu:
+            opcoes_display[f"{icone} {label}"] = valor
         
         pagina = st.radio(
-            "Menu:",
-            list(opcoes.values()),
-            format_func=lambda x: [k for k, v in opcoes.items() if v == x][0],
+            "Menu Principal",
+            list(opcoes_display.values()),
+            format_func=lambda x: [k for k, v in opcoes_display.items() if v == x][0],
             label_visibility="collapsed",
             key="nav_radio"
         )
