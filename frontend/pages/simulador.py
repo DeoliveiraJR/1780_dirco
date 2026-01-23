@@ -269,6 +269,93 @@ def nova_simulacao_bokeh():
             st.metric("Total 6 Meses", f"R$ {sum(y_atual):,.0f}")
             variacao = ((y_atual[-1] - y_atual[0]) / y_atual[0]) * 100
             st.metric("Variação", f"{variacao:.1f}%", delta=f"{variacao:.1f}%")
+        
+        # ============== OPÇÃO ALTERNATIVA: SLIDERS ==============
+        st.markdown("---")
+        st.markdown("### ✏️ Opção Alternativa: Ajuste Fino com Sliders")
+        
+        with st.expander("🎯 Clique para abrir os Sliders de Edição", expanded=False):
+            st.info("💡 Use os sliders abaixo para ajustar cada mês individualmente com precisão numérica!")
+            
+            # Inicializar valores dos sliders
+            if 'slider_valores' not in st.session_state:
+                st.session_state.slider_valores = y_atual[:]
+            
+            col_s1, col_s2, col_s3 = st.columns(3)
+            
+            with col_s1:
+                st.session_state.slider_valores[0] = st.slider(
+                    f"📅 {meses_label[0]}",
+                    min_value=int(base_value * 0.7),
+                    max_value=int(base_value * 1.5),
+                    value=int(st.session_state.slider_valores[0]),
+                    step=10,
+                    format="R$ %d",
+                    key="slider_jan"
+                )
+                
+                st.session_state.slider_valores[1] = st.slider(
+                    f"📅 {meses_label[1]}",
+                    min_value=int(base_value * 0.7),
+                    max_value=int(base_value * 1.5),
+                    value=int(st.session_state.slider_valores[1]),
+                    step=10,
+                    format="R$ %d",
+                    key="slider_fev"
+                )
+            
+            with col_s2:
+                st.session_state.slider_valores[2] = st.slider(
+                    f"📅 {meses_label[2]}",
+                    min_value=int(base_value * 0.7),
+                    max_value=int(base_value * 1.5),
+                    value=int(st.session_state.slider_valores[2]),
+                    step=10,
+                    format="R$ %d",
+                    key="slider_mar"
+                )
+                
+                st.session_state.slider_valores[3] = st.slider(
+                    f"📅 {meses_label[3]}",
+                    min_value=int(base_value * 0.7),
+                    max_value=int(base_value * 1.5),
+                    value=int(st.session_state.slider_valores[3]),
+                    step=10,
+                    format="R$ %d",
+                    key="slider_abr"
+                )
+            
+            with col_s3:
+                st.session_state.slider_valores[4] = st.slider(
+                    f"📅 {meses_label[4]}",
+                    min_value=int(base_value * 0.7),
+                    max_value=int(base_value * 1.5),
+                    value=int(st.session_state.slider_valores[4]),
+                    step=10,
+                    format="R$ %d",
+                    key="slider_mai"
+                )
+                
+                st.session_state.slider_valores[5] = st.slider(
+                    f"📅 {meses_label[5]}",
+                    min_value=int(base_value * 0.7),
+                    max_value=int(base_value * 1.5),
+                    value=int(st.session_state.slider_valores[5]),
+                    step=10,
+                    format="R$ %d",
+                    key="slider_jun"
+                )
+            
+            # Resumo dos sliders
+            st.markdown("**Valores dos Sliders:**")
+            col_r1, col_r2, col_r3 = st.columns(3)
+            with col_r1:
+                st.metric("Média", f"R$ {np.mean(st.session_state.slider_valores):,.0f}")
+            with col_r2:
+                st.metric("Total", f"R$ {sum(st.session_state.slider_valores):,.0f}")
+            with col_r3:
+                var_slider = ((st.session_state.slider_valores[-1] - st.session_state.slider_valores[0]) / st.session_state.slider_valores[0]) * 100
+                st.metric("Variação", f"{var_slider:.1f}%")
 
 
 def minhas_simulacoes():
@@ -320,16 +407,134 @@ def minhas_simulacoes():
 
 
 def analise_comparativa():
-    """Aba para análise comparativa com gráfico interativo"""
-    st.markdown("#### 📊 Análise Comparativa - Gráfico Interativo")
+    """Aba para análise comparativa com gráfico interativo drag-and-drop"""
+    st.markdown("#### 📊 Análise Comparativa - Drag-and-Drop Interativo")
     
-    col_grafico, col_tabela = st.columns([1.5, 1], gap="large")
+    st.markdown("---")
+    
+    if BOKEH_EVENTS is None:
+        st.warning("⚠️ streamlit-bokeh não disponível.")
+        col_grafico, col_tabela = st.columns([1.5, 1], gap="large")
+        
+        with col_grafico:
+            st.markdown("**Gráfico Interativo - Zoom, Pan e Análise**")
+            
+            meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun']
+            y_realista = [1000, 1100, 1210, 1331, 1464, 1610]
+            y_otimista = [1000, 1150, 1322, 1521, 1750, 2013]
+            y_pessimista = [1000, 950, 902, 857, 814, 773]
+            
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=meses, y=y_realista, name='Realista', line=dict(color='#06b6d4', width=4), mode='lines+markers'))
+            fig.add_trace(go.Scatter(x=meses, y=y_otimista, name='Otimista', line=dict(color='#10b981', width=2, dash='dash'), mode='lines+markers'))
+            fig.add_trace(go.Scatter(x=meses, y=y_pessimista, name='Pessimista', line=dict(color='#ec4899', width=2, dash='dot'), mode='lines+markers'))
+            fig.update_layout(title="Projeção", height=450)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col_tabela:
+            tabela_comp = {'Mês': meses, 'Realista': y_realista, 'Otimista': y_otimista, 'Pessimista': y_pessimista}
+            st.dataframe(pd.DataFrame(tabela_comp), use_container_width=True, hide_index=True)
+        return
+    
+    # ============== BOKEH DRAG-AND-DROP ==============
+    
+    meses_num = list(range(1, 7))
+    meses_label = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun']
+    
+    # Inicializar
+    if 'analise_realista' not in st.session_state:
+        st.session_state.analise_realista = [1000, 1100, 1210, 1331, 1464, 1610]
+        st.session_state.analise_otimista = [1000, 1150, 1322, 1521, 1750, 2013]
+        st.session_state.analise_pessimista = [1000, 950, 902, 857, 814, 773]
+    
+    col_grafico, col_tabela = st.columns([1.6, 1.4], gap="large")
     
     with col_grafico:
-        st.markdown("**Gráfico Interativo - Zoom, Pan e Análise**")
+        st.markdown("**👆 Arraste os Pontos Coloridos para Ajustar**")
         
-        # Dados iniciais
-        meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun']
+        source_realista = ColumnDataSource(data=dict(x=meses_num, y=st.session_state.analise_realista))
+        source_otimista = ColumnDataSource(data=dict(x=meses_num, y=st.session_state.analise_otimista))
+        source_pessimista = ColumnDataSource(data=dict(x=meses_num, y=st.session_state.analise_pessimista))
+        
+        p = figure(title="Projeção - Arraste para Editar", x_axis_label="Mês", y_axis_label="R$",
+                  width=900, height=480, toolbar_location="right", x_range=(0.5, 6.5),
+                  y_range=(700, 2100))
+        
+        p.line('x', 'y', source=source_otimista, color="#10b981", line_width=3, legend_label='Otimista', alpha=0.8, line_dash='dashed')
+        renderer_o = p.circle('x', 'y', source=source_otimista, size=14, color="#10b981", alpha=0.9, line_color='white', line_width=2)
+        
+        p.line('x', 'y', source=source_realista, color="#06b6d4", line_width=4, legend_label='Realista', alpha=0.9)
+        renderer_r = p.circle('x', 'y', source=source_realista, size=16, color="#06b6d4", alpha=0.9, line_color='white', line_width=3)
+        
+        p.line('x', 'y', source=source_pessimista, color="#ef4444", line_width=3, legend_label='Pessimista', alpha=0.8, line_dash='dotted')
+        renderer_p = p.circle('x', 'y', source=source_pessimista, size=14, color="#ef4444", alpha=0.9, line_color='white', line_width=2)
+        
+        tool_r = PointDrawTool(renderers=[renderer_r], empty_value='nan')
+        tool_o = PointDrawTool(renderers=[renderer_o], empty_value='nan')
+        tool_p = PointDrawTool(renderers=[renderer_p], empty_value='nan')
+        
+        p.add_tools(tool_r, tool_o, tool_p)
+        p.toolbar.active_tap = tool_r
+        p.legend.location = "top_left"
+        p.background_fill_color = "#f0f9fc"
+        p.outline_line_color = None
+        p.grid.grid_line_alpha = 0.3
+        
+        btn_reset = Button(label="🔄 Resetar", button_type="warning", width=120)
+        btn_reset.js_on_click(CustomJS(args=dict(
+            r=source_realista, o=source_otimista, p=source_pessimista,
+            vr=[1000, 1100, 1210, 1331, 1464, 1610], vo=[1000, 1150, 1322, 1521, 1750, 2013], vp=[1000, 950, 902, 857, 814, 773]
+        ), code="""
+            for (let i = 0; i < 6; i++) {
+                r.data['y'][i] = vr[i];
+                o.data['y'][i] = vo[i];
+                p.data['y'][i] = vp[i];
+            }
+            r.change.emit(); o.change.emit(); p.change.emit();
+        """))
+        
+        info = Div(text="""
+        <div style="background:#dbeafe; padding:10px; border-radius:8px; border-left:4px solid #06b6d4;">
+            <b>💡 Dicas:</b> • Arraste pontos <b style="color:#06b6d4;">●</b> <b style="color:#10b981;">●</b> <b style="color:#ef4444;">●</b><br>
+            • Zoom com mouse • Tabela atualiza em tempo real!
+        </div>
+        """)
+        
+        layout = column(p, row(btn_reset, info, sizing_mode="stretch_width"), sizing_mode="stretch_width")
+        
+        if BOKEH_EVENTS:
+            from streamlit_bokeh_events import streamlit_bokeh_events
+            streamlit_bokeh_events(layout, events="tap,reset", key="analise_bokeh", refresh_on_update=False, debounce_time=0)
+        else:
+            from streamlit_bokeh import streamlit_bokeh
+            streamlit_bokeh(layout, key="analise_bokeh")
+    
+    with col_tabela:
+        st.markdown("**📋 Valores (Atualiza em Tempo Real)**")
+        
+        y_r = source_realista.data['y']
+        y_o = source_otimista.data['y']
+        y_p = source_pessimista.data['y']
+        
+        df = pd.DataFrame({
+            'Mês': meses_label,
+            'Realista': [f'R$ {v:,.0f}' for v in y_r],
+            'Otimista': [f'R$ {v:,.0f}' for v in y_o],
+            'Pessimista': [f'R$ {v:,.0f}' for v in y_p]
+        })
+        st.dataframe(df, use_container_width=True, hide_index=True, height=330)
+        
+        st.markdown("---")
+        st.markdown("**📊 Estatísticas**")
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric("Var. Realista", f"{((y_r[-1]-y_r[0])/y_r[0]*100):.1f}%", delta=f"+R$ {(y_r[-1]-y_r[0]):,.0f}")
+            st.metric("Var. Otimista", f"{((y_o[-1]-y_o[0])/y_o[0]*100):.1f}%", delta=f"+R$ {(y_o[-1]-y_o[0]):,.0f}")
+        with c2:
+            st.metric("Var. Pessimista", f"{((y_p[-1]-y_p[0])/y_p[0]*100):.1f}%", delta=f"{(y_p[-1]-y_p[0]):,.0f}")
+            dif = y_o[-1] - y_p[-1]
+            st.metric("Dif. O/P", f"R$ {dif:,.0f}", delta=f"{(dif/y_p[-1]*100):.1f}%")
         
         # Valores iniciais
         y_realista = [1000, 1100, 1210, 1331, 1464, 1610]
