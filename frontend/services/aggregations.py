@@ -194,3 +194,78 @@ def _agregados_por_categoria(df_upload: pd.DataFrame, cliente: str, ano_proj: in
             "prev": {"ana": ana_p, "mer": mer_p, "ajs": ajs_p, "rlzd": rlz_p}
         }
     return out
+
+
+def _agregados_por_produto(df_upload: pd.DataFrame, cliente: str, categoria: str, produto: str, ano_proj: int, mascarar_zeros_finais: bool = True):
+    """
+    Retorna dados agregados para um produto específico:
+      {
+          "ana":[12], "mer":[12], "ajs":[12], "rlzd":[12],
+          "prev": {"ana":[12], "mer":[12], "ajs":[12], "rlzd":[12]}
+      }
+    """
+    empty = {
+        "ana": [0.0]*12, "mer": [0.0]*12, "ajs": [0.0]*12, "rlzd": [0.0]*12,
+        "prev": {"ana": [0.0]*12, "mer": [0.0]*12, "ajs": [0.0]*12, "rlzd": [0.0]*12}
+    }
+    
+    if df_upload is None or df_upload.empty:
+        return empty
+
+    dff = _ensure_cli_n(df_upload).copy()
+    
+    # Filtro por cliente
+    if cliente and cliente != "Todos":
+        dff = dff[dff["CLI_N"] == _norm_txt(cliente)]
+
+    # Normaliza colunas
+    if "CAT_N" not in dff.columns:
+        dff["CAT_N"] = dff["CATEGORIA"].astype(str).apply(_norm_txt)
+    if "PROD_N" not in dff.columns:
+        dff["PROD_N"] = dff["PRODUTO"].astype(str).apply(_norm_txt)
+    if "MES_NUM" not in dff.columns:
+        dff["MES_NUM"] = dff["MES"].apply(_mes_to_num) if "MES" in dff.columns else np.nan
+    if "ANO_NUM" not in dff.columns:
+        dff["ANO_NUM"] = pd.to_numeric(dff.get("ANO", 0), errors="coerce").fillna(0).astype(int)
+    
+    # Filtra por categoria e produto
+    dff = dff[(dff["CAT_N"] == _norm_txt(categoria)) & (dff["PROD_N"] == _norm_txt(produto))]
+    dff = dff[pd.to_numeric(dff["MES_NUM"], errors="coerce").between(1,12)]
+    dff = dff[pd.to_numeric(dff["ANO_NUM"], errors="coerce") >= 2022]
+    
+    if dff.empty:
+        return empty
+
+    col_real = "CURVA_REALIZADO" if "CURVA_REALIZADO" in dff.columns else ("REALIZADO" if "REALIZADO" in dff.columns else None)
+    has_ajs = "PROJETADO_AJUSTADO" in dff.columns
+
+    def arr_from_df(df_, col):
+        if df_.empty or col not in df_.columns:
+            return [0.0]*12
+        s = (df_.groupby("MES_NUM")[col].sum()
+                .reindex(range(1,13)).fillna(0.0).astype(float))
+        return (s.tolist() + [0.0]*12)[:12]
+
+    # Ano corrente
+    proj = dff[dff["ANO_NUM"] == int(ano_proj)].copy() if ano_proj else dff.iloc[0:0]
+    
+    ana = arr_from_df(proj, "PROJETADO_ANALITICO")
+    mer = arr_from_df(proj, "PROJETADO_MERCADO")
+    ajs = arr_from_df(proj, "PROJETADO_AJUSTADO") if has_ajs else ana[:]
+    rlz = arr_from_df(proj, col_real) if col_real else [0.0]*12
+    if mascarar_zeros_finais:
+        rlz = _mask_trailing_zeros(rlz)
+
+    # Ano anterior
+    prev_year = int(ano_proj) - 1 if ano_proj else None
+    proj_prev = dff[dff["ANO_NUM"] == prev_year].copy() if prev_year else dff.iloc[0:0]
+    
+    ana_p = arr_from_df(proj_prev, "PROJETADO_ANALITICO")
+    mer_p = arr_from_df(proj_prev, "PROJETADO_MERCADO")
+    ajs_p = arr_from_df(proj_prev, "PROJETADO_AJUSTADO") if has_ajs else ana_p[:]
+    rlz_p = arr_from_df(proj_prev, col_real) if col_real else [0.0]*12
+
+    return {
+        "ana": ana, "mer": mer, "ajs": ajs, "rlzd": rlz,
+        "prev": {"ana": ana_p, "mer": mer_p, "ajs": ajs_p, "rlzd": rlz_p}
+    }

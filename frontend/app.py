@@ -161,76 +161,15 @@ else:
         
         st.markdown("---")
         
-        # ============== FORMULÁRIO • DADOS DA SIMULAÇÃO ==============
-        with st.expander("📝 Dados da Simulação", expanded=False):
-            df_upload = get_dados_upload()
-
-            # Nome
-            sim_nome_default = st.session_state.get("sim_nome", "Simulação 2026")
-            sim_nome = st.text_input("Nome da Simulação", value=sim_nome_default, key="sim_nome")
-
-            # Cliente
-            clientes_opcoes = ["Todos"]
-            if isinstance(df_upload, pd.DataFrame) and not df_upload.empty:
-                if "TIPO_CLIENTE" in df_upload.columns:
-                    clientes_opcoes += sorted([c for c in df_upload["TIPO_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
-                elif "TP_CLIENTE" in df_upload.columns:
-                    clientes_opcoes += sorted([c for c in df_upload["TP_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
-
-            cliente_mem = st.session_state.get("filtros", {}).get("cliente", "Todos")
-            idx_cliente = clientes_opcoes.index(cliente_mem) if cliente_mem in clientes_opcoes else 0
-            sim_cliente = st.selectbox("Cliente", clientes_opcoes, index=idx_cliente, key="sim_cliente")
-
-            # Categorias/Produtos (dependentes do cliente)
-            if isinstance(df_upload, pd.DataFrame) and not df_upload.empty:
-                cats, map_cat_prod, df_subset = _recarregar_opcoes(df_upload, sim_cliente)
-            else:
-                cats, map_cat_prod, df_subset = [], {}, pd.DataFrame()
-
-            categoria_mem = st.session_state.get("filtros", {}).get("categoria", "")
-            idx_cat = cats.index(categoria_mem) if categoria_mem in cats else (0 if cats else None)
-            sim_categoria = st.selectbox("Categoria", cats, index=idx_cat, key="sim_categoria")
-
-            prds = map_cat_prod.get(sim_categoria, [])
-            produto_mem = st.session_state.get("filtros", {}).get("produto", "")
-            idx_prd = prds.index(produto_mem) if produto_mem in prds else (0 if prds else None)
-            sim_produto = st.selectbox("Produto", prds, index=idx_prd, key="sim_produto")
-
-            st.markdown("---")
-            st.markdown("**Parâmetros (estáticos no momento)**")
-
-            c1, c2 = st.columns(2)
-            with c1:
-                st.slider("Qtd. Meses", 1, 36, 12, key="sim_qtd_meses")
-                st.slider("Primeiro mês pjtd.", 0, 1_000_000_000, 146_635_129_309, step=1_000_000, key="sim_primeiro_pjtd", format="%d")
-                st.slider("Ajuste mensal final", -100, 100, 5, key="sim_ajuste_mensal_final")
-            with c2:
-                st.slider("Último mês pjtd.", 0, 1_000_000_000, 156_965_724_038, step=1_000_000, key="sim_ultimo_pjtd", format="%d")
-                st.slider("Inclinação", -1_500_000_000, 1_500_000_000, -939_144_975, step=1_000_000, key="sim_inclinacao", format="%d")
-                st.slider("Rotacionar Curva", 0.5, 1.5, 1.1, step=0.01, key="sim_rotacionar_curva")
+        # ============== PARÂMETROS DA SIMULAÇÃO (sliders em largura total) ==============
+        with st.expander("⚙️ Parâmetros da Simulação", expanded=True):
+            st.slider("Qtd. Meses", 1, 36, 12, key="sim_qtd_meses")
+            st.slider("Primeiro mês pjtd.", 0, 1_000_000_000, 146_635_129_309, step=1_000_000, key="sim_primeiro_pjtd", format="%d")
+            st.slider("Último mês pjtd.", 0, 1_000_000_000, 156_965_724_038, step=1_000_000, key="sim_ultimo_pjtd", format="%d")
+            st.slider("Inclinação", -1_500_000_000, 1_500_000_000, -939_144_975, step=1_000_000, key="sim_inclinacao", format="%d")
+            st.slider("Ajuste mensal final", -100, 100, 5, key="sim_ajuste_mensal_final")
+            st.slider("Rotacionar Curva", 0.5, 1.5, 1.1, step=0.01, key="sim_rotacionar_curva")
             st.slider("Incremento (%)", 0.0, 0.05, 0.007, step=0.0001, key="sim_incremento_perc")
-
-            # Persistir filtros atuais para o simulador
-            st.session_state["filtros"] = {
-                "cliente": sim_cliente,
-                "categoria": sim_categoria if sim_categoria else "",
-                "produto": sim_produto if sim_produto else "",
-                "nome": sim_nome
-            }
-
-            st.markdown("---")
-            if st.button("💾 Salvar Simulação", use_container_width=True, type="primary"):
-                ajustada = st.session_state.get("ajustada", [0.0]*12)
-                adicionar_simulacao(
-                    nome=st.session_state["filtros"].get("nome", "Simulação"),
-                    categoria=st.session_state["filtros"].get("categoria", ""),
-                    produto=st.session_state["filtros"].get("produto", ""),
-                    taxa_crescimento=0,   # (parâmetros reservados)
-                    volatilidade=0,
-                    cenarios={"Ajustada": True, "Cliente": st.session_state["filtros"].get("cliente", "Todos")},
-                    dados_grafico={"Ajustada": ajustada},
-                )
-                st.success("✅ Simulação salva com sucesso!")
 
         st.markdown("---")
         

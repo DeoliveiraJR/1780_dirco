@@ -10,20 +10,21 @@ def fmt_br(v: float, casas: int = 0) -> str:
     return s.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def fmt_compact(v: float) -> str:
+def fmt_compact(v: float, decimais: int = 2) -> str:
     """
-    Formata número de forma compacta (bi/mi/mil).
+    Formata número de forma compacta (T/B/M/K).
+    Usa mais casas decimais para sensibilidade a alterações pequenas.
     """
     try:
         v = float(v)
         if abs(v) >= 1e12:
-            return f"{v/1e12:.1f}T"
+            return f"{v/1e12:.{decimais}f}T"
         if abs(v) >= 1e9:
-            return f"{v/1e9:.1f}B"
+            return f"{v/1e9:.{decimais}f}B"
         if abs(v) >= 1e6:
-            return f"{v/1e6:.1f}M"
+            return f"{v/1e6:.{decimais}f}M"
         if abs(v) >= 1e3:
-            return f"{v/1e3:.1f}K"
-        return f"{v:.0f}"
+            return f"{v/1e3:.{decimais}f}K"
+        return f"{v:.{decimais}f}"
     except Exception:
         return "-"

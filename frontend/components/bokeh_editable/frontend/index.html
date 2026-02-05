@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Bokeh Editable Component</title>
+    
+    <!-- BokehJS 3.8.2 -->
+    <script src="https://cdn.bokeh.org/bokeh/release/bokeh-3.8.2.min.js"></script>
+    <script src="https://cdn.bokeh.org/bokeh/release/bokeh-widgets-3.8.2.min.js"></script>
+    <script src="https://cdn.bokeh.org/bokeh/release/bokeh-tables-3.8.2.min.js"></script>
+    <script src="https://cdn.bokeh.org/bokeh/release/bokeh-api-3.8.2.min.js"></script>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        #bokeh-container {
+            width: 100%;
+        }
+        .bk-root {
+            width: 100% !important;
+        }
+        #status-indicator {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 100, 0, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: monospace;
+            z-index: 9999;
+            display: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+    <div id="status-indicator"></div>
+    <div id="bokeh-container"></div>
+    
+    <script>
+        // ===== STREAMLIT COMPONENT API =====
+        
+        // Objeto Streamlit
+        let Streamlit = null;
+        let currentArgs = null;
+        let lastSentData = null;
+        let debounceTimer = null;
+        
+        // Inicializa comunicação com Streamlit
+        function initStreamlit() {
+            // Aguarda o objeto Streamlit estar disponível
+            return new Promise((resolve) => {
+                function check() {
+                    if (window.Streamlit) {
+                        Streamlit = window.Streamlit;
+                        resolve();
+                    } else {
+                        setTimeout(check, 50);
+                    }
+                }
+                check();
+            });
+        }
+        
+        // Mostra indicador de status
+        function showStatus(message, duration = 2000) {
+            const indicator = document.getElementById('status-indicator');
+            indicator.textContent = message;
+            indicator.style.display = 'block';
+            setTimeout(() => {
+                indicator.style.display = 'none';
+            }, duration);
+        }
+        
+        // Envia dados para o Python
+        function sendToPython(yValues) {
+            const dataStr = JSON.stringify(yValues);
+            if (dataStr === lastSentData) {
+                console.log('[BokehEditable] Dados iguais, ignorando');
+                return;
+            }
+            lastSentData = dataStr;
+            
+            console.log('[BokehEditable] Enviando para Python:', yValues);
+            showStatus('✓ Dados atualizados!');
+            
+            // Envia para o Streamlit
+            if (Streamlit) {
+                Streamlit.setComponentValue(yValues);
+            }
+        }
+        
+        // Processa mudança de dados com debounce
+        function handleDataChange(source) {
+            const data = source.data;
+            // Verifica se tem 12 elementos (meses)
+            if (data && data.y && data.y.length === 12) {
+                const yValues = Array.from(data.y).map(v => 
+                    Number.isFinite(v) ? parseFloat(v.toFixed(2)) : 0
+                );
+                
+                console.log('[BokehEditable] Novos valores:', yValues);
+                
+                // Debounce de 500ms
+                if (debounceTimer) clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    sendToPython(yValues);
+                }, 500);
+            }
+        }
+        
+        // Renderiza o gráfico Bokeh
+        async function renderBokeh(bokehJson, height) {
+            const container = document.getElementById('bokeh-container');
+            container.innerHTML = '';
+            
+            if (!bokehJson) {
+                container.innerHTML = '<p style="color: red;">Erro: Nenhum gráfico fornecido</p>';
+                return;
+            }
+            
+            try {
+                const bokehData = JSON.parse(bokehJson);
+                console.log('[BokehEditable] Renderizando gráfico...');
+                
+                // Embed o gráfico
+                const views = await Bokeh.embed.embed_item(bokehData, "bokeh-container");
+                
+                if (views && views.length > 0) {
+                    const doc = views[0].model.document;
+                    
+                    // Encontra todos os ColumnDataSources
+                    const allModels = doc._all_models;
+                    let dataSources = [];
+                    
+                    allModels.forEach((model, id) => {
+                        if (model.type === 'ColumnDataSource') {
+                            dataSources.push(model);
+                        }
+                    });
+                    
+                    console.log('[BokehEditable] DataSources encontrados:', dataSources.length);
+                    
+                    // Monitora cada DataSource com 12 elementos (curvas mensais)
+                    dataSources.forEach((source, idx) => {
+                        // Verifica se é um source com 12 elementos
+                        if (source.data && source.data.y && source.data.y.length === 12) {
+                            console.log('[BokehEditable] Monitorando:', source.name || source.id);
+                            
+                            // Escuta mudanças
+                            source.connect(source.properties.data.change, () => {
+                                console.log('[BokehEditable] Mudança detectada!');
+                                handleDataChange(source);
+                            });
+                        }
+                    });
+                    
+                    console.log('[BokehEditable] Gráfico renderizado com sucesso!');
+                    showStatus('Pronto para edição', 1500);
+                }
+                
+                // Ajusta altura
+                if (Streamlit) {
+                    Streamlit.setFrameHeight(height);
+                }
+                
+            } catch (error) {
+                console.error('[BokehEditable] Erro:', error);
+                container.innerHTML = `<p style="color: red;">Erro: ${error.message}</p>`;
+            }
+        }
+        
+        // Handler de renderização do Streamlit
+        function onRender(event) {
+            const args = event.detail.args;
+            currentArgs = args;
+            
+            const bokehJson = args.bokeh_json;
+            const height = args.height || 1200;
+            
+            renderBokeh(bokehJson, height);
+        }
+        
+        // ===== INICIALIZAÇÃO =====
+        async function init() {
+            await initStreamlit();
+            console.log('[BokehEditable] Componente inicializado');
+            
+            // Registra handler de renderização
+            Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
+            
+            // Sinaliza que está pronto
+            Streamlit.setComponentReady();
+            Streamlit.setFrameHeight();
+        }
+        
+        // Inicia
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>

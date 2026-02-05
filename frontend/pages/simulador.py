@@ -16,6 +16,7 @@ from bokeh.models import (
 from bokeh.layouts import column, row
 from bokeh.transform import dodge
 from streamlit_bokeh import streamlit_bokeh
+from components.bokeh_editable import bokeh_editable
 
 from utils_ext.css import make_stylesheet
 from utils_ext.formatters import fmt_br
@@ -39,12 +40,47 @@ from components.bars import _grafico_barras_categoria
 from components.donut import _grafico_pizza_share_categoria, _grafico_pizza_share_por_projecao
 from components.cards import _cards_categoria_html
 
-from streamlit import components
+import streamlit.components.v1 as st_components
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data_manager import get_dados_upload
+from data_manager import (
+    get_dados_upload, adicionar_simulacao, get_simulacoes_usuario,
+    restaurar_simulacao, deletar_simulacao, get_simulacao_por_combo
+)
 
 MASCARAR_ZEROS_FINAIS = True
+
+
+def _norm(s: str) -> str:
+    import unicodedata
+    if s is None:
+        return ""
+    s = unicodedata.normalize("NFKD", str(s))
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    return s.strip().lower()
+
+
+def _recarregar_opcoes(df, cliente_escolhido):
+    """Retorna (categorias, map_cat_prod, df_sub) com base no cliente."""
+    dff = df.copy()
+    if "CLI_N" not in dff.columns:
+        if "TIPO_CLIENTE" in dff.columns:
+            dff["CLI_N"] = dff["TIPO_CLIENTE"].astype(str).apply(_norm)
+        elif "TP_CLIENTE" in dff.columns:
+            dff["CLI_N"] = dff["TP_CLIENTE"].astype(str).apply(_norm)
+        else:
+            dff["CLI_N"] = ""
+
+    if cliente_escolhido and cliente_escolhido != "Todos":
+        dff = dff[dff["CLI_N"] == _norm(cliente_escolhido)]
+
+    categorias = sorted(dff["CATEGORIA"].dropna().astype(str).unique())
+    map_cat_prod = (
+        dff.groupby("CATEGORIA")["PRODUTO"]
+           .apply(lambda s: sorted(s.dropna().astype(str).unique().tolist()))
+           .to_dict()
+    )
+    return categorias, map_cat_prod, dff
 
 
 def renderizar():
@@ -91,14 +127,113 @@ def renderizar():
     </style>
     """, unsafe_allow_html=True)
 
-    st.markdown("---")
-
-    filtros = st.session_state.get("filtros", {}) or {}
+    # ==================== FILTROS NO TOPO DA PÁGINA ====================
     df_upload = get_dados_upload()
-
+    
     if df_upload is None or df_upload.empty:
         st.warning("⚠️ Nenhum dado carregado. Vá em **Upload** e importe o Excel.")
         return
+
+    # --- Carrega opções de clientes ---
+    clientes_opcoes = ["Todos"]
+    if isinstance(df_upload, pd.DataFrame) and not df_upload.empty:
+        if "TIPO_CLIENTE" in df_upload.columns:
+            clientes_opcoes += sorted([c for c in df_upload["TIPO_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
+        elif "TP_CLIENTE" in df_upload.columns:
+            clientes_opcoes += sorted([c for c in df_upload["TP_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
+
+    # --- Layout filtros: 5 colunas (Nome | Cliente | Categoria | Produto | Botão) ---
+    col_nome, col_cli, col_cat, col_prod, col_btn = st.columns([1.5, 1.2, 1.5, 1.5, 0.8])
+
+    with col_nome:
+        sim_nome_default = st.session_state.get("sim_nome", "Simulação 2026")
+        sim_nome = st.text_input("📝 Nome da Simulação", value=sim_nome_default, key="sim_nome_page")
+
+    with col_cli:
+        cliente_mem = st.session_state.get("filtros", {}).get("cliente", "Todos")
+        idx_cliente = clientes_opcoes.index(cliente_mem) if cliente_mem in clientes_opcoes else 0
+        sim_cliente = st.selectbox("👤 Cliente", clientes_opcoes, index=idx_cliente, key="sim_cliente_page")
+
+    # Recarrega categorias/produtos com base no cliente selecionado
+    cats, map_cat_prod, df_subset = _recarregar_opcoes(df_upload, sim_cliente)
+
+    with col_cat:
+        categoria_mem = st.session_state.get("filtros", {}).get("categoria", "")
+        idx_cat = cats.index(categoria_mem) if categoria_mem in cats else (0 if cats else None)
+        sim_categoria = st.selectbox("📁 Categoria", cats, index=idx_cat, key="sim_categoria_page")
+
+    with col_prod:
+        prds = map_cat_prod.get(sim_categoria, [])
+        produto_mem = st.session_state.get("filtros", {}).get("produto", "")
+        idx_prd = prds.index(produto_mem) if produto_mem in prds else (0 if prds else None)
+        sim_produto = st.selectbox("📦 Produto", prds, index=idx_prd, key="sim_produto_page")
+
+    with col_btn:
+        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+        salvar_clicked = st.button("💾 Salvar", type="primary", use_container_width=True)
+
+    # --- Linha de simulações salvas (SEMPRE VISÍVEL) ---
+    simulacoes_usuario = get_simulacoes_usuario()
+    
+    # Container para simulações salvas - sempre aparece
+    with st.expander(f"📂 Simulações Salvas ({len(simulacoes_usuario)})", expanded=len(simulacoes_usuario) > 0):
+        if not simulacoes_usuario:
+            st.info("ℹ️ Nenhuma simulação salva ainda. Use o botão 💾 Salvar para guardar sua simulação.")
+        else:
+            cols_sim = st.columns([3, 2, 2, 1, 1])
+            cols_sim[0].markdown("**Nome**")
+            cols_sim[1].markdown("**Categoria**")
+            cols_sim[2].markdown("**Produto**")
+            cols_sim[3].markdown("**Ação**")
+            cols_sim[4].markdown("**Excluir**")
+            
+            for sim in simulacoes_usuario:
+                cols_sim = st.columns([3, 2, 2, 1, 1])
+                cols_sim[0].write(sim.get("nome", "Sem nome"))
+                cols_sim[1].write(sim.get("categoria", "-")[:20])
+                cols_sim[2].write(sim.get("produto", "-")[:20])
+                if cols_sim[3].button("🔄", key=f"rest_{sim.get('id')}", help="Restaurar"):
+                    restaurar_simulacao(sim.get("id"))
+                    st.rerun()
+                if cols_sim[4].button("🗑️", key=f"del_{sim.get('id')}", help="Excluir"):
+                    deletar_simulacao(sim.get("id"))
+                    st.rerun()
+
+    # Atualiza session_state com os filtros selecionados APENAS se mudou
+    novo_filtro = {
+        "cliente": sim_cliente,
+        "categoria": sim_categoria if sim_categoria else "",
+        "produto": sim_produto if sim_produto else "",
+        "nome": sim_nome
+    }
+    if st.session_state.get("filtros") != novo_filtro:
+        st.session_state["filtros"] = novo_filtro
+
+    # Ação do botão salvar
+    if salvar_clicked:
+        ajustada_para_salvar = st.session_state.get("ajustada", [0.0]*12)
+        sim_salva = adicionar_simulacao(
+            nome=st.session_state["filtros"].get("nome", "Simulação"),
+            categoria=st.session_state["filtros"].get("categoria", ""),
+            produto=st.session_state["filtros"].get("produto", ""),
+            taxa_crescimento=st.session_state.get("sim_incremento_perc", 0),
+            volatilidade=st.session_state.get("sim_rotacionar_curva", 1.0),
+            cenarios={
+                "Ajustada": True, 
+                "Cliente": st.session_state["filtros"].get("cliente", "Todos"),
+                "ajuste_mensal": st.session_state.get("sim_ajuste_mensal_final", 0),
+                "inclinacao": st.session_state.get("sim_inclinacao", 0),
+            },
+            dados_grafico={"Ajustada": ajustada_para_salvar},
+        )
+        st.toast(f"✅ Simulação '{sim_salva.get('nome', '')}' salva com sucesso!", icon="💾")
+        st.success(f"✅ Simulação salva! ID: {sim_salva.get('id', '')[:20]}...")
+        st.rerun()  # Força rerun para atualizar a lista de simulações
+
+    st.markdown("---")
+
+    # ==================== LÓGICA DO SIMULADOR ====================
+    filtros = st.session_state.get("filtros", {}) or {}
 
     cliente  = filtros.get("cliente", "Todos")
     categoria= filtros.get("categoria", "")
@@ -114,9 +249,19 @@ def renderizar():
 
     analitica, mercado, ano_proj = _carregar_curvas_base(df_upload, cliente, categoria, produto)
     combo = f"{cliente}::{categoria}::{produto}"
+    
+    # ==================== ESTADOS PARA AS 3 CURVAS ====================
+    # Reinicia estados quando combo muda
     if st.session_state.get("last_combo") != combo:
-        st.session_state["ajustada"] = analitica[:]
+        st.session_state["curva_analitica"] = analitica[:]
+        st.session_state["curva_mercado"] = mercado[:]
+        st.session_state["ajustada"] = analitica[:]  # Ajustada inicia igual à analítica
         st.session_state["last_combo"] = combo
+        print(f"[DEBUG] COMBO MUDOU! Resetando curvas para: {combo}")
+    
+    # Carrega os valores dos estados (fonte de verdade)
+    curva_analitica_state = st.session_state.get("curva_analitica", analitica[:])
+    curva_mercado_state = st.session_state.get("curva_mercado", mercado[:])
     ajustada = st.session_state.get("ajustada", analitica[:])
 
     realizados_dict = _obter_realizados_por_ano(df_upload, cliente, categoria, produto, mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS)
@@ -378,48 +523,85 @@ def renderizar():
         sizing_mode="stretch_width",
     )
     
-    # Captura o retorno do streamlit_bokeh para persistir mudanças do drag-and-drop
-    bokeh_result = streamlit_bokeh(
+    # Renderiza o gráfico Bokeh (drag-and-drop salva valores no localStorage)
+    bokeh_editable(
         layout_topo, 
-        use_container_width=True, 
-        key=f"simulador_layout_topo::{combo}"
+        height=1200,
+        key=f"sim_bokeh_{combo}"
     )
     
-    # Se houver dados retornados do Bokeh (drag-and-drop), atualiza o session_state
-    if bokeh_result is not None:
-        try:
-            # O retorno pode conter os dados atualizados do ColumnDataSource
-            if isinstance(bokeh_result, dict):
-                # Tenta extrair os valores y do source ajustada
-                if 'y' in bokeh_result:
-                    novos_valores = bokeh_result['y']
-                    if isinstance(novos_valores, list) and len(novos_valores) >= 12:
-                        st.session_state["ajustada"] = novos_valores[:12]
-        except Exception:
-            pass  # Ignora erros de parsing
+    # ===== BOTÃO PARA APLICAR ALTERAÇÕES DO GRÁFICO =====
+    st.markdown("---")
+    col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+    with col_btn2:
+        if st.button("🔄 Aplicar Alterações do Gráfico", key=f"apply_btn_{combo}", use_container_width=True):
+            from components.bokeh_editable import get_bokeh_updates
+            novos_valores = get_bokeh_updates(key=f"sim_bokeh_{combo}")
+            if novos_valores is not None:
+                st.session_state["ajustada"] = novos_valores
+                st.success(f"✅ Curva atualizada! Total: R$ {sum(novos_valores):,.2f}")
+                print(f"[APLICAR] SESSION STATE ATUALIZADO: {novos_valores}")
+                st.rerun()
+            else:
+                st.info("ℹ️ Nenhuma alteração pendente. Arraste os pontos no gráfico primeiro.")
+    
+    # ==================== DEBUG: LOGS DOS ESTADOS DAS CURVAS ====================
+    st.markdown("---")
+    st.markdown("### 🔍 DEBUG - Estados das Curvas")
+    
+    # Exibe valores atuais dos estados
+    debug_col1, debug_col2, debug_col3 = st.columns(3)
+    
+    with debug_col1:
+        st.markdown("**📊 Curva Analítica (estado)**")
+        st.write(st.session_state.get("curva_analitica", "Não definido"))
+    
+    with debug_col2:
+        st.markdown("**📈 Curva Mercado (estado)**")
+        st.write(st.session_state.get("curva_mercado", "Não definido"))
+    
+    with debug_col3:
+        st.markdown("**🎯 Curva Ajustada (estado)**")
+        st.write(st.session_state.get("ajustada", "Não definido"))
+    
+    # Log no console também
+    print(f"\n{'='*60}")
+    print(f"[DEBUG] Combo: {combo}")
+    print(f"[DEBUG] curva_analitica: {st.session_state.get('curva_analitica', 'NÃO DEFINIDO')}")
+    print(f"[DEBUG] curva_mercado: {st.session_state.get('curva_mercado', 'NÃO DEFINIDO')}")
+    print(f"[DEBUG] ajustada: {st.session_state.get('ajustada', 'NÃO DEFINIDO')}")
+    print(f"{'='*60}\n")
+    
+    st.markdown("---")
+    
+    # Atualiza referência da ajustada do session_state para uso nos cards
+    ajustada = st.session_state.get("ajustada", analitica[:])
 
     # -------------------- Seção: Análises por Categoria ----------------------
     st.markdown("<h2 class='uan-sec' style='margin:8px 0 4px 0;padding:4px 0;font-size:1.2rem;border-top:1px solid #e2e8f0;'>🗂️ Análises por Categoria</h2>", unsafe_allow_html=True)
 
+    # Carrega dados agregados por categoria
     agreg = _agregados_por_categoria(df_upload, cliente, ano_proj or 0, mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS)
-
-    # Ajuste em tempo real da série "Ajustada" da CATEGORIA selecionada
-    # Aplica a diferença do drag-and-drop na categoria atual
+    
+    # ==== APLICA AJUSTES DO DRAG-AND-DROP À CATEGORIA ATUAL ====
+    # Quando o usuário arrasta pontos na curva ajustada, reflete na categoria correspondente
     ajustada_atual = st.session_state.get("ajustada", analitica[:])
     
     if agreg and categoria in agreg:
-        serie_cat_ajs = np.array(agreg[categoria]["ajs"], dtype=float)
-        serie_drag    = np.array(ajustada_atual, dtype=float)
+        # Calcula a diferença entre valores arrastados e originais do produto
         serie_prod_orig = _carregar_ajustada_produto(df_upload, cliente, categoria, produto, ano_proj) or analitica[:]
         serie_prod_orig = np.array(serie_prod_orig, dtype=float)
-        if serie_drag.size == 12 and serie_prod_orig.size == 12 and serie_cat_ajs.size == 12:
-            # Calcula a nova série ajustada da categoria = original + diferença do drag
+        serie_drag = np.array(ajustada_atual, dtype=float)
+        
+        if serie_drag.size == 12 and serie_prod_orig.size == 12:
+            # Calcula a diferença (ajuste do usuário)
             diff = serie_drag - serie_prod_orig
-            agreg[categoria]["ajs"] = list(serie_cat_ajs + diff)
-
-    # Gera hash dos valores ajustados para forçar re-render dos cards
-    ajustada_hash = hash(tuple(st.session_state.get("ajustada", [0]*12)))
-
+            
+            # Aplica a diferença à série ajustada da categoria
+            serie_cat_ajs = np.array(agreg[categoria]["ajs"], dtype=float)
+            if serie_cat_ajs.size == 12:
+                agreg[categoria]["ajs"] = list(serie_cat_ajs + diff)
+    
     if agreg:
         # Define ordem das categorias principais
         principais = ["CAPTAÇÕES", "OPERAÇÕES CRÉDITO", "SERVIÇOS", "CRÉDITO"]
@@ -430,18 +612,15 @@ def renderizar():
         cols_cards = st.columns(3, gap="small")
         for i, cat in enumerate(ordem):
             with cols_cards[i]:
-                components.v1.html(
-                    _cards_categoria_html(cat, agreg[cat]),
-                    height=260,
-                    scrolling=False
-                )
+                card_html = _cards_categoria_html(cat, agreg[cat])
+                st_components.html(card_html, height=260, scrolling=False)
 
         # ===== LINHA 2: Gráficos de barras =====
         cols_barras = st.columns(3, gap="small")
         for i, cat in enumerate(ordem):
             with cols_barras[i]:
                 barras = _grafico_barras_categoria(cat, agreg[cat], make_stylesheet())
-                streamlit_bokeh(barras, use_container_width=True, key=f"simulador_cat_bar::{combo}::{cat}::{ajustada_hash}")
+                streamlit_bokeh(barras, use_container_width=True, key=f"bar_{cat}_{combo}")
 
         # ===== LINHA 3: Gráficos de pizza - Share por tipo de projeção =====
         st.markdown("<h4 style='margin:0.5rem 0 0.25rem 0;'>🍩 Share por Tipo de Projeção</h4>", unsafe_allow_html=True)
@@ -451,4 +630,4 @@ def renderizar():
         for i, (tipo, nome) in enumerate(tipos_projecao):
             with cols_pizza[i]:
                 pizza = _grafico_pizza_share_por_projecao(tipo, agreg, make_stylesheet())
-                streamlit_bokeh(pizza, use_container_width=True, key=f"simulador_pizza_{tipo}::{combo}::{ajustada_hash}")
+                streamlit_bokeh(pizza, use_container_width=True, key=f"pizza_{tipo}_{combo}")

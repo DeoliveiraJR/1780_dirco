@@ -8,12 +8,17 @@ import streamlit as st
 import json
 from datetime import datetime
 
-# Inicializar session state para dados compartilhados
+
+# ============================================================================
+# INICIALIZAÇÃO DO SESSION STATE
+# ============================================================================
 def init_data_state():
     if "dados_upload" not in st.session_state:
         st.session_state.dados_upload = None
     if "simulacoes" not in st.session_state:
         st.session_state.simulacoes = []
+    if "simulacoes_salvas" not in st.session_state:
+        st.session_state.simulacoes_salvas = {}  # {usuario: [lista de simulações]}
     if "metricas_dashboard" not in st.session_state:
         st.session_state.metricas_dashboard = {
             "valor_total": 0,
@@ -21,29 +26,169 @@ def init_data_state():
             "taxa_acuracia": 0,
             "simulacoes_ativas": 0
         }
+    if "ajustada" not in st.session_state:
+        st.session_state.ajustada = [0.0] * 12
+    if "ajustes_categoria" not in st.session_state:
+        st.session_state.ajustes_categoria = {}
 
+
+# ============================================================================
+# DADOS DE UPLOAD
+# ============================================================================
 def set_dados_upload(df):
     """Armazena dados do upload no session state"""
     st.session_state.dados_upload = df
     atualizar_metricas_dashboard()
-    # Salvar no localStorage via JavaScript
-    salvar_local_storage("dados_upload", df.to_json(orient='records'))
+
 
 def get_dados_upload():
     """Recupera dados do upload"""
     return st.session_state.dados_upload
 
+
+# ============================================================================
+# SIMULAÇÕES - CRUD
+# ============================================================================
+def adicionar_simulacao(nome, categoria, produto, taxa_crescimento, 
+                        volatilidade, cenarios, dados_grafico):
+    """Adiciona uma nova simulação ao session_state"""
+    usuario = st.session_state.get("usuario", "anonimo")
+    
+    simulacao = {
+        "id": f"{usuario}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+        "nome": nome,
+        "categoria": categoria,
+        "produto": produto,
+        "cliente": cenarios.get("Cliente", "Todos"),
+        "taxa_crescimento": taxa_crescimento,
+        "volatilidade": volatilidade,
+        "cenarios": cenarios,
+        "dados_grafico": dados_grafico,
+        "ajustada": dados_grafico.get("Ajustada", [0.0] * 12),
+        "data_criacao": datetime.now().isoformat(),
+        "status": "Ativa"
+    }
+    
+    # Adiciona à lista do usuário
+    if usuario not in st.session_state.simulacoes_salvas:
+        st.session_state.simulacoes_salvas[usuario] = []
+    
+    # Verifica se já existe simulação com mesmo nome para mesma combo
+    combo_key = f"{categoria}::{produto}::{cenarios.get('Cliente', 'Todos')}"
+    existente = None
+    for i, sim in enumerate(st.session_state.simulacoes_salvas[usuario]):
+        sim_combo = f"{sim.get('categoria')}::{sim.get('produto')}::{sim.get('cliente', 'Todos')}"
+        if sim.get("nome") == nome and sim_combo == combo_key:
+            existente = i
+            break
+    
+    if existente is not None:
+        # Atualiza simulação existente
+        st.session_state.simulacoes_salvas[usuario][existente] = simulacao
+    else:
+        # Adiciona nova
+        st.session_state.simulacoes_salvas[usuario].append(simulacao)
+    
+    # Mantém compatibilidade com lista antiga
+    st.session_state.simulacoes.append(simulacao)
+    
+    return simulacao
+
+
+def get_simulacoes_usuario(usuario=None):
+    """Retorna todas as simulações do usuário"""
+    if usuario is None:
+        usuario = st.session_state.get("usuario", "anonimo")
+    return st.session_state.simulacoes_salvas.get(usuario, [])
+
+
+def get_simulacao_por_combo(categoria, produto, cliente="Todos"):
+    """Busca simulação salva para uma combinação específica"""
+    usuario = st.session_state.get("usuario", "anonimo")
+    simulacoes = st.session_state.simulacoes_salvas.get(usuario, [])
+    
+    for sim in reversed(simulacoes):  # Mais recente primeiro
+        if (sim.get("categoria") == categoria and 
+            sim.get("produto") == produto and
+            sim.get("cliente", "Todos") == cliente):
+            return sim
+    return None
+
+
+def restaurar_simulacao(simulacao_id):
+    """Restaura uma simulação salva para o estado atual"""
+    usuario = st.session_state.get("usuario", "anonimo")
+    simulacoes = st.session_state.simulacoes_salvas.get(usuario, [])
+    
+    for sim in simulacoes:
+        if sim.get("id") == simulacao_id:
+            # Restaura os dados
+            st.session_state["ajustada"] = sim.get("ajustada", [0.0] * 12)
+            st.session_state["filtros"] = {
+                "cliente": sim.get("cliente", "Todos"),
+                "categoria": sim.get("categoria", ""),
+                "produto": sim.get("produto", ""),
+                "nome": sim.get("nome", "")
+            }
+            return sim
+    return None
+
+
+def deletar_simulacao(simulacao_id):
+    """Deleta uma simulação por ID"""
+    usuario = st.session_state.get("usuario", "anonimo")
+    if usuario in st.session_state.simulacoes_salvas:
+        st.session_state.simulacoes_salvas[usuario] = [
+            s for s in st.session_state.simulacoes_salvas[usuario] 
+            if s.get("id") != simulacao_id
+        ]
+    # Compatibilidade
+    st.session_state.simulacoes = [
+        s for s in st.session_state.simulacoes 
+        if s.get("id") != simulacao_id
+    ]
+
+
+def get_simulacoes():
+    """Retorna todas as simulações (compatibilidade)"""
+    return st.session_state.simulacoes
+
+
+# ============================================================================
+# AJUSTES POR CATEGORIA (para propagar alterações do drag-and-drop)
+# ============================================================================
+def set_ajuste_categoria(categoria, valores):
+    """Salva ajuste temporário para uma categoria"""
+    st.session_state.ajustes_categoria[categoria] = valores
+
+
+def get_ajuste_categoria(categoria):
+    """Recupera ajuste temporário de uma categoria"""
+    return st.session_state.ajustes_categoria.get(categoria, None)
+
+
+def limpar_ajustes_categoria():
+    """Limpa todos os ajustes temporários"""
+    st.session_state.ajustes_categoria = {}
+
+
+# ============================================================================
+# MÉTRICAS DO DASHBOARD
+# ============================================================================
 def atualizar_metricas_dashboard():
     """Atualiza métricas do dashboard baseado nos dados do upload"""
     if st.session_state.dados_upload is not None:
         df = st.session_state.dados_upload
         
         st.session_state.metricas_dashboard = {
-            "valor_total": float(df['PROJETADO_AJUSTADO'].sum()) if 'PROJETADO_AJUSTADO' in df.columns else 0,
-            "realizado_atual": float(df['CURVA_REALIZADO'].sum()) if 'CURVA_REALIZADO' in df.columns else 0,
+            "valor_total": float(df['PROJETADO_AJUSTADO'].sum()) 
+                if 'PROJETADO_AJUSTADO' in df.columns else 0,
+            "realizado_atual": float(df['CURVA_REALIZADO'].sum()) 
+                if 'CURVA_REALIZADO' in df.columns else 0,
             "taxa_acuracia": calcular_acuracia(df),
-            "simulacoes_ativas": len(st.session_state.simulacoes)
+            "simulacoes_ativas": len(get_simulacoes_usuario())
         }
+
 
 def calcular_acuracia(df):
     """Calcula taxa de acurácia entre realizado e projetado"""
@@ -52,63 +197,41 @@ def calcular_acuracia(df):
         projetado = df['PROJETADO_ANALITICO'].sum()
         if projetado > 0:
             acuracia = (realizado / projetado) * 100
-            return min(100, max(0, acuracia))  # Limitar entre 0-100
+            return min(100, max(0, acuracia))
     return 0
 
-def adicionar_simulacao(nome, categoria, produto, taxa_crescimento, volatilidade, cenarios, dados_grafico):
-    """Adiciona uma nova simulação"""
-    simulacao = {
-        "id": len(st.session_state.simulacoes) + 1,
-        "nome": nome,
-        "categoria": categoria,
-        "produto": produto,
-        "taxa_crescimento": taxa_crescimento,
-        "volatilidade": volatilidade,
-        "cenarios": cenarios,
-        "dados_grafico": dados_grafico,
-        "data_criacao": datetime.now().isoformat(),
-        "status": "Ativa"
-    }
-    st.session_state.simulacoes.append(simulacao)
-    salvar_local_storage("simulacoes", json.dumps(st.session_state.simulacoes, default=str))
-    return simulacao
-
-def get_simulacoes():
-    """Retorna todas as simulações"""
-    return st.session_state.simulacoes
-
-def deletar_simulacao(simulacao_id):
-    """Deleta uma simulação por ID"""
-    st.session_state.simulacoes = [s for s in st.session_state.simulacoes if s["id"] != simulacao_id]
-    salvar_local_storage("simulacoes", json.dumps(st.session_state.simulacoes, default=str))
 
 def get_metricas_dashboard():
     """Retorna as métricas do dashboard"""
     return st.session_state.metricas_dashboard
 
-def salvar_local_storage(chave, valor):
-    """
-    Salva dados no localStorage via JavaScript
-    Isso persiste os dados mesmo após recarregar a página
-    """
-    js_code = f"""
-    <script>
-        localStorage.setItem('{chave}', JSON.stringify({json.dumps(valor)}));
-    </script>
-    """
-    st.components.v1.html(js_code, height=0)
 
-def carregar_local_storage(chave):
-    """Carrega dados do localStorage via JavaScript"""
-    js_code = f"""
-    <script>
-        const valor = localStorage.getItem('{chave}');
-        console.log('Carregado do localStorage: {chave}', valor);
-    </script>
-    """
-    st.components.v1.html(js_code, height=0)
+# ============================================================================
+# PERSISTÊNCIA (simulada via session_state - em produção usaria DB)
+# ============================================================================
+def exportar_simulacoes_json():
+    """Exporta todas as simulações do usuário para JSON"""
+    usuario = st.session_state.get("usuario", "anonimo")
+    dados = st.session_state.simulacoes_salvas.get(usuario, [])
+    return json.dumps(dados, default=str, indent=2)
 
-# Gerar dados de exemplo para o dashboard
+
+def importar_simulacoes_json(json_str):
+    """Importa simulações de um JSON"""
+    usuario = st.session_state.get("usuario", "anonimo")
+    try:
+        dados = json.loads(json_str)
+        if isinstance(dados, list):
+            st.session_state.simulacoes_salvas[usuario] = dados
+            return True
+    except Exception:
+        pass
+    return False
+
+
+# ============================================================================
+# GERAR DADOS DE EXEMPLO
+# ============================================================================
 def gerar_dados_exemplo():
     """Gera dados de exemplo para demonstração"""
     import numpy as np
@@ -139,6 +262,7 @@ def gerar_dados_exemplo():
                 })
     
     return pd.DataFrame(dados)
+
 
 # Inicializar ao importar
 init_data_state()
