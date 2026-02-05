@@ -39,7 +39,7 @@ def dados_pessoais():
             width=150,
             caption="Clique para alterar"
         )
-        if st.button("📷 Alterar Foto", use_container_width=True):
+        if st.button("📷 Alterar Foto", width='stretch'):
             st.info("Upload de foto implementado em breve")
     
     with col_dados:
@@ -64,11 +64,11 @@ def dados_pessoais():
         col_save, col_cancel = st.columns(2)
         
         with col_save:
-            if st.button("✓ Salvar Alterações", use_container_width=True, type="primary"):
+            if st.button("✓ Salvar Alterações", width='stretch', type="primary"):
                 st.success("✓ Dados atualizados com sucesso!")
         
         with col_cancel:
-            if st.button("✕ Cancelar", use_container_width=True):
+            if st.button("✕ Cancelar", width='stretch'):
                 st.rerun()
 
 
@@ -83,7 +83,7 @@ def seguranca():
     senha_nova = st.text_input("Nova Senha", type="password")
     senha_confirmacao = st.text_input("Confirmar Nova Senha", type="password")
     
-    if st.button("🔄 Atualizar Senha", use_container_width=True):
+    if st.button("🔄 Atualizar Senha", width='stretch'):
         if senha_atual and senha_nova and senha_confirmacao:
             if senha_nova == senha_confirmacao:
                 st.success("✓ Senha alterada com sucesso!")
@@ -108,7 +108,7 @@ def seguranca():
         
         codigo_backup = st.text_input("Digite o código de 6 dígitos", placeholder="000000")
         
-        if st.button("✓ Confirmar 2FA", use_container_width=True):
+        if st.button("✓ Confirmar 2FA", width='stretch'):
             st.success("✓ Autenticação de dois fatores ativada!")
     
     st.markdown("---")
@@ -202,13 +202,13 @@ def historico():
     col_export1, col_export2, col_export3 = st.columns(3)
     
     with col_export1:
-        if st.button("📊 Exportar Simulações", use_container_width=True):
+        if st.button("📊 Exportar Simulações", width='stretch'):
             st.info("Download iniciado...")
     
     with col_export2:
-        if st.button("📈 Exportar Histórico", use_container_width=True):
+        if st.button("📈 Exportar Histórico", width='stretch'):
             st.info("Download iniciado...")
     
     with col_export3:
-        if st.button("📋 Exportar Relatório", use_container_width=True):
+        if st.button("📋 Exportar Relatório", width='stretch'):
             st.info("Download iniciado...")

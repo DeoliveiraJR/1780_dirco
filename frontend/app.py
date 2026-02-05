@@ -1,11 +1,13 @@
+# frontend/app.py
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
+import pandas as pd  # <-- CORREÇÃO: necessário para isinstance(..., pd.DataFrame)
 from styles import CORES, CSS_CUSTOM, aplicar_tema
 from pages import autenticacao, dashboard, simulador, perfil, upload
-from data_manager import init_data_state
+from data_manager import init_data_state, get_dados_upload, adicionar_simulacao
 
 # Inicializar data state logo no início
 init_data_state()
@@ -21,7 +23,6 @@ st.set_page_config(
 aplicar_tema()
 
 # ============= CARREGAMENTO DA LOGO =============
-import os
 from PIL import Image
 
 logo_path = os.path.join(os.path.dirname(__file__), "images", "logo.png")
@@ -37,15 +38,45 @@ if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
     st.session_state.usuario = None
 
+def _norm(s: str) -> str:
+    import unicodedata
+    if s is None:
+        return ""
+    s = unicodedata.normalize("NFKD", str(s))
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    return s.strip().lower()
+
+def _recarregar_opcoes(df, cliente_escolhido):
+    """Retorna (categorias, map_cat_prod, df_sub) com base no cliente."""
+    dff = df.copy()
+    # Garante CLI_N para bases mais antigas
+    if "CLI_N" not in dff.columns:
+        if "TIPO_CLIENTE" in dff.columns:
+            dff["CLI_N"] = dff["TIPO_CLIENTE"].astype(str).apply(_norm)
+        elif "TP_CLIENTE" in dff.columns:
+            dff["CLI_N"] = dff["TP_CLIENTE"].astype(str).apply(_norm)
+        else:
+            dff["CLI_N"] = ""
+
+    if cliente_escolhido and cliente_escolhido != "Todos":
+        dff = dff[dff["CLI_N"] == _norm(cliente_escolhido)]
+
+    categorias = sorted(dff["CATEGORIA"].dropna().astype(str).unique())
+    map_cat_prod = (
+        dff.groupby("CATEGORIA")["PRODUTO"]
+           .apply(lambda s: sorted(s.dropna().astype(str).unique().tolist()))
+           .to_dict()
+    )
+    return categorias, map_cat_prod, dff
+
 if not st.session_state.autenticado:
     autenticacao.renderizar()
 else:
     with st.sidebar:
-        # Ocultar navegação padrão
+        # Ocultar navegação padrão (preserva botão de colapsar sidebar)
         st.markdown("""
         <style>
             [data-testid="stSidebarNav"] {display: none;}
-            [data-testid="collapsedControl"] {display: none;}
             section[data-testid="stSidebar"] > div {padding-top: 2rem;}
         </style>
         """, unsafe_allow_html=True)
@@ -53,29 +84,30 @@ else:
         # ============== HEADER COM BARRA AZUL GRADIENTE ==============
         st.markdown("""
         <div style="background: linear-gradient(135deg, #0c3a66 0%, #06b6d4 100%); 
-                    padding: 35px 20px; 
-                    border-radius: 16px; 
-                    margin-bottom: 25px;
+                    padding: 20px 10px; 
+                    border-radius: 24px; 
+                    margin-bottom: 40px;
                     text-align: center;
-                    box-shadow: 0 8px 16px rgba(0,0,0,0.15);">
+                    box-shadow: 0 16px 16px rgba(0,0,0,0.15);">
         """, unsafe_allow_html=True)
         
         # Logo centralizada
         if logo_image:
-            col_logo = st.columns([0.15, 0.7, 0.15])
+            col_logo = st.columns([0.15, 0.24, 0.15])
             with col_logo[1]:
-                st.image(logo_image, use_container_width=True)
+                # use_column_width para respeitar a coluna
+                st.image(logo_image, use_column_width=True)
         else:
             st.markdown('<div style="font-size: 52px; margin: 0;">🏢</div>', unsafe_allow_html=True)
         
         st.markdown("""
-            <h1 style="margin: 22px 0 10px 0; color: white; font-size: 28px; 
+            <h1 style="margin: 8px 0 0px 0; color: white; font-size: 32px; 
                        font-weight: 800; letter-spacing: 2px; text-align: center;">
-                UAN DASHBOARD
+                🌐UAN DASHBOARD
             </h1>
-            <p style="margin: 0; color: #FFD100; font-size: 14px; 
-                      font-weight: 600; text-align: center;">
-                sistema Arquitetura de projeções - Dirco
+            <p style="margin: 0px; color: #0c3a66; font-size: 14px; 
+                      font-weight: 500; text-align: center;">
+                🏦 Sistema de Arquitetura de projeções - Dirco
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -83,24 +115,25 @@ else:
         if not logo_image:
             st.caption("💡 Adicione logo.png em /frontend/images/")
         
-        st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 32px;"></div>', unsafe_allow_html=True)
         
         # ============== USUÁRIO ==============
-        st.markdown("""
+        usuario_label = (st.session_state.usuario or 'usuario@bb.com.br').split('@')[0].capitalize()
+        st.markdown(f"""
         <div style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); 
-                    padding: 16px; border-radius: 12px; border-left: 4px solid #06b6d4;
-                    margin-bottom: 25px; display: flex; align-items: center; gap: 14px;">
+                    padding: 16px; border-radius: 8px; border-left: 4px solid #06b6d4;
+                    margin-bottom: 8px; display: flex; align-items: center; gap: 16px;">
             <div style="width: 52px; height: 52px; 
                         background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); 
                         border-radius: 50%; display: flex; align-items: center;
-                        justify-content: center; font-size: 26px; flex-shrink: 0;
+                        justify-content: center; font-size: 32px; flex-shrink: 0;
                         box-shadow: 0 4px 6px rgba(6, 182, 212, 0.3);">
                 👤
             </div>
             <div>
-                <p style="margin: 0; font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">USUÁRIO</p>
+                <p style="margin: 0; font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">USUÁRIO@bb.com.br</p>
                 <p style="margin: 4px 0 0 0; font-size: 15px; color: #0c3a66; font-weight: 700;">
-        """ + st.session_state.usuario.split("@")[0].capitalize() + """
+                    {usuario_label}
                 </p>
             </div>
         </div>
@@ -111,19 +144,13 @@ else:
         # ============== MENU DE NAVEGAÇÃO ==============
         st.markdown("<p style='font-size: 11px; font-weight: 600; color: #94a3b8; margin: 0 0 10px 0;'>📍 NAVEGAÇÃO</p>", unsafe_allow_html=True)
         
-        # Mapeamento de páginas com ícones
         opcoes_menu = [
             ("📊", "Dashboard", "Dashboard"),
             ("🎯", "Simulador", "Simulador"),
             ("👤", "Perfil", "Perfil"),
             ("📤", "Upload", "Upload de Dados")
         ]
-        
-        # Criar labels formatados
-        opcoes_display = {}
-        for icone, label, valor in opcoes_menu:
-            opcoes_display[f"{icone} {label}"] = valor
-        
+        opcoes_display = {f"{i} {l}": v for (i,l,v) in opcoes_menu}
         pagina = st.radio(
             "Menu Principal",
             list(opcoes_display.values()),
@@ -134,15 +161,77 @@ else:
         
         st.markdown("---")
         
-        # ============== CONFIGURAÇÕES ==============
-        with st.expander("⚙️ Configurações", expanded=False):
-            st.markdown("""
-            **Tema:** Profissional  
-            **Idioma:** Português (BR)  
-            **Versão:** 1.0.0  
-            **Status:** Produção ✓
-            """)
-        
+        # ============== FORMULÁRIO • DADOS DA SIMULAÇÃO ==============
+        with st.expander("📝 Dados da Simulação", expanded=False):
+            df_upload = get_dados_upload()
+
+            # Nome
+            sim_nome_default = st.session_state.get("sim_nome", "Simulação 2026")
+            sim_nome = st.text_input("Nome da Simulação", value=sim_nome_default, key="sim_nome")
+
+            # Cliente
+            clientes_opcoes = ["Todos"]
+            if isinstance(df_upload, pd.DataFrame) and not df_upload.empty:
+                if "TIPO_CLIENTE" in df_upload.columns:
+                    clientes_opcoes += sorted([c for c in df_upload["TIPO_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
+                elif "TP_CLIENTE" in df_upload.columns:
+                    clientes_opcoes += sorted([c for c in df_upload["TP_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
+
+            cliente_mem = st.session_state.get("filtros", {}).get("cliente", "Todos")
+            idx_cliente = clientes_opcoes.index(cliente_mem) if cliente_mem in clientes_opcoes else 0
+            sim_cliente = st.selectbox("Cliente", clientes_opcoes, index=idx_cliente, key="sim_cliente")
+
+            # Categorias/Produtos (dependentes do cliente)
+            if isinstance(df_upload, pd.DataFrame) and not df_upload.empty:
+                cats, map_cat_prod, df_subset = _recarregar_opcoes(df_upload, sim_cliente)
+            else:
+                cats, map_cat_prod, df_subset = [], {}, pd.DataFrame()
+
+            categoria_mem = st.session_state.get("filtros", {}).get("categoria", "")
+            idx_cat = cats.index(categoria_mem) if categoria_mem in cats else (0 if cats else None)
+            sim_categoria = st.selectbox("Categoria", cats, index=idx_cat, key="sim_categoria")
+
+            prds = map_cat_prod.get(sim_categoria, [])
+            produto_mem = st.session_state.get("filtros", {}).get("produto", "")
+            idx_prd = prds.index(produto_mem) if produto_mem in prds else (0 if prds else None)
+            sim_produto = st.selectbox("Produto", prds, index=idx_prd, key="sim_produto")
+
+            st.markdown("---")
+            st.markdown("**Parâmetros (estáticos no momento)**")
+
+            c1, c2 = st.columns(2)
+            with c1:
+                st.slider("Qtd. Meses", 1, 36, 12, key="sim_qtd_meses")
+                st.slider("Primeiro mês pjtd.", 0, 1_000_000_000, 146_635_129_309, step=1_000_000, key="sim_primeiro_pjtd", format="%d")
+                st.slider("Ajuste mensal final", -100, 100, 5, key="sim_ajuste_mensal_final")
+            with c2:
+                st.slider("Último mês pjtd.", 0, 1_000_000_000, 156_965_724_038, step=1_000_000, key="sim_ultimo_pjtd", format="%d")
+                st.slider("Inclinação", -1_500_000_000, 1_500_000_000, -939_144_975, step=1_000_000, key="sim_inclinacao", format="%d")
+                st.slider("Rotacionar Curva", 0.5, 1.5, 1.1, step=0.01, key="sim_rotacionar_curva")
+            st.slider("Incremento (%)", 0.0, 0.05, 0.007, step=0.0001, key="sim_incremento_perc")
+
+            # Persistir filtros atuais para o simulador
+            st.session_state["filtros"] = {
+                "cliente": sim_cliente,
+                "categoria": sim_categoria if sim_categoria else "",
+                "produto": sim_produto if sim_produto else "",
+                "nome": sim_nome
+            }
+
+            st.markdown("---")
+            if st.button("💾 Salvar Simulação", use_container_width=True, type="primary"):
+                ajustada = st.session_state.get("ajustada", [0.0]*12)
+                adicionar_simulacao(
+                    nome=st.session_state["filtros"].get("nome", "Simulação"),
+                    categoria=st.session_state["filtros"].get("categoria", ""),
+                    produto=st.session_state["filtros"].get("produto", ""),
+                    taxa_crescimento=0,   # (parâmetros reservados)
+                    volatilidade=0,
+                    cenarios={"Ajustada": True, "Cliente": st.session_state["filtros"].get("cliente", "Todos")},
+                    dados_grafico={"Ajustada": ajustada},
+                )
+                st.success("✅ Simulação salva com sucesso!")
+
         st.markdown("---")
         
         # ============== LOGOUT ==============
@@ -159,7 +248,7 @@ else:
         st.markdown("""
         <div style="text-align: center; color: #95a5a6; font-size: 10px; margin-top: 20px;">
             <p style="margin: 5px 0;">UAN Dashboard v1.0.0</p>
-            <p style="margin: 5px 0;">(c) 2026 Banco Nacional</p>
+            <p style="margin: 5px 0;">(c) 2026 Banco do Brasil (UAN)</p>
         </div>
         """, unsafe_allow_html=True)
     

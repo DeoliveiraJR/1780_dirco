@@ -14,7 +14,7 @@ def renderizar():
 
     with col2:
         st.markdown("<h1 style='text-align:center; color: #0c3a66;'>UAN Dashboard</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align:center; color: #6b7280;'>Sistema de Analise Financeira</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align:center; color: #6b7280;'>Sistema de análise e simulação das projeções de mercado</p>", unsafe_allow_html=True)
         
         st.markdown("---")
         
