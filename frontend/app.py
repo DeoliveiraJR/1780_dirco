@@ -95,8 +95,8 @@ else:
         if logo_image:
             col_logo = st.columns([0.15, 0.24, 0.15])
             with col_logo[1]:
-                # use_column_width para respeitar a coluna
-                st.image(logo_image, use_column_width=True)
+                # use_container_width para respeitar a coluna
+                st.image(logo_image, use_container_width=True)
         else:
             st.markdown('<div style="font-size: 52px; margin: 0;">🏢</div>', unsafe_allow_html=True)
         

@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 import sys
 import os
-import math
 
 from bokeh.plotting import figure
 from bokeh.models import (
@@ -16,7 +15,7 @@ from bokeh.models import (
 from bokeh.layouts import column, row
 from bokeh.transform import dodge
 from streamlit_bokeh import streamlit_bokeh
-from components.bokeh_editable import bokeh_editable
+from components.bokeh_editable import bokeh_editable, get_bokeh_updates
 
 from utils_ext.css import make_stylesheet
 from utils_ext.formatters import fmt_br
@@ -257,9 +256,29 @@ def renderizar():
         st.session_state["curva_mercado"] = mercado[:]
         st.session_state["ajustada"] = analitica[:]  # Ajustada inicia igual à analítica
         st.session_state["last_combo"] = combo
+        st.session_state["sync_counter"] = 0  # Contador para forçar leitura do localStorage
         print(f"[DEBUG] COMBO MUDOU! Resetando curvas para: {combo}")
     
-    # Carrega os valores dos estados (fonte de verdade)
+    # Inicializa contador se não existir
+    if "sync_counter" not in st.session_state:
+        st.session_state["sync_counter"] = 0
+    
+    sync_counter = st.session_state.get("sync_counter", 0)
+    
+    # ==================== LEITURA DO LOCALSTORAGE (ANTES DE RENDERIZAR) ====================
+    # Lê valores do localStorage ANTES de criar os sources do Bokeh
+    # Isso garante que o gráfico é renderizado com os valores editados pelo usuário
+    valores_localStorage = get_bokeh_updates(key=f"sim_bokeh_{combo}", sync_counter=sync_counter)
+    
+    if valores_localStorage is not None and len(valores_localStorage) == 12:
+        valores_atuais = [round(v, 2) for v in st.session_state.get("ajustada", [])]
+        valores_novos = [round(v, 2) for v in valores_localStorage]
+        
+        if valores_novos != valores_atuais:
+            st.session_state["ajustada"] = valores_localStorage
+            print(f"[DEBUG] localStorage → session_state: {valores_localStorage[:3]}...")
+    
+    # Carrega os valores dos estados (FONTE DE VERDADE - agora já atualizada pelo localStorage)
     curva_analitica_state = st.session_state.get("curva_analitica", analitica[:])
     curva_mercado_state = st.session_state.get("curva_mercado", mercado[:])
     ajustada = st.session_state.get("ajustada", analitica[:])
@@ -530,83 +549,55 @@ def renderizar():
         key=f"sim_bokeh_{combo}"
     )
     
-    # ===== BOTÃO PARA APLICAR ALTERAÇÕES DO GRÁFICO =====
-    st.markdown("---")
-    col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
-    with col_btn2:
-        if st.button("🔄 Aplicar Alterações do Gráfico", key=f"apply_btn_{combo}", use_container_width=True):
-            from components.bokeh_editable import get_bokeh_updates
-            novos_valores = get_bokeh_updates(key=f"sim_bokeh_{combo}")
-            if novos_valores is not None:
-                st.session_state["ajustada"] = novos_valores
-                st.success(f"✅ Curva atualizada! Total: R$ {sum(novos_valores):,.2f}")
-                print(f"[APLICAR] SESSION STATE ATUALIZADO: {novos_valores}")
-                st.rerun()
-            else:
-                st.info("ℹ️ Nenhuma alteração pendente. Arraste os pontos no gráfico primeiro.")
-    
-    # ==================== DEBUG: LOGS DOS ESTADOS DAS CURVAS ====================
-    st.markdown("---")
-    st.markdown("### 🔍 DEBUG - Estados das Curvas")
-    
-    # Exibe valores atuais dos estados
-    debug_col1, debug_col2, debug_col3 = st.columns(3)
-    
-    with debug_col1:
-        st.markdown("**📊 Curva Analítica (estado)**")
-        st.write(st.session_state.get("curva_analitica", "Não definido"))
-    
-    with debug_col2:
-        st.markdown("**📈 Curva Mercado (estado)**")
-        st.write(st.session_state.get("curva_mercado", "Não definido"))
-    
-    with debug_col3:
-        st.markdown("**🎯 Curva Ajustada (estado)**")
-        st.write(st.session_state.get("ajustada", "Não definido"))
-    
-    # Log no console também
-    print(f"\n{'='*60}")
-    print(f"[DEBUG] Combo: {combo}")
-    print(f"[DEBUG] curva_analitica: {st.session_state.get('curva_analitica', 'NÃO DEFINIDO')}")
-    print(f"[DEBUG] curva_mercado: {st.session_state.get('curva_mercado', 'NÃO DEFINIDO')}")
-    print(f"[DEBUG] ajustada: {st.session_state.get('ajustada', 'NÃO DEFINIDO')}")
-    print(f"{'='*60}\n")
-    
     st.markdown("---")
     
-    # Atualiza referência da ajustada do session_state para uso nos cards
+    # ==================== BOTÃO DE SINCRONIZAÇÃO ====================
+    # Fluxo:
+    # 1. Usuário arrasta ponto → JS salva no localStorage (em tempo real)
+    # 2. Usuário clica "Sincronizar" → incrementa contador → rerun
+    # 3. No rerun, leitura do localStorage acontece NO INÍCIO (antes de renderizar)
+    # 4. Gráfico e cards são renderizados com valores atualizados
+    
+    # Atualiza referência local (já foi atualizada no início, mas garantimos aqui também)
     ajustada = st.session_state.get("ajustada", analitica[:])
-
+    sync_counter = st.session_state.get("sync_counter", 0)
+    
+    # Botão para forçar sincronização
+    col_sync1, col_sync2, col_sync3 = st.columns([2, 1, 2])
+    with col_sync2:
+        if st.button(
+            "🔄 Sincronizar Curva", 
+            key=f"sync_{combo}",
+            help="Clique para aplicar as alterações do drag-and-drop aos cards e gráficos",
+            use_container_width=True
+        ):
+            # Incrementa contador para forçar nova leitura no próximo rerun
+            st.session_state["sync_counter"] = sync_counter + 1
+            st.toast("🔄 Sincronizando...", icon="📈")
+            st.rerun()
+    
     # -------------------- Seção: Análises por Categoria ----------------------
     st.markdown("<h2 class='uan-sec' style='margin:8px 0 4px 0;padding:4px 0;font-size:1.2rem;border-top:1px solid #e2e8f0;'>🗂️ Análises por Categoria</h2>", unsafe_allow_html=True)
-
+    
     # Carrega dados agregados por categoria
     agreg = _agregados_por_categoria(df_upload, cliente, ano_proj or 0, mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS)
     
     # ==== APLICA AJUSTES DO DRAG-AND-DROP À CATEGORIA ATUAL ====
-    # Quando o usuário arrasta pontos na curva ajustada, reflete na categoria correspondente
-    ajustada_atual = st.session_state.get("ajustada", analitica[:])
-    
     if agreg and categoria in agreg:
-        # Calcula a diferença entre valores arrastados e originais do produto
         serie_prod_orig = _carregar_ajustada_produto(df_upload, cliente, categoria, produto, ano_proj) or analitica[:]
         serie_prod_orig = np.array(serie_prod_orig, dtype=float)
-        serie_drag = np.array(ajustada_atual, dtype=float)
+        serie_drag = np.array(ajustada, dtype=float)
         
         if serie_drag.size == 12 and serie_prod_orig.size == 12:
-            # Calcula a diferença (ajuste do usuário)
             diff = serie_drag - serie_prod_orig
-            
-            # Aplica a diferença à série ajustada da categoria
             serie_cat_ajs = np.array(agreg[categoria]["ajs"], dtype=float)
             if serie_cat_ajs.size == 12:
                 agreg[categoria]["ajs"] = list(serie_cat_ajs + diff)
     
     if agreg:
-        # Define ordem das categorias principais
         principais = ["CAPTAÇÕES", "OPERAÇÕES CRÉDITO", "SERVIÇOS", "CRÉDITO"]
         ordem = [c for c in principais if c in agreg] + [c for c in agreg.keys() if c not in principais]
-        ordem = ordem[:3]  # Limita a 3 categorias
+        ordem = ordem[:3]
 
         # ===== LINHA 1: Cards das categorias =====
         cols_cards = st.columns(3, gap="small")
@@ -622,7 +613,7 @@ def renderizar():
                 barras = _grafico_barras_categoria(cat, agreg[cat], make_stylesheet())
                 streamlit_bokeh(barras, use_container_width=True, key=f"bar_{cat}_{combo}")
 
-        # ===== LINHA 3: Gráficos de pizza - Share por tipo de projeção =====
+        # ===== LINHA 3: Gráficos de pizza =====
         st.markdown("<h4 style='margin:0.5rem 0 0.25rem 0;'>🍩 Share por Tipo de Projeção</h4>", unsafe_allow_html=True)
         cols_pizza = st.columns(3, gap="small")
         tipos_projecao = [("ana", "Proj. Analítica"), ("mer", "Proj. Mercado"), ("ajs", "Proj. Ajustada")]

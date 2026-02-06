@@ -17,7 +17,7 @@ def bokeh_editable(
     """
     Renderiza um gráfico Bokeh com monitoramento de mudanças nos DataSources.
     Quando o usuário arrasta pontos, os novos valores são salvos no localStorage
-    e podem ser lidos pelo Python via streamlit_js_eval.
+    e podem ser lidos pelo Python via get_bokeh_updates().
     
     Args:
         bokeh_figure: O objeto Bokeh (figure ou layout) a ser renderizado
@@ -128,30 +128,39 @@ def bokeh_editable(
     # Insere o JavaScript antes do </body>
     html_with_js = html_content.replace('</body>', custom_js + '</body>')
     
-    # Renderiza o HTML
-    components.html(html_with_js, height=height, scrolling=True)
+    # Renderiza o HTML (scrolling=False para evitar reruns desnecessários)
+    components.html(html_with_js, height=height, scrolling=False)
     
     return None
 
 
-def get_bokeh_updates(key: str = None) -> list:
+def get_bokeh_updates(key: str = None, sync_counter: int = 0) -> list:
     """
     Lê os valores atualizados do localStorage usando streamlit_js_eval.
     Retorna None se não houver atualizações.
+    
+    Args:
+        key: Chave do componente bokeh_editable
+        sync_counter: Contador de sincronização (incrementar para forçar nova leitura)
+    
+    Returns:
+        Lista de 12 valores ou None
     """
     try:
         from streamlit_js_eval import streamlit_js_eval
         
         storage_key = f"bokeh_update_{key or 'default'}"
         
+        # Usa o sync_counter na key para forçar nova leitura quando necessário
+        eval_key = f"_get_bokeh_{key}_{sync_counter}"
+        
         # Lê o valor do localStorage
         result = streamlit_js_eval(
             js_expressions=f"localStorage.getItem('{storage_key}')",
-            key=f"_get_bokeh_{key}"
+            key=eval_key
         )
         
         if result:
-            import json
             values = json.loads(result)
             if isinstance(values, list) and len(values) == 12:
                 return values
