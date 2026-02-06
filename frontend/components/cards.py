@@ -159,18 +159,42 @@ def _badge(v):
     return '<span class="badge badge-neu">0%</span>'
 
 
+def _safe_array(arr, size=12):
+    """Garante que o array tenha exatamente 'size' elementos, substituindo NaN por 0."""
+    if arr is None:
+        return [0.0] * size
+    arr = list(arr)
+    # Remove NaN e substitui por 0
+    arr = [0.0 if (v is None or (isinstance(v, float) and np.isnan(v))) else float(v) for v in arr]
+    # Garante tamanho exato
+    if len(arr) < size:
+        arr = arr + [0.0] * (size - len(arr))
+    return arr[:size]
+
+
 def _cards_categoria_html(cat: str, d: dict) -> str:
     """Gera HTML do card de categoria com cabeçalhos."""
     prev = d.get("prev", {
         "ana": [0] * 12, "mer": [0] * 12,
         "ajs": [0] * 12, "rlzd": [0] * 12
     })
+    
+    # Garante arrays com 12 elementos
+    rlzd = _safe_array(d.get("rlzd", []))
+    ana = _safe_array(d.get("ana", []))
+    mer = _safe_array(d.get("mer", []))
+    ajs = _safe_array(d.get("ajs", []))
+    
+    prev_rlzd = _safe_array(prev.get("rlzd", []))
+    prev_ana = _safe_array(prev.get("ana", []))
+    prev_mer = _safe_array(prev.get("mer", []))
+    prev_ajs = _safe_array(prev.get("ajs", []))
 
     linhas = [
-        ("Realizado", d["rlzd"], prev["rlzd"], "text-real"),
-        ("Proj. Analítica", d["ana"], prev["ana"], "text-ana"),
-        ("Proj. Mercado", d["mer"], prev["mer"], "text-mer"),
-        ("Proj. Ajustada", d["ajs"], prev["ajs"], "text-ajs"),
+        ("Realizado", rlzd, prev_rlzd, "text-real"),
+        ("Proj. Analítica", ana, prev_ana, "text-ana"),
+        ("Proj. Mercado", mer, prev_mer, "text-mer"),
+        ("Proj. Ajustada", ajs, prev_ajs, "text-ajs"),
     ]
 
     cor = _get_cat_color(cat)

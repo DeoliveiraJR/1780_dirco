@@ -30,6 +30,49 @@ def init_data_state():
         st.session_state.ajustada = [0.0] * 12
     if "ajustes_categoria" not in st.session_state:
         st.session_state.ajustes_categoria = {}
+    if "sync_counter" not in st.session_state:
+        st.session_state.sync_counter = 0
+    if "last_combo" not in st.session_state:
+        st.session_state.last_combo = None
+
+
+# ============================================================================
+# RESET COMPLETO - Limpa todos os estados
+# ============================================================================
+def resetar_tudo():
+    """
+    Reseta completamente todos os estados do session_state.
+    Deve ser chamado quando quiser começar do zero.
+    """
+    st.session_state.dados_upload = None
+    st.session_state.simulacoes = []
+    st.session_state.simulacoes_salvas = {}
+    st.session_state.metricas_dashboard = {
+        "valor_total": 0,
+        "realizado_atual": 0,
+        "taxa_acuracia": 0,
+        "simulacoes_ativas": 0
+    }
+    st.session_state.ajustada = [0.0] * 12
+    st.session_state.ajustes_categoria = {}
+    st.session_state.sync_counter = 0
+    st.session_state.last_combo = None
+    st.session_state.filtros = {}
+    st.session_state.curva_analitica = []
+    st.session_state.curva_mercado = []
+    # Flag para limpar localStorage no próximo render
+    st.session_state._limpar_localStorage = True
+
+
+def resetar_simulacao_atual():
+    """
+    Reseta apenas a simulação atual (curva ajustada volta para analítica).
+    Mantém os dados de upload e simulações salvas.
+    """
+    st.session_state.ajustada = st.session_state.get("curva_analitica", [0.0] * 12)[:]
+    st.session_state.sync_counter = st.session_state.get("sync_counter", 0) + 1
+    st.session_state.ajustes_categoria = {}
+    st.session_state._limpar_localStorage = True
 
 
 # ============================================================================

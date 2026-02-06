@@ -15,7 +15,7 @@ from bokeh.models import (
 from bokeh.layouts import column, row
 from bokeh.transform import dodge
 from streamlit_bokeh import streamlit_bokeh
-from components.bokeh_editable import bokeh_editable, get_bokeh_updates
+from components.bokeh_editable import bokeh_editable, get_bokeh_updates, limpar_localStorage
 
 from utils_ext.css import make_stylesheet
 from utils_ext.formatters import fmt_br
@@ -44,7 +44,8 @@ import streamlit.components.v1 as st_components
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_manager import (
     get_dados_upload, adicionar_simulacao, get_simulacoes_usuario,
-    restaurar_simulacao, deletar_simulacao, get_simulacao_por_combo
+    restaurar_simulacao, deletar_simulacao, get_simulacao_por_combo,
+    resetar_simulacao_atual
 )
 
 MASCARAR_ZEROS_FINAIS = True
@@ -251,13 +252,24 @@ def renderizar():
     
     # ==================== ESTADOS PARA AS 3 CURVAS ====================
     # Reinicia estados quando combo muda
-    if st.session_state.get("last_combo") != combo:
+    combo_mudou = st.session_state.get("last_combo") != combo
+    if combo_mudou:
+        # Limpa localStorage do combo anterior para evitar conflitos
+        old_combo = st.session_state.get("last_combo")
+        if old_combo:
+            limpar_localStorage(key=f"sim_bokeh_{old_combo}")
+        
         st.session_state["curva_analitica"] = analitica[:]
         st.session_state["curva_mercado"] = mercado[:]
         st.session_state["ajustada"] = analitica[:]  # Ajustada inicia igual à analítica
         st.session_state["last_combo"] = combo
-        st.session_state["sync_counter"] = 0  # Contador para forçar leitura do localStorage
+        st.session_state["sync_counter"] = 0
         print(f"[DEBUG] COMBO MUDOU! Resetando curvas para: {combo}")
+    
+    # Verifica se precisa limpar localStorage (flag de reset)
+    if st.session_state.get("_limpar_localStorage"):
+        limpar_localStorage(key=f"sim_bokeh_{combo}")
+        st.session_state["_limpar_localStorage"] = False
     
     # Inicializa contador se não existir
     if "sync_counter" not in st.session_state:
@@ -268,7 +280,10 @@ def renderizar():
     # ==================== LEITURA DO LOCALSTORAGE (ANTES DE RENDERIZAR) ====================
     # Lê valores do localStorage ANTES de criar os sources do Bokeh
     # Isso garante que o gráfico é renderizado com os valores editados pelo usuário
-    valores_localStorage = get_bokeh_updates(key=f"sim_bokeh_{combo}", sync_counter=sync_counter)
+    # NÃO lê se o combo acabou de mudar (para começar com curva analítica)
+    valores_localStorage = None
+    if not combo_mudou:
+        valores_localStorage = get_bokeh_updates(key=f"sim_bokeh_{combo}", sync_counter=sync_counter)
     
     if valores_localStorage is not None and len(valores_localStorage) == 12:
         valores_atuais = [round(v, 2) for v in st.session_state.get("ajustada", [])]
@@ -562,18 +577,29 @@ def renderizar():
     ajustada = st.session_state.get("ajustada", analitica[:])
     sync_counter = st.session_state.get("sync_counter", 0)
     
-    # Botão para forçar sincronização
-    col_sync1, col_sync2, col_sync3 = st.columns([2, 1, 2])
+    # Botões de Sincronizar e Resetar
+    col_sync1, col_sync2, col_reset, col_sync3 = st.columns([1.5, 1, 1, 1.5])
     with col_sync2:
         if st.button(
             "🔄 Sincronizar Curva", 
             key=f"sync_{combo}",
-            help="Clique para aplicar as alterações do drag-and-drop aos cards e gráficos",
+            help="Aplicar alterações do drag-and-drop aos cards",
             use_container_width=True
         ):
-            # Incrementa contador para forçar nova leitura no próximo rerun
             st.session_state["sync_counter"] = sync_counter + 1
             st.toast("🔄 Sincronizando...", icon="📈")
+            st.rerun()
+    
+    with col_reset:
+        if st.button(
+            "↩️ Resetar Curva",
+            key=f"reset_{combo}",
+            help="Voltar curva ajustada para a analítica original",
+            use_container_width=True
+        ):
+            resetar_simulacao_atual()
+            limpar_localStorage(key=f"sim_bokeh_{combo}")
+            st.toast("↩️ Curva resetada!", icon="🔄")
             st.rerun()
     
     # -------------------- Seção: Análises por Categoria ----------------------
@@ -582,17 +608,26 @@ def renderizar():
     # Carrega dados agregados por categoria
     agreg = _agregados_por_categoria(df_upload, cliente, ano_proj or 0, mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS)
     
+    # Função auxiliar para garantir arrays de 12 elementos
+    def _safe_array_12(arr):
+        if arr is None:
+            return [0.0] * 12
+        arr = list(arr)
+        # Converte NaN para 0
+        arr = [0.0 if (v is None or (isinstance(v, float) and np.isnan(v))) else float(v) for v in arr]
+        if len(arr) < 12:
+            arr = arr + [0.0] * (12 - len(arr))
+        return arr[:12]
+    
     # ==== APLICA AJUSTES DO DRAG-AND-DROP À CATEGORIA ATUAL ====
     if agreg and categoria in agreg:
         serie_prod_orig = _carregar_ajustada_produto(df_upload, cliente, categoria, produto, ano_proj) or analitica[:]
-        serie_prod_orig = np.array(serie_prod_orig, dtype=float)
-        serie_drag = np.array(ajustada, dtype=float)
+        serie_prod_orig = np.array(_safe_array_12(serie_prod_orig), dtype=float)
+        serie_drag = np.array(_safe_array_12(ajustada), dtype=float)
         
-        if serie_drag.size == 12 and serie_prod_orig.size == 12:
-            diff = serie_drag - serie_prod_orig
-            serie_cat_ajs = np.array(agreg[categoria]["ajs"], dtype=float)
-            if serie_cat_ajs.size == 12:
-                agreg[categoria]["ajs"] = list(serie_cat_ajs + diff)
+        diff = serie_drag - serie_prod_orig
+        serie_cat_ajs = np.array(_safe_array_12(agreg[categoria].get("ajs", [])), dtype=float)
+        agreg[categoria]["ajs"] = list(serie_cat_ajs + diff)
     
     if agreg:
         principais = ["CAPTAÇÕES", "OPERAÇÕES CRÉDITO", "SERVIÇOS", "CRÉDITO"]

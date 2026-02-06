@@ -2,6 +2,7 @@
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource, Legend, LegendItem, NumeralTickFormatter, HoverTool
 from bokeh.transform import dodge
+import numpy as np
 from utils_ext.constants import MESES_ABR_LIST, COR_ANALITICA, COR_MERCADO, COR_AJUSTADA, COR_RLZD_BASE, CAT_COLORS
 
 
@@ -22,6 +23,23 @@ def _grafico_barras_categoria(cat: str, d: dict, stylesheet):
     
     # Cor do título baseada na categoria (case-insensitive)
     cat_color = _get_cat_color(cat)
+    
+    # Garante que todos os arrays tenham exatamente 12 elementos
+    def safe_array(arr, size=12):
+        if arr is None:
+            return [0.0] * size
+        arr = list(arr)
+        # Remove NaN e substitui por 0
+        arr = [0.0 if (v is None or (isinstance(v, float) and np.isnan(v))) else float(v) for v in arr]
+        # Garante tamanho exato
+        if len(arr) < size:
+            arr = arr + [0.0] * (size - len(arr))
+        return arr[:size]
+    
+    rlzd = safe_array(d.get("rlzd", []))
+    ana = safe_array(d.get("ana", []))
+    mer = safe_array(d.get("mer", []))
+    ajs = safe_array(d.get("ajs", []))
 
     p = figure(
         height=280,
@@ -54,10 +72,10 @@ def _grafico_barras_categoria(cat: str, d: dict, stylesheet):
 
     src = ColumnDataSource(dict(
         x=months,
-        rlzd=[d["rlzd"][i] for i in range(12)],
-        ana=[d["ana"][i] for i in range(12)],
-        mer=[d["mer"][i] for i in range(12)],
-        ajs=[d["ajs"][i] for i in range(12)],
+        rlzd=rlzd,
+        ana=ana,
+        mer=mer,
+        ajs=ajs,
     ))
 
     # 4 barras: largura ajustada para caber todas

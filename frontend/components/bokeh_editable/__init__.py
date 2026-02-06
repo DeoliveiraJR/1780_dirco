@@ -168,3 +168,47 @@ def get_bokeh_updates(key: str = None, sync_counter: int = 0) -> list:
         print(f"[get_bokeh_updates] Erro: {e}")
     
     return None
+
+
+def limpar_localStorage(key: str = None):
+    """
+    Limpa o localStorage do navegador para uma key específica ou todas as keys bokeh_update.
+    Deve ser chamado quando quiser resetar os dados do drag-and-drop.
+    
+    Args:
+        key: Chave específica para limpar. Se None, limpa todas as keys bokeh_update_*.
+    """
+    try:
+        from streamlit_js_eval import streamlit_js_eval
+        import streamlit as st
+        
+        # Incrementa contador para garantir execução única
+        clear_counter = st.session_state.get("_clear_counter", 0)
+        st.session_state["_clear_counter"] = clear_counter + 1
+        
+        if key:
+            storage_key = f"bokeh_update_{key}"
+            js_code = f"localStorage.removeItem('{storage_key}')"
+        else:
+            # Limpa todas as keys que começam com bokeh_update_
+            js_code = """
+            (function() {
+                const keysToRemove = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && k.startsWith('bokeh_update_')) {
+                        keysToRemove.push(k);
+                    }
+                }
+                keysToRemove.forEach(k => localStorage.removeItem(k));
+                return keysToRemove.length;
+            })()
+            """
+        
+        streamlit_js_eval(
+            js_expressions=js_code,
+            key=f"_clear_ls_{clear_counter}"
+        )
+        
+    except Exception as e:
+        print(f"[limpar_localStorage] Erro: {e}")
