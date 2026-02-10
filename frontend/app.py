@@ -4,10 +4,11 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
-import pandas as pd  # <-- CORREÇÃO: necessário para isinstance(..., pd.DataFrame)
+import pandas as pd
 from styles import CORES, CSS_CUSTOM, aplicar_tema
 from pages import autenticacao, dashboard, simulador, perfil, upload
 from data_manager import init_data_state, get_dados_upload, adicionar_simulacao
+from services.aggregations import _carregar_curvas_base
 
 # Inicializar data state logo no início
 init_data_state()
@@ -161,15 +162,126 @@ else:
         
         st.markdown("---")
         
-        # ============== PARÂMETROS DA SIMULAÇÃO (sliders em largura total) ==============
+        # ============== PARÂMETROS DA SIMULAÇÃO ==============
         with st.expander("⚙️ Parâmetros da Simulação", expanded=True):
-            st.slider("Qtd. Meses", 1, 36, 12, key="sim_qtd_meses")
-            st.slider("Primeiro mês pjtd.", 0, 1_000_000_000, 146_635_129_309, step=1_000_000, key="sim_primeiro_pjtd", format="%d")
-            st.slider("Último mês pjtd.", 0, 1_000_000_000, 156_965_724_038, step=1_000_000, key="sim_ultimo_pjtd", format="%d")
-            st.slider("Inclinação", -1_500_000_000, 1_500_000_000, -939_144_975, step=1_000_000, key="sim_inclinacao", format="%d")
-            st.slider("Ajuste mensal final", -100, 100, 5, key="sim_ajuste_mensal_final")
-            st.slider("Rotacionar Curva", 0.5, 1.5, 1.1, step=0.01, key="sim_rotacionar_curva")
-            st.slider("Incremento (%)", 0.0, 0.05, 0.007, step=0.0001, key="sim_incremento_perc")
+            # Função auxiliar para formatar valores em R$ (milhões)
+            def fmt_reais(valor):
+                """Formata valor em R$ com separador de milhares brasileiro."""
+                if valor == 0:
+                    return "R$ 0"
+                if abs(valor) >= 1_000_000_000:
+                    return f"R$ {valor/1_000_000_000:,.2f} bi".replace(",", "X").replace(".", ",").replace("X", ".")
+                elif abs(valor) >= 1_000_000:
+                    return f"R$ {valor/1_000_000:,.2f} mi".replace(",", "X").replace(".", ",").replace("X", ".")
+                else:
+                    return f"R$ {valor:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            
+            # ===== CÁLCULO EM TEMPO REAL DOS PARÂMETROS =====
+            # Ler dados e filtros - prefere as keys dos widgets (mais atualizadas)
+            df_upload = get_dados_upload()
+            
+            # Ler diretamente das keys dos widgets do simulador (prioridade) ou do filtros
+            cliente = st.session_state.get("sim_cliente_page") or st.session_state.get("filtros", {}).get("cliente", "Todos")
+            categoria = st.session_state.get("sim_categoria_page") or st.session_state.get("filtros", {}).get("categoria", "")
+            produto = st.session_state.get("sim_produto_page") or st.session_state.get("filtros", {}).get("produto", "")
+            
+            # Calcular curva analítica com base nos filtros
+            qtd_meses = 12
+            primeiro_pjtd = 0
+            ultimo_pjtd = 0
+            inclinacao = 0
+            
+            if df_upload is not None and not df_upload.empty and categoria and produto:
+                try:
+                    analitica, _, _ = _carregar_curvas_base(df_upload, cliente, categoria, produto)
+                    if analitica and len(analitica) >= 12:
+                        primeiro_pjtd = analitica[0] if analitica[0] else 0
+                        ultimo_pjtd = analitica[11] if analitica[11] else 0
+                        # Inclinação = (último - primeiro) / (qtd_meses - 1)
+                        if qtd_meses > 1:
+                            inclinacao = (ultimo_pjtd - primeiro_pjtd) / (qtd_meses - 1)
+                except Exception:
+                    pass
+            
+            # Atualizar session_state para uso em outras partes
+            st.session_state["sim_qtd_meses"] = qtd_meses
+            st.session_state["sim_primeiro_pjtd"] = primeiro_pjtd
+            st.session_state["sim_ultimo_pjtd"] = ultimo_pjtd
+            st.session_state["sim_inclinacao"] = inclinacao
+            
+            if "sim_incremento_perc" not in st.session_state:
+                st.session_state.sim_incremento_perc = 0.0
+            
+            # Estilos CSS para campos informativos
+            st.markdown("""
+            <style>
+                .param-info-card {
+                    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+                    border-radius: 8px;
+                    padding: 10px 12px;
+                    margin-bottom: 8px;
+                    border-left: 3px solid #06b6d4;
+                }
+                .param-label {
+                    font-size: 11px;
+                    color: #64748b;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    margin: 0;
+                }
+                .param-value {
+                    font-size: 14px;
+                    color: #0c3a66;
+                    font-weight: 700;
+                    margin: 4px 0 0 0;
+                }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            # --- CAMPOS INFORMATIVOS ---
+            st.markdown(f"""
+            <div class="param-info-card">
+                <p class="param-label">📅 Qtd. Meses</p>
+                <p class="param-value">{qtd_meses}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown(f"""
+            <div class="param-info-card">
+                <p class="param-label">📈 Primeiro mês pjtd.</p>
+                <p class="param-value">{fmt_reais(primeiro_pjtd)}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown(f"""
+            <div class="param-info-card">
+                <p class="param-label">📉 Último mês pjtd.</p>
+                <p class="param-value">{fmt_reais(ultimo_pjtd)}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown(f"""
+            <div class="param-info-card">
+                <p class="param-label">📐 Inclinação</p>
+                <p class="param-value">{fmt_reais(inclinacao)}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown(f"""
+            <div class="param-info-card">
+                <p class="param-label">📊 Incremento (%)</p>
+                <p class="param-value">{st.session_state.sim_incremento_perc:.4%}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown('<div style="height: 12px;"></div>', unsafe_allow_html=True)
+            
+            # --- CAMPOS EDITÁVEIS (Sliders) ---
+            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #94a3b8; margin: 0 0 8px 0;'>🎛️ AJUSTES</p>", unsafe_allow_html=True)
+            
+            st.slider("🔄 Rotacionar Curva", 1, 10, 5, key="sim_rotacionar_curva")
+            st.slider("📏 Ajuste mensal final", 1, 10, 5, key="sim_ajuste_mensal_final")
 
         st.markdown("---")
         

@@ -143,6 +143,22 @@ def renderizar():
             clientes_opcoes += sorted([c for c in df_upload["TP_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
 
     # --- Layout filtros: 5 colunas (Nome | Cliente | Categoria | Produto | Botão) ---
+    # Callbacks para atualizar filtros imediatamente quando mudam
+    def _on_cliente_change():
+        filtros = st.session_state.get("filtros", {})
+        filtros["cliente"] = st.session_state.get("sim_cliente_page", "Todos")
+        st.session_state["filtros"] = filtros
+    
+    def _on_categoria_change():
+        filtros = st.session_state.get("filtros", {})
+        filtros["categoria"] = st.session_state.get("sim_categoria_page", "")
+        st.session_state["filtros"] = filtros
+    
+    def _on_produto_change():
+        filtros = st.session_state.get("filtros", {})
+        filtros["produto"] = st.session_state.get("sim_produto_page", "")
+        st.session_state["filtros"] = filtros
+    
     col_nome, col_cli, col_cat, col_prod, col_btn = st.columns([1.5, 1.2, 1.5, 1.5, 0.8])
 
     with col_nome:
@@ -152,7 +168,10 @@ def renderizar():
     with col_cli:
         cliente_mem = st.session_state.get("filtros", {}).get("cliente", "Todos")
         idx_cliente = clientes_opcoes.index(cliente_mem) if cliente_mem in clientes_opcoes else 0
-        sim_cliente = st.selectbox("👤 Cliente", clientes_opcoes, index=idx_cliente, key="sim_cliente_page")
+        sim_cliente = st.selectbox(
+            "👤 Cliente", clientes_opcoes, index=idx_cliente, 
+            key="sim_cliente_page", on_change=_on_cliente_change
+        )
 
     # Recarrega categorias/produtos com base no cliente selecionado
     cats, map_cat_prod, df_subset = _recarregar_opcoes(df_upload, sim_cliente)
@@ -160,13 +179,19 @@ def renderizar():
     with col_cat:
         categoria_mem = st.session_state.get("filtros", {}).get("categoria", "")
         idx_cat = cats.index(categoria_mem) if categoria_mem in cats else (0 if cats else None)
-        sim_categoria = st.selectbox("📁 Categoria", cats, index=idx_cat, key="sim_categoria_page")
+        sim_categoria = st.selectbox(
+            "📁 Categoria", cats, index=idx_cat, 
+            key="sim_categoria_page", on_change=_on_categoria_change
+        )
 
     with col_prod:
         prds = map_cat_prod.get(sim_categoria, [])
         produto_mem = st.session_state.get("filtros", {}).get("produto", "")
         idx_prd = prds.index(produto_mem) if produto_mem in prds else (0 if prds else None)
-        sim_produto = st.selectbox("📦 Produto", prds, index=idx_prd, key="sim_produto_page")
+        sim_produto = st.selectbox(
+            "📦 Produto", prds, index=idx_prd, 
+            key="sim_produto_page", on_change=_on_produto_change
+        )
 
     with col_btn:
         st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
@@ -249,6 +274,26 @@ def renderizar():
 
     analitica, mercado, ano_proj = _carregar_curvas_base(df_upload, cliente, categoria, produto)
     combo = f"{cliente}::{categoria}::{produto}"
+    
+    # ==================== ATUALIZA PARÂMETROS NA SIDEBAR ====================
+    # Qtd. Meses = 12 (fixo para projeções mensais)
+    st.session_state["sim_qtd_meses"] = 12
+    
+    # Primeiro mês pjtd = primeiro valor da curva analítica
+    primeiro_pjtd = analitica[0] if analitica and len(analitica) > 0 else 0
+    st.session_state["sim_primeiro_pjtd"] = primeiro_pjtd
+    
+    # Último mês pjtd = último valor da curva analítica  
+    ultimo_pjtd = analitica[11] if analitica and len(analitica) > 11 else 0
+    st.session_state["sim_ultimo_pjtd"] = ultimo_pjtd
+    
+    # Inclinação = (último - primeiro) / (qtd_meses - 1)
+    qtd_meses = 12
+    if qtd_meses > 1:
+        inclinacao = (ultimo_pjtd - primeiro_pjtd) / (qtd_meses - 1)
+    else:
+        inclinacao = 0
+    st.session_state["sim_inclinacao"] = inclinacao
     
     # ==================== ESTADOS PARA AS 3 CURVAS ====================
     # Reinicia estados quando combo muda
