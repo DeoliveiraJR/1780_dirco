@@ -9,13 +9,13 @@ from bokeh.plotting import figure
 from bokeh.models import (
     ColumnDataSource, PointDrawTool, DataTable, TableColumn,
     StringFormatter, CustomJS, HTMLTemplateFormatter,
-    NumeralTickFormatter, HoverTool, DatetimeTickFormatter,
-    Legend, LegendItem
+    NumeralTickFormatter, HoverTool,
+    Legend, LegendItem, NumberEditor, Div
 )
 from bokeh.layouts import column, row
 from bokeh.transform import dodge
 from streamlit_bokeh import streamlit_bokeh
-from components.bokeh_editable import bokeh_editable, get_bokeh_updates, limpar_localStorage
+from components.bokeh_editable import bokeh_editable, get_bokeh_updates, limpar_localStorage, salvar_localStorage
 
 from utils_ext.css import make_stylesheet
 from utils_ext.formatters import fmt_br
@@ -298,6 +298,52 @@ def renderizar():
     curva_mercado_state = st.session_state.get("curva_mercado", mercado[:])
     ajustada = st.session_state.get("ajustada", analitica[:])
 
+    # ==================== PAINEL DE AJUSTE MANUAL POR MÊS ====================
+    # Permite incrementar/decrementar valores da curva ajustada por mês
+    # O valor do incremento será futuramente vinculado aos parâmetros da sidebar
+    with st.expander("⚙️ Ajuste Manual por Mês", expanded=False):
+        st.caption("O valor em tempo real aparece na barra azul acima do gráfico")
+        incremento_base = st.session_state.get("sim_incremento_valor", 1_000_000_000)
+        
+        col_mes, col_inc, col_btn_menos, col_btn_mais = st.columns([2, 2, 1, 1])
+        
+        with col_mes:
+            mes_selecionado = st.selectbox(
+                "Mês",
+                options=list(range(12)),
+                format_func=lambda i: MESES_ABR_LIST[i],
+                key=f"ajuste_mes_{combo}",
+                label_visibility="collapsed"
+            )
+        
+        with col_inc:
+            incremento = st.number_input(
+                "Incremento",
+                value=incremento_base,
+                step=100_000_000,
+                format="%d",
+                key=f"ajuste_inc_{combo}",
+                label_visibility="collapsed"
+            )
+            st.session_state["sim_incremento_valor"] = incremento
+        
+        with col_btn_menos:
+            if st.button("➖", key=f"btn_menos_{combo}", help="Reduzir valor", use_container_width=True):
+                novo_valor = ajustada[mes_selecionado] - incremento
+                ajustada[mes_selecionado] = max(0, novo_valor)
+                st.session_state["ajustada"] = ajustada[:]
+                salvar_localStorage(key=f"sim_bokeh_{combo}", valores=ajustada[:])
+                st.toast(f"📉 {MESES_ABR_LIST[mes_selecionado]}: -R$ {fmt_br(incremento, 0)}")
+                st.rerun()
+        
+        with col_btn_mais:
+            if st.button("➕", key=f"btn_mais_{combo}", help="Aumentar valor", use_container_width=True):
+                ajustada[mes_selecionado] = ajustada[mes_selecionado] + incremento
+                st.session_state["ajustada"] = ajustada[:]
+                salvar_localStorage(key=f"sim_bokeh_{combo}", valores=ajustada[:])
+                st.toast(f"📈 {MESES_ABR_LIST[mes_selecionado]}: +R$ {fmt_br(incremento, 0)}")
+                st.rerun()
+
     realizados_dict = _obter_realizados_por_ano(df_upload, cliente, categoria, produto, mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS)
     anos_realizados = sorted(realizados_dict.keys())
     variacoes_rlzd = {ano: _variacao_mensal(realizados_dict[ano]) for ano in anos_realizados}
@@ -345,6 +391,39 @@ def renderizar():
         LegendItem(label="Projeção Ajustada", renderers=[r_ajs]),
     ], click_policy="mute", orientation="horizontal", label_text_font_size="12pt")
     p.add_layout(legend, "above")
+
+    # -------------------- DIV DE VALORES EM TEMPO REAL -----------------------
+    # Exibe os valores da curva ajustada, atualizando em tempo real via JS
+    valores_html_inicial = " | ".join([
+        f"<b>{MESES_ABR_LIST[i]}:</b> R$ {fmt_br(ajustada[i], 0)}" 
+        for i in range(12)
+    ])
+    div_valores = Div(
+        text=f"<div style='font-size:12px; padding:8px; background:#f0f8ff; border-radius:4px; margin-bottom:8px;'>"
+             f"<b>📊 Curva Ajustada:</b> {valores_html_inicial}</div>",
+        sizing_mode="stretch_width"
+    )
+    
+    # Callback JS para atualizar o Div quando os dados mudam
+    cb_atualiza_div = CustomJS(args=dict(src=src_ajs, div=div_valores, meses=MESES_ABR_LIST), code="""
+        const y = src.data['y'];
+        if (!y || y.length < 12) return;
+        
+        function formatBR(v) {
+            return v.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+        }
+        
+        let html = "<div style='font-size:12px; padding:8px; background:#f0f8ff; border-radius:4px; margin-bottom:8px;'>";
+        html += "<b>📊 Curva Ajustada:</b> ";
+        const parts = [];
+        for (let i = 0; i < 12; i++) {
+            parts.push("<b>" + meses[i] + ":</b> R$ " + formatBR(y[i]));
+        }
+        html += parts.join(" | ");
+        html += "</div>";
+        div.text = html;
+    """)
+    src_ajs.js_on_change("data", cb_atualiza_div)
 
     # -------------------- TABELA ---------------------------------------------
     var_ana = _variacao_mensal(analitica)
@@ -413,6 +492,12 @@ def renderizar():
     tbl_src = ColumnDataSource(tbl_data)
 
     CURRENCY_TMPL = "<%= (value==null || isNaN(value)) ? '—' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(value) %>"
+    
+    # Template destacado para coluna Ajustada (editável via clique duplo)
+    AJUSTADA_TMPL = '<span style="color:#1a5f7a;font-weight:600;cursor:pointer;" title="Clique duplo para editar"><%= (value==null || isNaN(value)) ? "—" : new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(value) %></span>'
+
+    # Editor para coluna Ajustada (step de 1 bilhão)
+    ajustada_editor = NumberEditor(step=1_000_000_000)
 
     columns = [
         TableColumn(field="Mes", title="Mês", formatter=StringFormatter(text_color="#0b1320"), sortable=False)
@@ -431,7 +516,7 @@ def renderizar():
         TableColumn(field="Var_Ana_Disp",  title="Var. % Analítica",  formatter=HTMLTemplateFormatter(template="<%= value %>")),
         TableColumn(field="Mercado",       title="Mercado",           formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
         TableColumn(field="Var_Mer_Disp",  title="Var. % Mercado",    formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field="Ajustada",      title="Ajustada",          formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
+        TableColumn(field="Ajustada",      title="Ajustada",          formatter=HTMLTemplateFormatter(template=AJUSTADA_TMPL), editor=ajustada_editor),
         TableColumn(field="Var_Ajs_Disp",  title="Var. % Ajustada",   formatter=HTMLTemplateFormatter(template="<%= value %>")),
     ])
 
@@ -442,6 +527,7 @@ def renderizar():
         sizing_mode="stretch_width",
         width=1400,
         height=420,
+        editable=True,  # Habilita edição na tabela
         stylesheets=[make_stylesheet()],
     )
 
@@ -542,6 +628,35 @@ def renderizar():
     src_ajs.js_on_change("patching", cb)
     src_ajs.js_on_change("data", cb)
 
+    # ==== Callback reverso: Tabela -> Gráfico ====
+    # Quando o usuário edita a coluna Ajustada na tabela, atualiza o gráfico
+    cb_tbl_to_graph = CustomJS(args=dict(src=src_ajs, tbl=tbl_src), code="""
+        // Pega os 12 primeiros valores de Ajustada (meses)
+        const ajustada = tbl.data['Ajustada'];
+        if (!ajustada || ajustada.length < 12) return;
+        
+        const newY = ajustada.slice(0, 12).map(v => Number.isFinite(v) ? v : 0);
+        
+        // Atualiza o gráfico apenas se houve mudança real
+        const currentY = src.data['y'];
+        let changed = false;
+        for (let i = 0; i < 12; i++) {
+            if (Math.abs(newY[i] - currentY[i]) > 0.01) {
+                changed = true;
+                break;
+            }
+        }
+        
+        if (changed) {
+            src.data['y'] = newY;
+            src.data['y_br'] = newY.map(v => v.toLocaleString('pt-BR'));
+            src.change.emit();
+            console.log('[TBL->GRAPH] Gráfico atualizado:', newY.slice(0,3));
+        }
+    """)
+    tbl_src.js_on_change("data", cb_tbl_to_graph)
+    tbl_src.js_on_change("patching", cb_tbl_to_graph)  # Edições de células
+
     # -------------------- GRÁFICOS AUXILIARES -------------------------
     g1 = _grafico_visao_anual_linhas(
         _obter_realizados_por_ano(df_upload, cliente, categoria, produto, mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS),
@@ -551,6 +666,7 @@ def renderizar():
                                   analitica, mercado, ano_proj, style_top)
 
     layout_topo = column(
+        div_valores,
         p,
         tbl,
         row(g1, g2, sizing_mode="stretch_width"),
