@@ -278,3 +278,66 @@ def salvar_localStorage(key: str, valores: list):
         
     except Exception as e:
         print(f"[salvar_localStorage] Erro: {e}")
+
+
+def check_for_updates(key: str, current_values: list, threshold_ms: int = 2000) -> tuple:
+    """
+    Verifica se há atualizações recentes no localStorage.
+    Usado para detectar quando o usuário arrastou pontos no gráfico.
+    
+    Args:
+        key: Chave do componente bokeh_editable
+        current_values: Valores atuais no session_state
+        threshold_ms: Janela de tempo (ms) para considerar uma atualização como "recente"
+    
+    Returns:
+        (needs_update, new_values): Tupla com flag e novos valores
+    """
+    try:
+        from streamlit_js_eval import streamlit_js_eval
+        import streamlit as st
+        import time
+        
+        storage_key = f"bokeh_update_{key}"
+        
+        # Contador único para essa verificação
+        check_counter = st.session_state.get("_check_counter", 0)
+        st.session_state["_check_counter"] = check_counter + 1
+        
+        # Lê valores e timestamp do localStorage
+        js_code = f"""
+        (function() {{
+            const data = localStorage.getItem('{storage_key}');
+            const ts = localStorage.getItem('{storage_key}_timestamp');
+            return JSON.stringify({{data: data, timestamp: ts}});
+        }})()
+        """
+        
+        result = streamlit_js_eval(
+            js_expressions=js_code,
+            key=f"_check_ls_{check_counter}"
+        )
+        
+        if result:
+            parsed = json.loads(result)
+            data_str = parsed.get('data')
+            timestamp_str = parsed.get('timestamp')
+            
+            if data_str and timestamp_str:
+                new_values = json.loads(data_str)
+                timestamp = int(timestamp_str)
+                now = int(time.time() * 1000)
+                
+                # Verifica se é recente e diferente dos valores atuais
+                if now - timestamp < threshold_ms:
+                    if isinstance(new_values, list) and len(new_values) == 12:
+                        current_rounded = [round(v, 2) for v in (current_values or [])]
+                        new_rounded = [round(v, 2) for v in new_values]
+                        
+                        if current_rounded != new_rounded:
+                            return (True, new_values)
+        
+    except Exception as e:
+        print(f"[check_for_updates] Erro: {e}")
+    
+    return (False, None)

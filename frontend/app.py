@@ -185,21 +185,64 @@ else:
             categoria = st.session_state.get("sim_categoria_page") or st.session_state.get("filtros", {}).get("categoria", "")
             produto = st.session_state.get("sim_produto_page") or st.session_state.get("filtros", {}).get("produto", "")
             
+            # Validar e auto-detectar categoria/produto
+            if df_upload is not None and not df_upload.empty:
+                # Buscar categorias disponíveis
+                cats_disponiveis = []
+                if "CATEGORIA" in df_upload.columns:
+                    cats_disponiveis = sorted(df_upload["CATEGORIA"].dropna().astype(str).unique())
+                
+                # Se categoria vazia ou não existe, usar primeira disponível
+                if not categoria or categoria not in cats_disponiveis:
+                    if cats_disponiveis:
+                        categoria = cats_disponiveis[0]
+                
+                # Buscar produtos da categoria atual
+                prods_disponiveis = []
+                if categoria and "CATEGORIA" in df_upload.columns and "PRODUTO" in df_upload.columns:
+                    prods_disponiveis = sorted(
+                        df_upload[df_upload["CATEGORIA"].astype(str) == categoria]["PRODUTO"]
+                        .dropna().astype(str).unique()
+                    )
+                
+                # Se produto vazio ou não existe NA CATEGORIA ATUAL, usar primeiro disponível
+                if not produto or produto not in prods_disponiveis:
+                    if prods_disponiveis:
+                        produto = prods_disponiveis[0]
+            
             # Calcular curva analítica com base nos filtros
             qtd_meses = 12
             primeiro_pjtd = 0
             ultimo_pjtd = 0
             inclinacao = 0
+            incremento_perc = 0.0
             
             if df_upload is not None and not df_upload.empty and categoria and produto:
                 try:
                     analitica, _, _ = _carregar_curvas_base(df_upload, cliente, categoria, produto)
                     if analitica and len(analitica) >= 12:
-                        primeiro_pjtd = analitica[0] if analitica[0] else 0
-                        ultimo_pjtd = analitica[11] if analitica[11] else 0
+                        # Usar valores ajustados se disponíveis, senão usar analítica
+                        ajustada = st.session_state.get("ajustada", None)
+                        curva_exibir = ajustada if ajustada and len(ajustada) == 12 else analitica
+                        
+                        primeiro_pjtd = curva_exibir[0] if curva_exibir[0] else 0
+                        ultimo_pjtd = curva_exibir[11] if curva_exibir[11] else 0
                         # Inclinação = (último - primeiro) / (qtd_meses - 1)
                         if qtd_meses > 1:
                             inclinacao = (ultimo_pjtd - primeiro_pjtd) / (qtd_meses - 1)
+                        
+                        # Incremento (%) = AVERAGE das variações percentuais absolutas mensais
+                        # Fórmula: P%[mês] = ABS(Valor[mês] - Valor[mês-1]) / Valor[mês]
+                        variacoes = []
+                        for i in range(1, 12):  # Mês 2 a 12 (índices 1 a 11)
+                            valor_atual = curva_exibir[i]
+                            valor_anterior = curva_exibir[i - 1]
+                            if valor_atual and valor_atual != 0:
+                                var_perc = abs(valor_atual - valor_anterior) / valor_atual
+                                variacoes.append(var_perc)
+                        
+                        if variacoes:
+                            incremento_perc = sum(variacoes) / len(variacoes)
                 except Exception:
                     pass
             
@@ -208,9 +251,7 @@ else:
             st.session_state["sim_primeiro_pjtd"] = primeiro_pjtd
             st.session_state["sim_ultimo_pjtd"] = ultimo_pjtd
             st.session_state["sim_inclinacao"] = inclinacao
-            
-            if "sim_incremento_perc" not in st.session_state:
-                st.session_state.sim_incremento_perc = 0.0
+            st.session_state["sim_incremento_perc"] = incremento_perc
             
             # Estilos CSS para campos informativos
             st.markdown("""
@@ -271,7 +312,7 @@ else:
             st.markdown(f"""
             <div class="param-info-card">
                 <p class="param-label">📊 Incremento (%)</p>
-                <p class="param-value">{st.session_state.sim_incremento_perc:.4%}</p>
+                <p class="param-value">{incremento_perc:.2%}</p>
             </div>
             """, unsafe_allow_html=True)
             

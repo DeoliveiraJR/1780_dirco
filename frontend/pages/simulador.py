@@ -15,7 +15,9 @@ from bokeh.models import (
 from bokeh.layouts import column, row
 from bokeh.transform import dodge
 from streamlit_bokeh import streamlit_bokeh
-from components.bokeh_editable import bokeh_editable, get_bokeh_updates, limpar_localStorage, salvar_localStorage
+from components.bokeh_editable import (
+    bokeh_editable, get_bokeh_updates, limpar_localStorage, salvar_localStorage
+)
 
 from utils_ext.css import make_stylesheet
 from utils_ext.formatters import fmt_br
@@ -147,11 +149,16 @@ def renderizar():
     def _on_cliente_change():
         filtros = st.session_state.get("filtros", {})
         filtros["cliente"] = st.session_state.get("sim_cliente_page", "Todos")
+        # Limpar categoria e produto quando cliente muda (serão recalculados)
+        filtros["categoria"] = ""
+        filtros["produto"] = ""
         st.session_state["filtros"] = filtros
     
     def _on_categoria_change():
         filtros = st.session_state.get("filtros", {})
         filtros["categoria"] = st.session_state.get("sim_categoria_page", "")
+        # Limpar produto quando categoria muda (será recalculado)
+        filtros["produto"] = ""
         st.session_state["filtros"] = filtros
     
     def _on_produto_change():
@@ -342,53 +349,52 @@ def renderizar():
     curva_analitica_state = st.session_state.get("curva_analitica", analitica[:])
     curva_mercado_state = st.session_state.get("curva_mercado", mercado[:])
     ajustada = st.session_state.get("ajustada", analitica[:])
-
+    
+    # Calcula o incremento líquido por mês (diferença entre ajustada e analítica)
+    incremento_liquido = [ajustada[i] - analitica[i] for i in range(12)]
+    
     # ==================== PAINEL DE AJUSTE MANUAL POR MÊS ====================
-    # Permite incrementar/decrementar valores da curva ajustada por mês
-    # O valor do incremento será futuramente vinculado aos parâmetros da sidebar
+    incremento_perc = st.session_state.get("sim_incremento_perc", 0.05)
+    
     with st.expander("⚙️ Ajuste Manual por Mês", expanded=False):
-        st.caption("O valor em tempo real aparece na barra azul acima do gráfico")
-        incremento_base = st.session_state.get("sim_incremento_valor", 1_000_000_000)
+        st.caption(f"Incremento atual: **{incremento_perc:.2%}** (fórmula VBA: valor ± analítica × incremento%)")
         
-        col_mes, col_inc, col_btn_menos, col_btn_mais = st.columns([2, 2, 1, 1])
+        # Grid 4 colunas x 3 linhas (12 meses)
+        for row_idx in range(4):
+            cols = st.columns(3)
+            for col_idx in range(3):
+                mes_idx = row_idx * 3 + col_idx
+                mes_nome = MESES_ABR_LIST[mes_idx]
+                valor_atual = ajustada[mes_idx]
+                inc = incremento_liquido[mes_idx]
+                inc_step = analitica[mes_idx] * incremento_perc
+                
+                with cols[col_idx]:
+                    # Container com informações e botões
+                    c1, c2, c3, c4 = st.columns([0.8, 2.5, 0.7, 0.7])
+                    c1.markdown(f"**{mes_nome}**")
+                    c2.markdown(f"<small>R$ {valor_atual:,.0f}</small>", unsafe_allow_html=True)
+                    
+                    # Botão diminuir
+                    if c3.button("−", key=f"dec_{mes_idx}", help=f"-{inc_step:,.0f}"):
+                        ajustada[mes_idx] = max(0, ajustada[mes_idx] - inc_step)
+                        st.session_state["ajustada"] = ajustada
+                        salvar_localStorage(key=f"sim_bokeh_{combo}", valores=ajustada)
+                        st.rerun()
+                    
+                    # Botão aumentar  
+                    if c4.button("+", key=f"inc_{mes_idx}", help=f"+{inc_step:,.0f}"):
+                        ajustada[mes_idx] = ajustada[mes_idx] + inc_step
+                        st.session_state["ajustada"] = ajustada
+                        salvar_localStorage(key=f"sim_bokeh_{combo}", valores=ajustada)
+                        st.rerun()
         
-        with col_mes:
-            mes_selecionado = st.selectbox(
-                "Mês",
-                options=list(range(12)),
-                format_func=lambda i: MESES_ABR_LIST[i],
-                key=f"ajuste_mes_{combo}",
-                label_visibility="collapsed"
-            )
-        
-        with col_inc:
-            incremento = st.number_input(
-                "Incremento",
-                value=incremento_base,
-                step=100_000_000,
-                format="%d",
-                key=f"ajuste_inc_{combo}",
-                label_visibility="collapsed"
-            )
-            st.session_state["sim_incremento_valor"] = incremento
-        
-        with col_btn_menos:
-            if st.button("➖", key=f"btn_menos_{combo}", help="Reduzir valor", use_container_width=True):
-                novo_valor = ajustada[mes_selecionado] - incremento
-                ajustada[mes_selecionado] = max(0, novo_valor)
-                st.session_state["ajustada"] = ajustada[:]
-                salvar_localStorage(key=f"sim_bokeh_{combo}", valores=ajustada[:])
-                st.toast(f"📉 {MESES_ABR_LIST[mes_selecionado]}: -R$ {fmt_br(incremento, 0)}")
-                st.rerun()
-        
-        with col_btn_mais:
-            if st.button("➕", key=f"btn_mais_{combo}", help="Aumentar valor", use_container_width=True):
-                ajustada[mes_selecionado] = ajustada[mes_selecionado] + incremento
-                st.session_state["ajustada"] = ajustada[:]
-                salvar_localStorage(key=f"sim_bokeh_{combo}", valores=ajustada[:])
-                st.toast(f"📈 {MESES_ABR_LIST[mes_selecionado]}: +R$ {fmt_br(incremento, 0)}")
-                st.rerun()
-
+        # Mostrar resumo do ajuste líquido total
+        total_inc = sum(incremento_liquido)
+        if abs(total_inc) > 0:
+            cor = "green" if total_inc > 0 else "red"
+            st.markdown(f"**Ajuste Líquido Total:** <span style='color:{cor}'>R$ {total_inc:,.0f}</span>", unsafe_allow_html=True)
+    
     realizados_dict = _obter_realizados_por_ano(df_upload, cliente, categoria, produto, mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS)
     anos_realizados = sorted(realizados_dict.keys())
     variacoes_rlzd = {ano: _variacao_mensal(realizados_dict[ano]) for ano in anos_realizados}
@@ -449,6 +455,8 @@ def renderizar():
         sizing_mode="stretch_width"
     )
     
+
+    
     # Callback JS para atualizar o Div quando os dados mudam
     cb_atualiza_div = CustomJS(args=dict(src=src_ajs, div=div_valores, meses=MESES_ABR_LIST), code="""
         const y = src.data['y'];
@@ -489,6 +497,9 @@ def renderizar():
     tbl_data["Var_Mer"]   = var_mer
     tbl_data["Ajustada"]  = ajustada
     tbl_data["Var_Ajs"]   = var_ajs
+    
+    # Coluna de Ajuste (incremento líquido = Ajustada - Analítica)
+    tbl_data["Ajuste"] = incremento_liquido
 
     def _mean_safe(v):
         v = np.array(v, dtype=float)
@@ -504,6 +515,7 @@ def renderizar():
     media_row["Var_Mer"]   = _mean_safe(tbl_data["Var_Mer"])
     media_row["Ajustada"]  = _mean_safe(tbl_data["Ajustada"])
     media_row["Var_Ajs"]   = _mean_safe(tbl_data["Var_Ajs"])
+    media_row["Ajuste"]    = _mean_safe(tbl_data["Ajuste"])
 
     def _delta_first_last(v):
         v = list(map(float, v))
@@ -519,6 +531,7 @@ def renderizar():
         delta = _delta_first_last(tbl_data[field_val])
         cres_row[field_val] = delta
         cres_row[field_var] = 1.0 if delta > 0 else (-1.0 if delta < 0 else 0.0)
+    cres_row["Ajuste"] = _delta_first_last(tbl_data["Ajuste"])
 
     for k in list(tbl_data.keys()):
         if k == "Mes":
@@ -540,7 +553,7 @@ def renderizar():
     
     # Template destacado para coluna Ajustada (editável via clique duplo)
     AJUSTADA_TMPL = '<span style="color:#1a5f7a;font-weight:600;cursor:pointer;" title="Clique duplo para editar"><%= (value==null || isNaN(value)) ? "—" : new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(value) %></span>'
-
+    
     # Editor para coluna Ajustada (step de 1 bilhão)
     ajustada_editor = NumberEditor(step=1_000_000_000)
 
@@ -563,6 +576,7 @@ def renderizar():
         TableColumn(field="Var_Mer_Disp",  title="Var. % Mercado",    formatter=HTMLTemplateFormatter(template="<%= value %>")),
         TableColumn(field="Ajustada",      title="Ajustada",          formatter=HTMLTemplateFormatter(template=AJUSTADA_TMPL), editor=ajustada_editor),
         TableColumn(field="Var_Ajs_Disp",  title="Var. % Ajustada",   formatter=HTMLTemplateFormatter(template="<%= value %>")),
+        TableColumn(field="Ajuste",        title="Ajuste (Δ)",        formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:600;"><%= (value==null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(value)) %></span>')),
     ])
 
     tbl = DataTable(
@@ -727,28 +741,21 @@ def renderizar():
     
     st.markdown("---")
     
-    # ==================== BOTÃO DE SINCRONIZAÇÃO ====================
-    # Fluxo:
-    # 1. Usuário arrasta ponto → JS salva no localStorage (em tempo real)
-    # 2. Usuário clica "Sincronizar" → incrementa contador → rerun
-    # 3. No rerun, leitura do localStorage acontece NO INÍCIO (antes de renderizar)
-    # 4. Gráfico e cards são renderizados com valores atualizados
-    
-    # Atualiza referência local (já foi atualizada no início, mas garantimos aqui também)
+    # ==================== BOTÕES DE CONTROLE ====================
+    # Atualiza referência local
     ajustada = st.session_state.get("ajustada", analitica[:])
     sync_counter = st.session_state.get("sync_counter", 0)
     
-    # Botões de Sincronizar e Resetar
-    col_sync1, col_sync2, col_reset, col_sync3 = st.columns([1.5, 1, 1, 1.5])
-    with col_sync2:
+    # Botões Sincronizar e Resetar
+    col_sp1, col_sync, col_reset, col_sp2 = st.columns([1.5, 1, 1, 1.5])
+    with col_sync:
         if st.button(
-            "🔄 Sincronizar Curva", 
+            "🔄 Sincronizar",
             key=f"sync_{combo}",
-            help="Aplicar alterações do drag-and-drop aos cards",
+            help="Aplicar alterações do gráfico",
             use_container_width=True
         ):
             st.session_state["sync_counter"] = sync_counter + 1
-            st.toast("🔄 Sincronizando...", icon="📈")
             st.rerun()
     
     with col_reset:
