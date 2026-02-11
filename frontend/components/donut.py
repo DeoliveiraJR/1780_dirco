@@ -2,7 +2,7 @@
 import math
 import numpy as np
 from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, HoverTool
+from bokeh.models import ColumnDataSource, HoverTool, FullscreenTool
 from utils_ext.constants import COR_ANALITICA, COR_MERCADO, COR_AJUSTADA, CAT_COLORS
 
 
@@ -137,8 +137,9 @@ def _grafico_pizza_share_por_projecao(tipo_projecao: str, agreg: dict, styleshee
         sizing_mode="stretch_width",
         x_range=(-1.4, 1.4), y_range=(-1.15, 1.15),
         title=f"🍩 Share (%) - {titulos.get(tipo_projecao, '')}",
-        toolbar_location=None, stylesheets=[stylesheet],
+        toolbar_location="right", stylesheets=[stylesheet],
     )
+    p.toolbar.logo = None  # Remove logo Bokeh
     p.axis.visible = False
     p.grid.visible = False
     p.min_border = 6
@@ -174,5 +175,6 @@ def _grafico_pizza_share_por_projecao(tipo_projecao: str, agreg: dict, styleshee
                text_font_size="10pt", text_color="#1e293b", text_font_style="bold",
                text_baseline="middle")
     
+    p.add_tools(FullscreenTool())  # Tela cheia
     return p
 

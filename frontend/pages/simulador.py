@@ -10,13 +10,13 @@ from bokeh.models import (
     ColumnDataSource, PointDrawTool, DataTable, TableColumn,
     StringFormatter, CustomJS, HTMLTemplateFormatter,
     NumeralTickFormatter, HoverTool,
-    Legend, LegendItem, NumberEditor, Div
+    Legend, LegendItem, NumberEditor, Div, FullscreenTool
 )
 from bokeh.layouts import column, row
 from bokeh.transform import dodge
 from streamlit_bokeh import streamlit_bokeh
 from components.bokeh_editable import (
-    bokeh_editable, get_bokeh_updates, limpar_localStorage, salvar_localStorage
+    bokeh_editable, get_bokeh_updates, limpar_localStorage
 )
 
 from utils_ext.css import make_stylesheet
@@ -329,23 +329,16 @@ def renderizar():
     
     sync_counter = st.session_state.get("sync_counter", 0)
     
-    # ==================== LEITURA DO LOCALSTORAGE (ANTES DE RENDERIZAR) ====================
-    # Lê valores do localStorage ANTES de criar os sources do Bokeh
-    # Isso garante que o gráfico é renderizado com os valores editados pelo usuário
-    # NÃO lê se o combo acabou de mudar (para começar com curva analítica)
-    valores_localStorage = None
-    if not combo_mudou:
+    # ==================== LEITURA DO LOCALSTORAGE (APENAS NO SYNC) ====================
+    # Lê valores do localStorage APENAS quando o usuário clica em Sincronizar
+    # Isso evita conflitos entre botões de ajuste e drag-and-drop
+    if sync_counter > 0 and not combo_mudou:
         valores_localStorage = get_bokeh_updates(key=f"sim_bokeh_{combo}", sync_counter=sync_counter)
-    
-    if valores_localStorage is not None and len(valores_localStorage) == 12:
-        valores_atuais = [round(v, 2) for v in st.session_state.get("ajustada", [])]
-        valores_novos = [round(v, 2) for v in valores_localStorage]
         
-        if valores_novos != valores_atuais:
+        if valores_localStorage is not None and len(valores_localStorage) == 12:
             st.session_state["ajustada"] = valores_localStorage
-            print(f"[DEBUG] localStorage → session_state: {valores_localStorage[:3]}...")
     
-    # Carrega os valores dos estados (FONTE DE VERDADE - agora já atualizada pelo localStorage)
+    # Carrega os valores dos estados (FONTE DE VERDADE)
     curva_analitica_state = st.session_state.get("curva_analitica", analitica[:])
     curva_mercado_state = st.session_state.get("curva_mercado", mercado[:])
     ajustada = st.session_state.get("ajustada", analitica[:])
@@ -353,47 +346,195 @@ def renderizar():
     # Calcula o incremento líquido por mês (diferença entre ajustada e analítica)
     incremento_liquido = [ajustada[i] - analitica[i] for i in range(12)]
     
+    # Função callback para ajustar mês
+    def _ajustar_mes(mes_idx: int, delta: float):
+        cur = st.session_state.get("ajustada", analitica[:])
+        cur[mes_idx] = max(0, cur[mes_idx] + delta)
+        st.session_state["ajustada"] = cur
+    
+    # Função callback para replicar ajuste para meses seguintes
+    def _replicar_ajuste(mes_idx: int):
+        """Replica o incremento do mês atual para todos os meses seguintes."""
+        cur = st.session_state.get("ajustada", analitica[:])
+        inc_atual = cur[mes_idx] - analitica[mes_idx]  # incremento atual do mês
+        
+        # Aplica o mesmo incremento para os meses seguintes (mes_idx+1 até 11)
+        for i in range(mes_idx + 1, 12):
+            cur[i] = max(0, analitica[i] + inc_atual)
+        
+        st.session_state["ajustada"] = cur
+    
     # ==================== PAINEL DE AJUSTE MANUAL POR MÊS ====================
     incremento_perc = st.session_state.get("sim_incremento_perc", 0.05)
     
     with st.expander("⚙️ Ajuste Manual por Mês", expanded=False):
-        st.caption(f"Incremento atual: **{incremento_perc:.2%}** (fórmula VBA: valor ± analítica × incremento%)")
+        # CSS para cards e botões + JavaScript para estilizar botões
+        st.markdown("""
+        <style>
+            /* Cards de mês */
+            .mes-card {
+                background: linear-gradient(145deg, #f8fafc 0%, #f1f5f9 100%);
+                border-radius: 8px;
+                padding: 8px 12px;
+                text-align: center;
+                border: 1px solid #e2e8f0;
+                min-height: 48px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                transition: all 0.2s ease;
+                margin-bottom: 8px;
+            }
+            .mes-card:hover {
+                box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+                border-color: #cbd5e1;
+            }
+            .mes-nome {
+                font-weight: 700;
+                color: #0c3a66;
+                font-size: 13px;
+                line-height: 1.2;
+            }
+            .mes-valor {
+                color: #334155;
+                font-size: 11px;
+                line-height: 1.2;
+            }
+            .mes-delta {
+                font-size: 10px;
+                font-weight: 600;
+                line-height: 1.1;
+                margin-left: 4px;
+            }
+            .mes-delta.pos { color: #059669; }
+            .mes-delta.neg { color: #dc2626; }
+            
+            /* Espaçador entre linhas */
+            .spacer-row {
+                height: 8px;
+            }
+            
+            /* Botões base no expander - tamanho fixo */
+            .stExpander button[kind="secondary"] {
+                min-height: 38px !important;
+                max-height: 38px !important;
+                font-size: 16px !important;
+                font-weight: 700 !important;
+                border-radius: 8px !important;
+                padding: 0 !important;
+            }
+        </style>
+        <script>
+        // Estiliza botões de + e - após carregamento
+        const styleButtons = () => {
+            document.querySelectorAll('.stExpander button').forEach(btn => {
+                const text = btn.textContent.trim();
+                if (text === '➕' || text === '+') {
+                    btn.style.color = '#0c3a66';
+                    btn.style.fontWeight = '800';
+                    btn.style.fontSize = '20px';
+                } else if (text === '➖' || text === '−' || text === '-') {
+                    btn.style.color = '#0c3a66';
+                    btn.style.fontWeight = '800';
+                    btn.style.fontSize = '20px';
+                } else if (text === '⬇️' || text.includes('⬇')) {
+                    btn.style.color = '#0c3a66';
+                    btn.style.fontWeight = '700';
+                    btn.style.fontSize = '16px';
+                    btn.style.background = 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)';
+                    btn.style.border = 'none';
+                }
+            });
+        };
+        // Executa após um pequeno delay e também observa mudanças
+        setTimeout(styleButtons, 100);
+        setTimeout(styleButtons, 500);
+        setTimeout(styleButtons, 1000);
+        const observer = new MutationObserver(styleButtons);
+        observer.observe(document.body, {childList: true, subtree: true});
+        </script>
+        """, unsafe_allow_html=True)
         
-        # Grid 4 colunas x 3 linhas (12 meses)
-        for row_idx in range(4):
-            cols = st.columns(3)
-            for col_idx in range(3):
-                mes_idx = row_idx * 3 + col_idx
-                mes_nome = MESES_ABR_LIST[mes_idx]
-                valor_atual = ajustada[mes_idx]
-                inc = incremento_liquido[mes_idx]
-                inc_step = analitica[mes_idx] * incremento_perc
-                
-                with cols[col_idx]:
-                    # Container com informações e botões
-                    c1, c2, c3, c4 = st.columns([0.8, 2.5, 0.7, 0.7])
-                    c1.markdown(f"**{mes_nome}**")
-                    c2.markdown(f"<small>R$ {valor_atual:,.0f}</small>", unsafe_allow_html=True)
-                    
-                    # Botão diminuir
-                    if c3.button("−", key=f"dec_{mes_idx}", help=f"-{inc_step:,.0f}"):
-                        ajustada[mes_idx] = max(0, ajustada[mes_idx] - inc_step)
-                        st.session_state["ajustada"] = ajustada
-                        salvar_localStorage(key=f"sim_bokeh_{combo}", valores=ajustada)
-                        st.rerun()
-                    
-                    # Botão aumentar  
-                    if c4.button("+", key=f"inc_{mes_idx}", help=f"+{inc_step:,.0f}"):
-                        ajustada[mes_idx] = ajustada[mes_idx] + inc_step
-                        st.session_state["ajustada"] = ajustada
-                        salvar_localStorage(key=f"sim_bokeh_{combo}", valores=ajustada)
-                        st.rerun()
+        # Header informativo
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #0c3a66 0%, #1a5f7a 100%); 
+                    padding: 10px 14px; border-radius: 8px; margin-bottom: 12px;">
+            <span style="color: white; font-size: 12px;">
+                📊 <b>Incremento:</b> {incremento_perc:.2%} | 
+                <b>Fórmula:</b> valor ± (analítica × {incremento_perc:.2%})
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # Mostrar resumo do ajuste líquido total
+        # Grid por COLUNAS (vertical): 3 colunas x 4 linhas por coluna
+        # Coluna 1: Jan, Fev, Mar, Abr | Coluna 2: Mai, Jun, Jul, Ago | Coluna 3: Set, Out, Nov, Dez
+        cols = st.columns(3, gap="medium")
+        
+        for col_idx in range(3):
+            with cols[col_idx]:
+                for row_idx in range(4):
+                    mes_idx = col_idx * 4 + row_idx
+                    mes_nome = MESES_ABR_LIST[mes_idx]
+                    valor_atual = ajustada[mes_idx]
+                    inc = incremento_liquido[mes_idx]
+                    inc_step = analitica[mes_idx] * incremento_perc
+                    
+                    # Delta display
+                    delta_html = ""
+                    if abs(inc) > 0:
+                        delta_class = "pos" if inc > 0 else "neg"
+                        sinal = "+" if inc > 0 else ""
+                        delta_html = f'<span class="mes-delta {delta_class}">{sinal}{inc/1e6:.1f}M</span>'
+                    
+                    # Layout: botão(-) - card - botão(+) - botão(⬇️ replicar)
+                    c1, c2, c3, c4 = st.columns([1, 5, 1, 1])
+                    
+                    with c1:
+                        st.button("➖", key=f"dec_{mes_idx}", 
+                                  on_click=lambda i=mes_idx, s=inc_step: _ajustar_mes(i, -s),
+                                  use_container_width=True)
+                    
+                    with c2:
+                        st.markdown(f"""
+                        <div class="mes-card">
+                            <span class="mes-nome">{mes_nome}</span>
+                            <span class="mes-valor">R$ {valor_atual/1e9:.2f}B {delta_html}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    with c3:
+                        st.button("➕", key=f"inc_{mes_idx}",
+                                  on_click=lambda i=mes_idx, s=inc_step: _ajustar_mes(i, s),
+                                  use_container_width=True)
+                    
+                    with c4:
+                        # Botão de replicar (só aparece se não for o último mês)
+                        if mes_idx < 11:
+                            st.button("⬇️", key=f"rep_{mes_idx}",
+                                      on_click=lambda i=mes_idx: _replicar_ajuste(i),
+                                      use_container_width=True,
+                                      help=f"Replicar ajuste de {mes_nome} para meses seguintes")
+                    
+                    # Espaçador entre linhas
+                    if row_idx < 3:
+                        st.markdown('<div class="spacer-row"></div>', unsafe_allow_html=True)
+        
+        # Resumo elegante
         total_inc = sum(incremento_liquido)
-        if abs(total_inc) > 0:
-            cor = "green" if total_inc > 0 else "red"
-            st.markdown(f"**Ajuste Líquido Total:** <span style='color:{cor}'>R$ {total_inc:,.0f}</span>", unsafe_allow_html=True)
+        sinal = "+" if total_inc > 0 else ""
+        cor = "#059669" if total_inc >= 0 else "#dc2626"
+        
+        st.markdown(f"""
+        <div style="background: #f1f5f9; border-radius: 8px; padding: 12px 16px; margin-top: 12px;
+                    display: flex; justify-content: space-between; align-items: center; border: 1px solid #e2e8f0;">
+            <span style="font-weight: 600; color: #334155; font-size: 14px;">
+                📊 Ajuste Total: <span style="color: {cor}; font-weight: 700;">{sinal}R$ {total_inc/1e9:.2f}B</span>
+            </span>
+            <span style="color: #64748b; font-size: 12px;">
+                Step: ~R$ {analitica[0] * incremento_perc/1e9:.3f}B
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
     
     realizados_dict = _obter_realizados_por_ano(df_upload, cliente, categoria, produto, mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS)
     anos_realizados = sorted(realizados_dict.keys())
@@ -412,20 +553,22 @@ def renderizar():
     ))
 
     p = figure(
-        height=400, sizing_mode="stretch_width",
+        height=380, sizing_mode="stretch_width",
         x_range=(0.5,12.5), x_axis_label="Mês", y_axis_label="Valor (R$)",
         toolbar_location="right",
-        title=f"📈 Curva de Projeção Ajustada • {cliente or 'Portfólio'} • {categoria} • {produto}",
+        title="",  # Título removido (exibido via Streamlit acima)
         stylesheets=[style_top]
     )
-    p.background_fill_color="#f7fbff"; p.grid.grid_line_alpha=0.22
-    p.min_border_top = 4; p.min_border_bottom = 4
+    p.background_fill_color="#fafbfc"; p.grid.grid_line_alpha=0.18
+    p.min_border_top = 8; p.min_border_bottom = 40  # Espaço para legenda embaixo
     p.yaxis.formatter = NumeralTickFormatter(format="0.00a")
-    p.title.text_font_size = "14pt"
+    p.title.text_font_size = "0pt"  # Oculta título
     p.xaxis.ticker = MESES_NUM
     p.xaxis.major_label_overrides = {i: MESES_ABR[i] for i in MESES_NUM}
-    p.xaxis.major_label_text_font_size = "13px"
-    p.yaxis.major_label_text_font_size = "13px"
+    p.xaxis.major_label_text_font_size = "12px"
+    p.yaxis.major_label_text_font_size = "12px"
+    p.outline_line_color = "#e2e8f0"
+    p.border_fill_color = "#ffffff"
 
     r_ana = p.line("x","y", source=src_ana, color=COR_ANALITICA, line_width=3, muted_alpha=0.15)
     r_mer = p.line("x","y", source=src_mer, color=COR_MERCADO, line_width=3, line_dash="dashed", muted_alpha=0.15)
@@ -435,27 +578,34 @@ def renderizar():
     draw = PointDrawTool(renderers=[pts], empty_value=np.nan)
     p.add_tools(draw); p.toolbar.active_drag = draw
     p.add_tools(HoverTool(renderers=[pts], tooltips=[("Mês","@xm"),("Ajustada","R$ @y_br")]))
+    p.add_tools(FullscreenTool())  # Ferramenta de tela cheia nativa do Bokeh
 
     legend = Legend(items=[
         LegendItem(label="Projeção Analítica", renderers=[r_ana]),
         LegendItem(label="Projeção Mercado",  renderers=[r_mer]),
         LegendItem(label="Projeção Ajustada", renderers=[r_ajs]),
-    ], click_policy="mute", orientation="horizontal", label_text_font_size="12pt")
-    p.add_layout(legend, "above")
+    ], click_policy="mute", orientation="horizontal", label_text_font_size="11pt",
+       location="bottom_center", background_fill_alpha=0.8, border_line_alpha=0.3)
+    p.add_layout(legend, "below")
+    
+    # Configura toolbar mais completo (right side)
+    p.toolbar_location = "right"
 
     # -------------------- DIV DE VALORES EM TEMPO REAL -----------------------
     # Exibe os valores da curva ajustada, atualizando em tempo real via JS
     valores_html_inicial = " | ".join([
-        f"<b>{MESES_ABR_LIST[i]}:</b> R$ {fmt_br(ajustada[i], 0)}" 
+        f"<span style='color:#64748b'>{MESES_ABR_LIST[i]}:</span> <b style='color:#0f172a'>R$ {fmt_br(ajustada[i], 0)}</b>" 
         for i in range(12)
     ])
     div_valores = Div(
-        text=f"<div style='font-size:12px; padding:8px; background:#f0f8ff; border-radius:4px; margin-bottom:8px;'>"
-             f"<b>📊 Curva Ajustada:</b> {valores_html_inicial}</div>",
+        text=f"""<div style='font-size:11px; padding:10px 14px; 
+                    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); 
+                    border-radius:8px; border: 1px solid #e2e8f0;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.05);'>
+                 <span style='color:#0c3a66; font-weight:600;'>📊 Curva Ajustada:</span> 
+                 {valores_html_inicial}</div>""",
         sizing_mode="stretch_width"
     )
-    
-
     
     # Callback JS para atualizar o Div quando os dados mudam
     cb_atualiza_div = CustomJS(args=dict(src=src_ajs, div=div_valores, meses=MESES_ABR_LIST), code="""
@@ -466,11 +616,14 @@ def renderizar():
             return v.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0});
         }
         
-        let html = "<div style='font-size:12px; padding:8px; background:#f0f8ff; border-radius:4px; margin-bottom:8px;'>";
-        html += "<b>📊 Curva Ajustada:</b> ";
+        let html = "<div style='font-size:11px; padding:10px 14px; ";
+        html += "background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); ";
+        html += "border-radius:8px; border: 1px solid #e2e8f0; ";
+        html += "box-shadow: 0 1px 3px rgba(0,0,0,0.05);'>";
+        html += "<span style='color:#0c3a66; font-weight:600;'>📊 Curva Ajustada:</span> ";
         const parts = [];
         for (let i = 0; i < 12; i++) {
-            parts.push("<b>" + meses[i] + ":</b> R$ " + formatBR(y[i]));
+            parts.push("<span style='color:#64748b'>" + meses[i] + ":</span> <b style='color:#0f172a'>R$ " + formatBR(y[i]) + "</b>");
         }
         html += parts.join(" | ");
         html += "</div>";
@@ -587,6 +740,7 @@ def renderizar():
         width=1400,
         height=420,
         editable=True,  # Habilita edição na tabela
+        reorderable=False,  # Desabilita reordenação (evita warning jquery-ui)
         stylesheets=[make_stylesheet()],
     )
 
@@ -732,43 +886,70 @@ def renderizar():
         sizing_mode="stretch_width",
     )
     
+    # ==================== BOTÕES DE CONTROLE (ACIMA DO GRÁFICO) ====================
+    ajustada = st.session_state.get("ajustada", analitica[:])
+    sync_counter = st.session_state.get("sync_counter", 0)
+    
+    # Layout: Título à esquerda, botões à direita
+    col_titulo, col_spacer, col_sync, col_reset = st.columns([5, 2, 1.5, 1.5])
+    
+    with col_titulo:
+        st.markdown(f"""<div style="padding: 8px 0;">
+            <span style="font-size: 1.1rem; font-weight: 600; color: #0c3a66;">📈 Curva de Projeção Ajustada</span>
+            <span style="font-size: 0.85rem; color: #64748b;"> • {cliente or 'Portfólio'} • {categoria} • {produto}</span>
+        </div>""", unsafe_allow_html=True)
+    
+    with col_sync:
+        # Botão Sincronizar com estilo elegante via HTML
+        sync_clicked = st.button("🔄 Sincronizar", key=f"sync_{combo}", 
+                                  help="Aplicar alterações do drag-and-drop",
+                                  use_container_width=True)
+        if sync_clicked:
+            st.session_state["sync_counter"] = sync_counter + 1
+            st.rerun()
+    
+    with col_reset:
+        # Botão Resetar com estilo elegante
+        reset_clicked = st.button("↩️ Resetar", key=f"reset_{combo}",
+                                   help="Voltar para curva analítica original",
+                                   use_container_width=True)
+        if reset_clicked:
+            resetar_simulacao_atual()
+            limpar_localStorage(key=f"sim_bokeh_{combo}")
+            st.toast("↩️ Curva resetada!", icon="🔄")
+            st.rerun()
+    
+    # CSS para estilizar botões Sincronizar/Resetar
+    st.markdown("""
+    <style>
+        /* Estilo elegante para botões de controle */
+        div[data-testid="column"]:nth-child(3) button,
+        div[data-testid="column"]:nth-child(4) button {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 8px !important;
+            padding: 8px 16px !important;
+            font-weight: 500 !important;
+            color: #334155 !important;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+            transition: all 0.2s ease !important;
+        }
+        div[data-testid="column"]:nth-child(3) button:hover,
+        div[data-testid="column"]:nth-child(4) button:hover {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%) !important;
+            border-color: #3b82f6 !important;
+            box-shadow: 0 2px 6px rgba(59,130,246,0.15) !important;
+            color: #0c3a66 !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
     # Renderiza o gráfico Bokeh (drag-and-drop salva valores no localStorage)
     bokeh_editable(
         layout_topo, 
         height=1200,
         key=f"sim_bokeh_{combo}"
     )
-    
-    st.markdown("---")
-    
-    # ==================== BOTÕES DE CONTROLE ====================
-    # Atualiza referência local
-    ajustada = st.session_state.get("ajustada", analitica[:])
-    sync_counter = st.session_state.get("sync_counter", 0)
-    
-    # Botões Sincronizar e Resetar
-    col_sp1, col_sync, col_reset, col_sp2 = st.columns([1.5, 1, 1, 1.5])
-    with col_sync:
-        if st.button(
-            "🔄 Sincronizar",
-            key=f"sync_{combo}",
-            help="Aplicar alterações do gráfico",
-            use_container_width=True
-        ):
-            st.session_state["sync_counter"] = sync_counter + 1
-            st.rerun()
-    
-    with col_reset:
-        if st.button(
-            "↩️ Resetar Curva",
-            key=f"reset_{combo}",
-            help="Voltar curva ajustada para a analítica original",
-            use_container_width=True
-        ):
-            resetar_simulacao_atual()
-            limpar_localStorage(key=f"sim_bokeh_{combo}")
-            st.toast("↩️ Curva resetada!", icon="🔄")
-            st.rerun()
     
     # -------------------- Seção: Análises por Categoria ----------------------
     st.markdown("<h2 class='uan-sec' style='margin:8px 0 4px 0;padding:4px 0;font-size:1.2rem;border-top:1px solid #e2e8f0;'>🗂️ Análises por Categoria</h2>", unsafe_allow_html=True)

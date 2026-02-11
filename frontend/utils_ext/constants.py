@@ -8,13 +8,13 @@ MESES_ABR = {1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
              7:"Jul",8:"Ago",9:"Set",10:"Out",11:"Nov",12:"Dez"}
 MESES_ABR_LIST = [MESES_ABR[i] for i in MESES_NUM]
 
-# Paleta (mantida do seu simulador)
-COR_ANALITICA   = "#1e3a8a"
-COR_MERCADO     = "#f59e0b"
-COR_AJUSTADA    = "#14b8a6"
-COR_RLZD_BASE   = "#64748b"
-COR_MERCADO_L   = "#f59e0b"
-COR_ANALITICA_L = "#3b82f6"
+# Paleta - Tons pasteurizados elegantes
+COR_ANALITICA   = "#3b82f6"  # Azul médio (mais visível)
+COR_MERCADO     = "#f59e0b"  # Âmbar/Laranja
+COR_AJUSTADA    = "#10b981"  # Esmeralda/Verde água
+COR_RLZD_BASE   = "#6b7280"  # Cinza neutro
+COR_MERCADO_L   = "#fbbf24"  # Amarelo âmbar
+COR_ANALITICA_L = "#60a5fa"  # Azul claro
 
 # Paleta de cores por categoria - tons pastel elegantes
 CAT_COLORS = {

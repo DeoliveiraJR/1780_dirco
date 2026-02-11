@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, Legend, LegendItem, NumeralTickFormatter, DatetimeTickFormatter
+from bokeh.models import ColumnDataSource, Legend, LegendItem, NumeralTickFormatter, DatetimeTickFormatter, FullscreenTool
 
 from utils_ext.constants import (
     MESES_NUM, MESES_ABR, COR_RLZD_BASE, COR_ANALITICA_L, COR_MERCADO_L, COR_AJUSTADA
@@ -58,6 +58,7 @@ def _grafico_visao_anual_linhas(realizados_dict: dict, ana: list, mer: list, ajs
     legend = Legend(items=[LegendItem(label=lab, renderers=rens) for lab, rens in renderers],
                     click_policy="mute", orientation="horizontal", label_text_font_size="12pt")
     p.add_layout(legend, "above")
+    p.add_tools(FullscreenTool())  # Tela cheia
     return p
 
 
@@ -123,4 +124,5 @@ def _grafico_serie_historica(df_upload: pd.DataFrame, cliente: str, categoria: s
     legend = Legend(items=[LegendItem(label=lab, renderers=rens) for lab, rens in renderers],
                     click_policy="mute", orientation="horizontal", label_text_font_size="12pt")
     p.add_layout(legend, "above")
+    p.add_tools(FullscreenTool())  # Tela cheia
     return p

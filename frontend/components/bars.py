@@ -1,6 +1,6 @@
 # frontend/components/bars.py
 from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, Legend, LegendItem, NumeralTickFormatter, HoverTool
+from bokeh.models import ColumnDataSource, Legend, LegendItem, NumeralTickFormatter, HoverTool, FullscreenTool
 from bokeh.transform import dodge
 import numpy as np
 from utils_ext.constants import MESES_ABR_LIST, COR_ANALITICA, COR_MERCADO, COR_AJUSTADA, COR_RLZD_BASE, CAT_COLORS
@@ -47,8 +47,9 @@ def _grafico_barras_categoria(cat: str, d: dict, stylesheet):
         x_range=months,
         stylesheets=[stylesheet],
         title=f"📊 {cat_short.upper()}",
-        toolbar_location=None
+        toolbar_location="right"
     )
+    p.toolbar.logo = None  # Remove logo Bokeh
     p.background_fill_color = "#fafbfc"
     p.grid.grid_line_alpha = 0.25
     p.grid.grid_line_color = "#cbd5e1"
@@ -123,5 +124,6 @@ def _grafico_barras_categoria(cat: str, d: dict, stylesheet):
         border_line_alpha=0.0,
     )
     p.add_layout(legend, 'above')
+    p.add_tools(FullscreenTool())  # Tela cheia
 
     return p
