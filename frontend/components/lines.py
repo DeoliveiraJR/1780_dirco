@@ -2,7 +2,10 @@
 import numpy as np
 import pandas as pd
 from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, Legend, LegendItem, NumeralTickFormatter, DatetimeTickFormatter, FullscreenTool
+from bokeh.models import (
+    ColumnDataSource, Legend, LegendItem, NumeralTickFormatter,
+    DatetimeTickFormatter, FullscreenTool, CustomJS
+)
 
 from utils_ext.constants import (
     MESES_NUM, MESES_ABR, COR_RLZD_BASE, COR_ANALITICA_L, COR_MERCADO_L, COR_AJUSTADA
@@ -62,8 +65,11 @@ def _grafico_visao_anual_linhas(realizados_dict: dict, ana: list, mer: list, ajs
     return p
 
 
-def _grafico_serie_historica(df_upload: pd.DataFrame, cliente: str, categoria: str, produto: str,
-                             ana: list, mer: list, ano_proj: int, stylesheet):
+def _grafico_serie_historica(df_upload: pd.DataFrame, cliente: str,
+                             categoria: str, produto: str,
+                             ana: list, mer: list, ajs: list,
+                             ano_proj: int, stylesheet,
+                             src_ajs_ref: ColumnDataSource | None = None):
     p = figure(height=320, sizing_mode="stretch_width", x_axis_type="datetime",
                title="🕒 SÉRIE HISTÓRICA • Realizado vs Projeções",
                stylesheets=[stylesheet], toolbar_location="right")
@@ -113,13 +119,38 @@ def _grafico_serie_historica(df_upload: pd.DataFrame, cliente: str, categoria: s
     if ano_proj:
         idx = pd.date_range(f"{ano_proj}-01-01", periods=12, freq="MS")
         if ana:
-            r_a = p.line("x","y", source=ColumnDataSource(dict(x=idx, y=ana)),
-                   color=COR_ANALITICA_L, line_width=3, muted_alpha=0.15)
+            r_a = p.line("x", "y", source=ColumnDataSource(dict(x=idx, y=ana)),
+                         color=COR_ANALITICA_L, line_width=3, muted_alpha=0.15)
             renderers.append(("Proj. Analítica", [r_a]))
         if mer:
-            r_m = p.line("x","y", source=ColumnDataSource(dict(x=idx, y=mer)),
-                   color=COR_MERCADO_L, line_width=3, line_dash="dashed", muted_alpha=0.15)
+            r_m = p.line("x", "y", source=ColumnDataSource(dict(x=idx, y=mer)),
+                         color=COR_MERCADO_L, line_width=3,
+                         line_dash="dashed", muted_alpha=0.15)
             renderers.append(("Proj. Mercado", [r_m]))
+        
+        # Curva Ajustada - com atualização em tempo real via src_ajs_ref
+        if src_ajs_ref is not None:
+            # Cria source local com timestamps para eixo X datetime
+            src_ajs_ts = ColumnDataSource(dict(x=idx, y=ajs or [0]*12))
+            r_aj = p.line("x", "y", source=src_ajs_ts,
+                          color=COR_AJUSTADA, line_width=3, muted_alpha=0.15)
+            p.circle("x", "y", source=src_ajs_ts, color=COR_AJUSTADA, size=5)
+            renderers.append(("Proj. Ajustada", [r_aj]))
+            
+            # Callback JS para sincronizar valores Y do src_ajs_ref
+            cb_sync = CustomJS(args=dict(src_ts=src_ajs_ts, src_ref=src_ajs_ref),
+                               code="""
+                const y_new = src_ref.data['y'];
+                src_ts.data['y'] = y_new.slice();
+                src_ts.change.emit();
+            """)
+            src_ajs_ref.js_on_change("data", cb_sync)
+        elif ajs:
+            src_ajs_ts = ColumnDataSource(dict(x=idx, y=ajs))
+            r_aj = p.line("x", "y", source=src_ajs_ts,
+                          color=COR_AJUSTADA, line_width=3, muted_alpha=0.15)
+            p.circle("x", "y", source=src_ajs_ts, color=COR_AJUSTADA, size=5)
+            renderers.append(("Proj. Ajustada", [r_aj]))
 
     legend = Legend(items=[LegendItem(label=lab, renderers=rens) for lab, rens in renderers],
                     click_policy="mute", orientation="horizontal", label_text_font_size="12pt")

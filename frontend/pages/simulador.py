@@ -892,7 +892,8 @@ def renderizar():
         analitica, mercado, ajustada, ano_proj, style_top, src_ajs_ref=src_ajs
     )
     g2 = _grafico_serie_historica(df_upload, cliente, categoria, produto,
-                                  analitica, mercado, ano_proj, style_top)
+                                  analitica, mercado, ajustada, ano_proj,
+                                  style_top, src_ajs_ref=src_ajs)
 
     layout_topo = column(
         div_valores,
