@@ -48,7 +48,7 @@ from data_manager import (
     get_dados_upload, adicionar_simulacao, get_simulacoes_usuario,
     restaurar_simulacao, deletar_simulacao, get_simulacao_por_combo,
     resetar_simulacao_atual, carregar_curva_ajustada, existe_curva_salva,
-    aplicar_todas_curvas_salvas
+    aplicar_todas_curvas_salvas, get_score_by_produto_nome
 )
 
 MASCARAR_ZEROS_FINAIS = True
@@ -613,6 +613,7 @@ def renderizar():
         f"<span style='color:#64748b'>{MESES_ABR_LIST[i]}:</span> <b style='color:#0f172a'>R$ {fmt_br(ajustada[i], 0)}</b>" 
         for i in range(12)
     ])
+    
     div_valores = Div(
         text=f"""<div style='font-size:11px; padding:10px 14px; 
                     background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); 
@@ -623,8 +624,40 @@ def renderizar():
         sizing_mode="stretch_width"
     )
     
-    # Callback JS para atualizar o Div quando os dados mudam
-    cb_atualiza_div = CustomJS(args=dict(src=src_ajs, div=div_valores, meses=MESES_ABR_LIST), code="""
+    # Div para o Incremento em tempo real (atualizado via JS)
+    soma_ana_inicial = sum(analitica) if analitica else 1
+    soma_ajs_inicial = sum(ajustada) if ajustada else 0
+    incr_inicial_pct = ((soma_ajs_inicial / soma_ana_inicial) - 1) * 100 if soma_ana_inicial > 0 else 0
+    incr_color = "#10b981" if incr_inicial_pct >= 0 else "#ef4444"
+    incr_icon = "📈" if incr_inicial_pct >= 0 else "📉"
+    
+    div_incremento = Div(
+        text=f"""<div id="div_incremento" style="
+            background: linear-gradient(145deg, {'#ecfdf5' if incr_inicial_pct >= 0 else '#fef2f2'} 0%, #ffffff 100%);
+            border: 2px solid {incr_color};
+            border-radius: 12px;
+            padding: 6px 16px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            min-width: 110px;
+        ">
+            <div style="font-size: 0.7rem; color: #64748b; font-weight: 500;">
+                {incr_icon} Incremento
+            </div>
+            <div style="font-size: 1.3rem; font-weight: 700; color: {incr_color};">
+                {incr_inicial_pct:+.2f}%
+            </div>
+        </div>""",
+        sizing_mode="fixed",
+        width=130
+    )
+    
+    # Callback JS para atualizar o Div de valores E o Div de incremento
+    soma_analitica_js = sum(analitica) if analitica else 1
+    cb_atualiza_div = CustomJS(
+        args=dict(src=src_ajs, div=div_valores, div_incr=div_incremento, 
+                  meses=MESES_ABR_LIST, soma_ana=soma_analitica_js), 
+        code="""
         const y = src.data['y'];
         if (!y || y.length < 12) return;
         
@@ -632,6 +665,7 @@ def renderizar():
             return v.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0});
         }
         
+        // Atualiza div de valores
         let html = "<div style='font-size:11px; padding:10px 14px; ";
         html += "background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); ";
         html += "border-radius:8px; border: 1px solid #e2e8f0; ";
@@ -644,6 +678,28 @@ def renderizar():
         html += parts.join(" | ");
         html += "</div>";
         div.text = html;
+        
+        // Calcula e atualiza incremento
+        let soma_ajs = 0;
+        for (let i = 0; i < 12; i++) {
+            soma_ajs += y[i];
+        }
+        const incr_pct = soma_ana > 0 ? ((soma_ajs / soma_ana) - 1) * 100 : 0;
+        const incr_color = incr_pct >= 0 ? "#10b981" : "#ef4444";
+        const incr_bg = incr_pct >= 0 ? "#ecfdf5" : "#fef2f2";
+        const incr_icon = incr_pct >= 0 ? "📈" : "📉";
+        const incr_sign = incr_pct >= 0 ? "+" : "";
+        
+        let html_incr = '<div style="';
+        html_incr += 'background: linear-gradient(145deg, ' + incr_bg + ' 0%, #ffffff 100%);';
+        html_incr += 'border: 2px solid ' + incr_color + ';';
+        html_incr += 'border-radius: 12px; padding: 6px 16px; text-align: center;';
+        html_incr += 'box-shadow: 0 2px 8px rgba(0,0,0,0.08); min-width: 110px;">';
+        html_incr += '<div style="font-size: 0.7rem; color: #64748b; font-weight: 500;">';
+        html_incr += incr_icon + ' Incremento</div>';
+        html_incr += '<div style="font-size: 1.3rem; font-weight: 700; color: ' + incr_color + ';">';
+        html_incr += incr_sign + incr_pct.toFixed(2) + '%</div></div>';
+        div_incr.text = html_incr;
     """)
     src_ajs.js_on_change("data", cb_atualiza_div)
 
@@ -896,7 +952,7 @@ def renderizar():
                                   style_top, src_ajs_ref=src_ajs)
 
     layout_topo = column(
-        div_valores,
+        row(div_valores, div_incremento, sizing_mode="stretch_width"),
         p,
         tbl,
         row(g1, g2, sizing_mode="stretch_width"),
@@ -907,14 +963,64 @@ def renderizar():
     ajustada = st.session_state.get("ajustada", analitica[:])
     sync_counter = st.session_state.get("sync_counter", 0)
     
-    # Layout: Título à esquerda, botões à direita
-    col_titulo, col_spacer, col_sync, col_reset = st.columns([5, 2, 1.5, 1.5])
+    # Buscar SCORE (MAPE) do modelo de ML para o produto
+    mape_score = get_score_by_produto_nome(produto, df_upload)
+    
+    # Calcular Incremento: variação entre total Ajustada vs total Analítica
+    soma_analitica = sum(analitica) if analitica else 0
+    soma_ajustada = sum(ajustada) if ajustada else 0
+    if soma_analitica > 0:
+        incremento_pct = (soma_ajustada / soma_analitica) - 1
+    else:
+        incremento_pct = 0
+    
+    # Layout: Título à esquerda, SCORE, e botões à direita
+    col_titulo, col_score, col_sync, col_reset = st.columns(
+        [4, 1.2, 1.3, 1.3]
+    )
     
     with col_titulo:
         st.markdown(f"""<div style="padding: 8px 0;">
             <span style="font-size: 1.1rem; font-weight: 600; color: #0c3a66;">📈 Curva de Projeção Ajustada</span>
             <span style="font-size: 0.85rem; color: #64748b;"> • {cliente or 'Portfólio'} • {categoria} • {produto}</span>
         </div>""", unsafe_allow_html=True)
+    
+    with col_score:
+        # Card de SCORE (MAPE do modelo)
+        if mape_score is not None:
+            # MAPE válido - cor verde se baixo (<10%), amarelo se médio, vermelho se alto
+            if mape_score < 0.10:
+                score_color = "#10b981"  # Verde
+                score_bg = "#ecfdf5"
+            elif mape_score < 0.30:
+                score_color = "#f59e0b"  # Amarelo
+                score_bg = "#fffbeb"
+            else:
+                score_color = "#ef4444"  # Vermelho
+                score_bg = "#fef2f2"
+            score_display = f"{mape_score*100:.2f}%"
+        else:
+            score_color = "#94a3b8"
+            score_bg = "#f1f5f9"
+            score_display = "N/D"
+        
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(145deg, {score_bg} 0%, #ffffff 100%);
+            border: 2px solid {score_color};
+            border-radius: 12px;
+            padding: 6px 12px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        ">
+            <div style="font-size: 0.7rem; color: #64748b; font-weight: 500;">
+                🎯 SCORE
+            </div>
+            <div style="font-size: 1.3rem; font-weight: 700; color: {score_color};">
+                {score_display}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col_sync:
         # Botão Sincronizar com estilo elegante via HTML
@@ -940,8 +1046,8 @@ def renderizar():
     st.markdown("""
     <style>
         /* Estilo elegante para botões de controle */
-        div[data-testid="column"]:nth-child(3) button,
-        div[data-testid="column"]:nth-child(4) button {
+        div[data-testid="column"]:nth-child(4) button,
+        div[data-testid="column"]:nth-child(5) button {
             background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
             border: 1px solid #e2e8f0 !important;
             border-radius: 8px !important;
@@ -951,8 +1057,8 @@ def renderizar():
             box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
             transition: all 0.2s ease !important;
         }
-        div[data-testid="column"]:nth-child(3) button:hover,
-        div[data-testid="column"]:nth-child(4) button:hover {
+        div[data-testid="column"]:nth-child(4) button:hover,
+        div[data-testid="column"]:nth-child(5) button:hover {
             background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%) !important;
             border-color: #3b82f6 !important;
             box-shadow: 0 2px 6px rgba(59,130,246,0.15) !important;

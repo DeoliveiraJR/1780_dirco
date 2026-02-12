@@ -44,6 +44,71 @@ def init_data_state():
     if "historico_simulacoes" not in st.session_state:
         # Histórico completo de todas as simulações salvas
         st.session_state.historico_simulacoes = []
+    if "scores_mape" not in st.session_state:
+        # Dicionário {cod_produto: mape_value} para o card SCORE
+        st.session_state.scores_mape = {}
+        _carregar_scores_mape()
+
+
+def _carregar_scores_mape():
+    """
+    Carrega tabela de SCORES (MAPE por produto) do arquivo CSV.
+    O MAPE é a métrica de erro do modelo de ML para cada produto.
+    """
+    import os
+    csv_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "data", "raw", "scores_mape.csv"
+    )
+    try:
+        if os.path.exists(csv_path):
+            import pandas as pd
+            df_scores = pd.read_csv(csv_path)
+            st.session_state.scores_mape = dict(
+                zip(df_scores['COD_BLOCO'].astype(str), df_scores['MAPE'])
+            )
+            print(f"[SCORES] Carregados {len(st.session_state.scores_mape)} scores")
+    except Exception as e:
+        print(f"[SCORES] Erro ao carregar scores: {e}")
+        st.session_state.scores_mape = {}
+
+
+def get_score_mape(cod_produto: str) -> float:
+    """
+    Retorna o MAPE (score) para um código de produto.
+    Retorna None se não encontrado.
+    """
+    if not st.session_state.scores_mape:
+        _carregar_scores_mape()
+    return st.session_state.scores_mape.get(str(cod_produto), None)
+
+
+def get_score_by_produto_nome(produto_nome: str, df=None) -> float:
+    """
+    Busca o MAPE pelo nome do produto.
+    Tenta extrair o código do nome se estiver no formato "CODIGO: NOME"
+    ou busca na coluna COD_PRODUTO do DataFrame.
+    """
+    # Tenta extrair código do nome (formato "111111120: INVESTIMENTO")
+    if ':' in str(produto_nome):
+        codigo = str(produto_nome).split(':')[0].strip()
+        mape = get_score_mape(codigo)
+        if mape is not None:
+            return mape
+    
+    # Busca no DataFrame se disponível
+    if df is not None and not df.empty:
+        if 'COD_PRODUTO' in df.columns:
+            # Normaliza para comparação
+            df_filtered = df[df['PRODUTO'].astype(str).str.lower().str.strip() 
+                           == str(produto_nome).lower().strip()]
+            if not df_filtered.empty:
+                cod = str(df_filtered.iloc[0]['COD_PRODUTO'])
+                mape = get_score_mape(cod)
+                if mape is not None:
+                    return mape
+    
+    return None
 
 
 # ============================================================================
