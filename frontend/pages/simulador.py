@@ -47,7 +47,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_manager import (
     get_dados_upload, adicionar_simulacao, get_simulacoes_usuario,
     restaurar_simulacao, deletar_simulacao, get_simulacao_por_combo,
-    resetar_simulacao_atual
+    resetar_simulacao_atual, carregar_curva_ajustada, existe_curva_salva,
+    aplicar_todas_curvas_salvas
 )
 
 MASCARAR_ZEROS_FINAIS = True
@@ -131,6 +132,12 @@ def renderizar():
 
     # ==================== FILTROS NO TOPO DA PÁGINA ====================
     df_upload = get_dados_upload()
+    
+    # Aplica todas as curvas salvas ao DataFrame (garante persistência)
+    if df_upload is not None and not df_upload.empty:
+        if not st.session_state.get("_curvas_aplicadas_sessao"):
+            aplicar_todas_curvas_salvas()
+            st.session_state["_curvas_aplicadas_sessao"] = True
     
     if df_upload is None or df_upload.empty:
         st.warning("⚠️ Nenhum dado carregado. Vá em **Upload** e importe o Excel.")
@@ -313,10 +320,19 @@ def renderizar():
         
         st.session_state["curva_analitica"] = analitica[:]
         st.session_state["curva_mercado"] = mercado[:]
-        st.session_state["ajustada"] = analitica[:]  # Ajustada inicia igual à analítica
+        
+        # ============== NOVO: Tenta carregar curva salva ==============
+        curva_salva = carregar_curva_ajustada(cliente, categoria, produto)
+        if curva_salva is not None:
+            st.session_state["ajustada"] = curva_salva[:]
+            print(f"[PERSIST] Curva carregada do banco: {combo}")
+            st.toast(f"📂 Carregada simulação salva para {produto}", icon="✅")
+        else:
+            st.session_state["ajustada"] = analitica[:]  # Ajustada inicia igual à analítica
+            print(f"[DEBUG] COMBO MUDOU! Usando curva analítica: {combo}")
+        
         st.session_state["last_combo"] = combo
         st.session_state["sync_counter"] = 0
-        print(f"[DEBUG] COMBO MUDOU! Resetando curvas para: {combo}")
     
     # Verifica se precisa limpar localStorage (flag de reset)
     if st.session_state.get("_limpar_localStorage"):

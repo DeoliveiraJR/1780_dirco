@@ -1,12 +1,13 @@
 """
 Data Manager - Gerencia dados compartilhados entre páginas
-Armazena dados do upload e simulações
+Armazena dados do upload, simulações e curvas ajustadas persistentes
 """
 
 import pandas as pd
 import streamlit as st
 import json
 from datetime import datetime
+from typing import Optional, List, Dict
 
 
 # ============================================================================
@@ -15,6 +16,8 @@ from datetime import datetime
 def init_data_state():
     if "dados_upload" not in st.session_state:
         st.session_state.dados_upload = None
+    if "dados_upload_original" not in st.session_state:
+        st.session_state.dados_upload_original = None  # Backup do upload original
     if "simulacoes" not in st.session_state:
         st.session_state.simulacoes = []
     if "simulacoes_salvas" not in st.session_state:
@@ -34,6 +37,13 @@ def init_data_state():
         st.session_state.sync_counter = 0
     if "last_combo" not in st.session_state:
         st.session_state.last_combo = None
+    # ============== NOVO: Curvas ajustadas persistentes por combo ==============
+    if "curvas_ajustadas_persistentes" not in st.session_state:
+        # Estrutura: {combo_key: {"curva": [12], "data_salvo": iso, "nome": str}}
+        st.session_state.curvas_ajustadas_persistentes = {}
+    if "historico_simulacoes" not in st.session_state:
+        # Histórico completo de todas as simulações salvas
+        st.session_state.historico_simulacoes = []
 
 
 # ============================================================================
@@ -81,12 +91,223 @@ def resetar_simulacao_atual():
 def set_dados_upload(df):
     """Armazena dados do upload no session state"""
     st.session_state.dados_upload = df
+    # Guarda backup do original para referência
+    if st.session_state.dados_upload_original is None:
+        st.session_state.dados_upload_original = df.copy() if df is not None else None
     atualizar_metricas_dashboard()
 
 
 def get_dados_upload():
-    """Recupera dados do upload"""
+    """Recupera dados do upload (com curvas ajustadas aplicadas)"""
     return st.session_state.dados_upload
+
+
+def get_dados_upload_original():
+    """Recupera dados originais do upload (sem ajustes)"""
+    return st.session_state.dados_upload_original
+
+
+# ============================================================================
+# PERSISTÊNCIA DE CURVAS AJUSTADAS
+# ============================================================================
+def _gerar_combo_key(cliente: str, categoria: str, produto: str) -> str:
+    """Gera chave única para combinação cliente/categoria/produto"""
+    return f"{cliente or 'Todos'}::{categoria}::{produto}"
+
+
+def salvar_curva_ajustada(cliente: str, categoria: str, produto: str, 
+                          curva: List[float], nome_simulacao: str = "") -> bool:
+    """
+    Salva a curva ajustada para uma combinação específica.
+    Persiste no session_state e atualiza o DataFrame principal.
+    
+    Args:
+        cliente: Nome do cliente (ou "Todos")
+        categoria: Nome da categoria
+        produto: Nome do produto
+        curva: Lista com 12 valores mensais
+        nome_simulacao: Nome opcional da simulação
+        
+    Returns:
+        True se salvo com sucesso
+    """
+    combo_key = _gerar_combo_key(cliente, categoria, produto)
+    
+    # Garante que curva tem 12 elementos
+    curva_normalizada = (list(curva) + [0.0] * 12)[:12]
+    
+    # Salva no dicionário de curvas persistentes
+    st.session_state.curvas_ajustadas_persistentes[combo_key] = {
+        "curva": curva_normalizada,
+        "data_salvo": datetime.now().isoformat(),
+        "nome": nome_simulacao,
+        "cliente": cliente,
+        "categoria": categoria,
+        "produto": produto
+    }
+    
+    # Adiciona ao histórico
+    entrada_historico = {
+        "id": f"{combo_key}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+        "combo_key": combo_key,
+        "cliente": cliente,
+        "categoria": categoria,
+        "produto": produto,
+        "curva": curva_normalizada,
+        "nome": nome_simulacao,
+        "data_criacao": datetime.now().isoformat(),
+        "usuario": st.session_state.get("usuario", "anonimo")
+    }
+    st.session_state.historico_simulacoes.append(entrada_historico)
+    
+    # Aplica a curva ajustada no DataFrame principal
+    _aplicar_curva_no_dataframe(cliente, categoria, produto, curva_normalizada)
+    
+    # Atualiza métricas
+    atualizar_metricas_dashboard()
+    
+    print(f"[PERSIST] Curva salva: {combo_key} = {curva_normalizada[:3]}...")
+    return True
+
+
+def carregar_curva_ajustada(cliente: str, categoria: str, produto: str) -> Optional[List[float]]:
+    """
+    Carrega a curva ajustada salva para uma combinação específica.
+    
+    Returns:
+        Lista com 12 valores ou None se não existir
+    """
+    combo_key = _gerar_combo_key(cliente, categoria, produto)
+    dados = st.session_state.curvas_ajustadas_persistentes.get(combo_key)
+    
+    if dados and "curva" in dados:
+        print(f"[PERSIST] Curva carregada: {combo_key}")
+        return dados["curva"]
+    
+    return None
+
+
+def existe_curva_salva(cliente: str, categoria: str, produto: str) -> bool:
+    """Verifica se existe curva salva para a combinação"""
+    combo_key = _gerar_combo_key(cliente, categoria, produto)
+    return combo_key in st.session_state.curvas_ajustadas_persistentes
+
+
+def listar_curvas_salvas() -> Dict[str, dict]:
+    """Retorna todas as curvas salvas"""
+    return st.session_state.curvas_ajustadas_persistentes.copy()
+
+
+def get_historico_simulacoes() -> List[dict]:
+    """Retorna histórico completo de simulações"""
+    return st.session_state.historico_simulacoes.copy()
+
+
+def _aplicar_curva_no_dataframe(cliente: str, categoria: str, produto: str, 
+                                 curva: List[float]) -> None:
+    """
+    Aplica a curva ajustada diretamente no DataFrame de dados.
+    Atualiza a coluna PROJETADO_AJUSTADO para o produto/categoria específico.
+    """
+    df = st.session_state.dados_upload
+    if df is None or df.empty:
+        return
+    
+    # Normalização de texto para comparação
+    def _norm(s):
+        import unicodedata
+        if s is None:
+            return ""
+        s = unicodedata.normalize("NFKD", str(s))
+        s = "".join(ch for ch in s if not unicodedata.combining(ch))
+        return s.strip().lower()
+    
+    # Identificar coluna de cliente
+    col_cli = None
+    if "TIPO_CLIENTE" in df.columns:
+        col_cli = "TIPO_CLIENTE"
+    elif "TP_CLIENTE" in df.columns:
+        col_cli = "TP_CLIENTE"
+    
+    # Identificar coluna de mês
+    if "MES_NUM" not in df.columns and "MES" in df.columns:
+        df["MES_NUM"] = df["MES"].apply(lambda x: _mes_to_num_simple(x))
+    
+    # Garantir coluna PROJETADO_AJUSTADO existe
+    if "PROJETADO_AJUSTADO" not in df.columns:
+        if "PROJETADO_ANALITICO" in df.columns:
+            df["PROJETADO_AJUSTADO"] = df["PROJETADO_ANALITICO"].copy()
+        else:
+            df["PROJETADO_AJUSTADO"] = 0.0
+    
+    # Máscara para filtrar registros do produto/categoria/cliente
+    mask = (df["CATEGORIA"].astype(str).apply(_norm) == _norm(categoria)) & \
+           (df["PRODUTO"].astype(str).apply(_norm) == _norm(produto))
+    
+    if cliente and cliente != "Todos" and col_cli:
+        mask = mask & (df[col_cli].astype(str).apply(_norm) == _norm(cliente))
+    
+    # Atualizar valores por mês
+    for i, valor in enumerate(curva):
+        mes_num = i + 1  # Mês 1-12
+        mask_mes = mask & (df["MES_NUM"] == mes_num)
+        
+        if mask_mes.any():
+            df.loc[mask_mes, "PROJETADO_AJUSTADO"] = valor
+    
+    # Atualiza o DataFrame no session_state
+    st.session_state.dados_upload = df
+    print(f"[PERSIST] DataFrame atualizado: {categoria}/{produto} com {len(curva)} meses")
+
+
+def _mes_to_num_simple(mes: str) -> int:
+    """Converte nome do mês para número (1-12)"""
+    meses = {
+        "jan": 1, "janeiro": 1,
+        "fev": 2, "fevereiro": 2,
+        "mar": 3, "março": 3, "marco": 3,
+        "abr": 4, "abril": 4,
+        "mai": 5, "maio": 5,
+        "jun": 6, "junho": 6,
+        "jul": 7, "julho": 7,
+        "ago": 8, "agosto": 8,
+        "set": 9, "setembro": 9,
+        "out": 10, "outubro": 10,
+        "nov": 11, "novembro": 11,
+        "dez": 12, "dezembro": 12
+    }
+    mes_lower = str(mes).lower().strip()[:3]
+    return meses.get(mes_lower, 0)
+
+
+def aplicar_todas_curvas_salvas() -> int:
+    """
+    Aplica TODAS as curvas salvas ao DataFrame principal.
+    Deve ser chamada ao iniciar a página para garantir que 
+    todas as curvas persistidas estejam refletidas nos dados.
+    
+    Returns:
+        Quantidade de curvas aplicadas
+    """
+    curvas = st.session_state.curvas_ajustadas_persistentes
+    if not curvas:
+        return 0
+    
+    count = 0
+    for combo_key, dados in curvas.items():
+        curva = dados.get("curva", [])
+        cliente = dados.get("cliente", "Todos")
+        categoria = dados.get("categoria", "")
+        produto = dados.get("produto", "")
+        
+        if curva and categoria and produto:
+            _aplicar_curva_no_dataframe(cliente, categoria, produto, curva)
+            count += 1
+    
+    if count > 0:
+        print(f"[PERSIST] Aplicadas {count} curvas salvas no DataFrame")
+    
+    return count
 
 
 # ============================================================================
@@ -94,30 +315,39 @@ def get_dados_upload():
 # ============================================================================
 def adicionar_simulacao(nome, categoria, produto, taxa_crescimento, 
                         volatilidade, cenarios, dados_grafico):
-    """Adiciona uma nova simulação ao session_state"""
+    """
+    Adiciona uma nova simulação ao session_state.
+    TAMBÉM persiste a curva ajustada e atualiza o DataFrame.
+    """
     usuario = st.session_state.get("usuario", "anonimo")
+    cliente = cenarios.get("Cliente", "Todos")
+    curva_ajustada = dados_grafico.get("Ajustada", [0.0] * 12)
     
     simulacao = {
         "id": f"{usuario}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
         "nome": nome,
         "categoria": categoria,
         "produto": produto,
-        "cliente": cenarios.get("Cliente", "Todos"),
+        "cliente": cliente,
         "taxa_crescimento": taxa_crescimento,
         "volatilidade": volatilidade,
         "cenarios": cenarios,
         "dados_grafico": dados_grafico,
-        "ajustada": dados_grafico.get("Ajustada", [0.0] * 12),
+        "ajustada": curva_ajustada,
         "data_criacao": datetime.now().isoformat(),
         "status": "Ativa"
     }
+    
+    # ============== NOVO: Persiste curva ajustada ==============
+    salvar_curva_ajustada(cliente, categoria, produto, curva_ajustada, nome)
+    print(f"[SIMULAÇÃO] Salva: {nome} | {cliente}/{categoria}/{produto}")
     
     # Adiciona à lista do usuário
     if usuario not in st.session_state.simulacoes_salvas:
         st.session_state.simulacoes_salvas[usuario] = []
     
     # Verifica se já existe simulação com mesmo nome para mesma combo
-    combo_key = f"{categoria}::{produto}::{cenarios.get('Cliente', 'Todos')}"
+    combo_key = f"{categoria}::{produto}::{cliente}"
     existente = None
     for i, sim in enumerate(st.session_state.simulacoes_salvas[usuario]):
         sim_combo = f"{sim.get('categoria')}::{sim.get('produto')}::{sim.get('cliente', 'Todos')}"
@@ -159,20 +389,33 @@ def get_simulacao_por_combo(categoria, produto, cliente="Todos"):
 
 
 def restaurar_simulacao(simulacao_id):
-    """Restaura uma simulação salva para o estado atual"""
+    """
+    Restaura uma simulação salva para o estado atual.
+    Também carrega a curva persistida e aplica no DataFrame.
+    """
     usuario = st.session_state.get("usuario", "anonimo")
     simulacoes = st.session_state.simulacoes_salvas.get(usuario, [])
     
     for sim in simulacoes:
         if sim.get("id") == simulacao_id:
-            # Restaura os dados
-            st.session_state["ajustada"] = sim.get("ajustada", [0.0] * 12)
+            cliente = sim.get("cliente", "Todos")
+            categoria = sim.get("categoria", "")
+            produto = sim.get("produto", "")
+            curva = sim.get("ajustada", [0.0] * 12)
+            
+            # Restaura os dados no session_state
+            st.session_state["ajustada"] = curva[:]
             st.session_state["filtros"] = {
-                "cliente": sim.get("cliente", "Todos"),
-                "categoria": sim.get("categoria", ""),
-                "produto": sim.get("produto", ""),
+                "cliente": cliente,
+                "categoria": categoria,
+                "produto": produto,
                 "nome": sim.get("nome", "")
             }
+            
+            # Aplica a curva no DataFrame
+            _aplicar_curva_no_dataframe(cliente, categoria, produto, curva)
+            
+            print(f"[RESTAURAR] Simulação restaurada: {sim.get('nome')}")
             return sim
     return None
 
