@@ -383,10 +383,19 @@ def adicionar_simulacao(nome, categoria, produto, taxa_crescimento,
     """
     Adiciona uma nova simulação ao session_state.
     TAMBÉM persiste a curva ajustada e atualiza o DataFrame.
+    IMPORTANTE: Salva um SNAPSHOT COMPLETO de todas as curvas ajustadas.
     """
     usuario = st.session_state.get("usuario", "anonimo")
     cliente = cenarios.get("Cliente", "Todos")
     curva_ajustada = dados_grafico.get("Ajustada", [0.0] * 12)
+    
+    # Primeiro persiste a curva atual
+    salvar_curva_ajustada(cliente, categoria, produto, curva_ajustada, nome)
+    
+    # SNAPSHOT COMPLETO: Copia todas as curvas persistentes neste momento
+    # Isso permite restaurar o estado COMPLETO de todas as curvas
+    import copy
+    snapshot_curvas = copy.deepcopy(st.session_state.curvas_ajustadas_persistentes)
     
     simulacao = {
         "id": f"{usuario}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
@@ -399,13 +408,12 @@ def adicionar_simulacao(nome, categoria, produto, taxa_crescimento,
         "cenarios": cenarios,
         "dados_grafico": dados_grafico,
         "ajustada": curva_ajustada,
+        "snapshot_curvas": snapshot_curvas,  # SNAPSHOT de TODAS as curvas
         "data_criacao": datetime.now().isoformat(),
         "status": "Ativa"
     }
     
-    # ============== NOVO: Persiste curva ajustada ==============
-    salvar_curva_ajustada(cliente, categoria, produto, curva_ajustada, nome)
-    print(f"[SIMULAÇÃO] Salva: {nome} | {cliente}/{categoria}/{produto}")
+    print(f"[SIMULAÇÃO] Salva: {nome} | {cliente}/{categoria}/{produto} | Snapshot com {len(snapshot_curvas)} curvas")
     
     # Adiciona à lista do usuário
     if usuario not in st.session_state.simulacoes_salvas:
@@ -456,8 +464,10 @@ def get_simulacao_por_combo(categoria, produto, cliente="Todos"):
 def restaurar_simulacao(simulacao_id):
     """
     Restaura uma simulação salva para o estado atual.
-    Também carrega a curva persistida e aplica no DataFrame.
+    RESTAURA O SNAPSHOT COMPLETO de todas as curvas ajustadas.
+    Isso garante que ao restaurar, TODAS as curvas voltam ao estado daquela simulação.
     """
+    import copy
     usuario = st.session_state.get("usuario", "anonimo")
     simulacoes = st.session_state.simulacoes_salvas.get(usuario, [])
     
@@ -467,6 +477,28 @@ def restaurar_simulacao(simulacao_id):
             categoria = sim.get("categoria", "")
             produto = sim.get("produto", "")
             curva = sim.get("ajustada", [0.0] * 12)
+            nome = sim.get("nome", "Simulação Restaurada")
+            
+            # ============== RESTAURAR SNAPSHOT COMPLETO ==============
+            # Se existe snapshot, restaura TODAS as curvas daquele momento
+            snapshot = sim.get("snapshot_curvas")
+            if snapshot:
+                # Substitui TODO o dicionário de curvas pelo snapshot
+                st.session_state.curvas_ajustadas_persistentes = copy.deepcopy(snapshot)
+                print(f"[RESTAURAR] Snapshot restaurado com {len(snapshot)} curvas")
+                
+                # Aplica cada curva do snapshot no DataFrame
+                for combo_key, dados in snapshot.items():
+                    curva_snap = dados.get("curva", [])
+                    cli = dados.get("cliente", "Todos")
+                    cat = dados.get("categoria", "")
+                    prd = dados.get("produto", "")
+                    if curva_snap and len(curva_snap) == 12:
+                        _aplicar_curva_no_dataframe(cli, cat, prd, curva_snap)
+            else:
+                # Fallback: só restaura a curva do produto específico (simulações antigas)
+                salvar_curva_ajustada(cliente, categoria, produto, curva, nome)
+                _aplicar_curva_no_dataframe(cliente, categoria, produto, curva)
             
             # Restaura os dados no session_state
             st.session_state["ajustada"] = curva[:]
@@ -474,13 +506,17 @@ def restaurar_simulacao(simulacao_id):
                 "cliente": cliente,
                 "categoria": categoria,
                 "produto": produto,
-                "nome": sim.get("nome", "")
+                "nome": nome
             }
             
-            # Aplica a curva no DataFrame
-            _aplicar_curva_no_dataframe(cliente, categoria, produto, curva)
+            # Reseta o sync_counter para evitar que localStorage sobrescreva a curva restaurada
+            st.session_state["sync_counter"] = 0
             
-            print(f"[RESTAURAR] Simulação restaurada: {sim.get('nome')}")
+            # Força limpeza do localStorage e detecção de combo mudou
+            st.session_state["_limpar_localStorage"] = True
+            st.session_state["last_combo"] = None
+            
+            print(f"[RESTAURAR] Simulação restaurada: {nome}")
             return sim
     return None
 
