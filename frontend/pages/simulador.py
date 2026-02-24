@@ -195,7 +195,7 @@ def renderizar():
         idx_cat = cats.index(categoria_mem) if categoria_mem in cats else (0 if cats else None)
         sim_categoria = st.selectbox(
             "📁 Categoria", cats, index=idx_cat, 
-            key="sim_categoria_page", on_change=_on_categoria_change
+            key="sim_categoria_page", on_change=_on_categoria_change                        
         )
 
     with col_prod:
@@ -217,26 +217,84 @@ def renderizar():
     # Container para simulações salvas - sempre aparece
     with st.expander(f"📂 Simulações Salvas ({len(simulacoes_usuario)})", expanded=len(simulacoes_usuario) > 0):
         if not simulacoes_usuario:
-            st.info("ℹ️ Nenhuma simulação salva ainda. Use o botão 💾 Salvar para guardar sua simulação.")
+            st.info("📋 Nenhuma simulação salva ainda. Use o botão 💾 Salvar para guardar sua simulação.")
         else:
-            cols_sim = st.columns([3, 2, 2, 1, 1])
-            cols_sim[0].markdown("**Nome**")
-            cols_sim[1].markdown("**Categoria**")
-            cols_sim[2].markdown("**Produto**")
-            cols_sim[3].markdown("**Ação**")
-            cols_sim[4].markdown("**Excluir**")
+            # Cabeçalho da tabela com colunas
+            col_v, col_nome, col_cat, col_prod, col_data, col_hora, col_user, col_act = st.columns([0.8, 2, 1.5, 2, 1.2, 1.2, 1.5, 1.5])
             
-            for sim in simulacoes_usuario:
-                cols_sim = st.columns([3, 2, 2, 1, 1])
-                cols_sim[0].write(sim.get("nome", "Sem nome"))
-                cols_sim[1].write(sim.get("categoria", "-")[:20])
-                cols_sim[2].write(sim.get("produto", "-")[:20])
-                if cols_sim[3].button("🔄", key=f"rest_{sim.get('id')}", help="Restaurar"):
-                    restaurar_simulacao(sim.get("id"))
-                    st.rerun()
-                if cols_sim[4].button("🗑️", key=f"del_{sim.get('id')}", help="Excluir"):
-                    deletar_simulacao(sim.get("id"))
-                    st.rerun()
+            with col_v:
+                st.markdown("**🏷️ V.**")
+            with col_nome:
+                st.markdown("**📌 Nome**")
+            with col_cat:
+                st.markdown("**📁 Cat.**")
+            with col_prod:
+                st.markdown("**🛍️ Produto**")
+            with col_data:
+                st.markdown("**📅 Data**")
+            with col_hora:
+                st.markdown("**🕐 Hora**")
+            with col_user:
+                st.markdown("**👤 Usuário**")
+            with col_act:
+                st.markdown("**⚙️ Ações**")
+            
+            st.divider()
+            
+            # Renderiza cada simulação em uma linha
+            total_sims = len(simulacoes_usuario)
+            for idx, sim in enumerate(simulacoes_usuario):
+                versao_num = total_sims - idx
+                
+                col_v, col_nome, col_cat, col_prod, col_data, col_hora, col_user, col_act = st.columns([0.8, 2, 1.5, 2, 1.2, 1.2, 1.5, 1.5])
+                
+                sim_id = sim.get("id")
+                nome = sim.get("nome", "Sem nome")
+                categoria = sim.get("categoria", "-")
+                produto = sim.get("produto", "-")[:25]
+                data_salvo = sim.get("data_salvo", "-")
+                hora_salvo = sim.get("hora_salvo", "-")
+                usuario_salvo = sim.get("usuario", "anonimo")[:15]
+                
+                # Coluna Versão
+                with col_v:
+                    st.markdown(f"**v{versao_num}**")
+                
+                # Coluna Nome
+                with col_nome:
+                    st.markdown(f"`{nome}`")
+                
+                # Coluna Categoria
+                with col_cat:
+                    st.markdown(f"<span style='background-color: #eff6ff; padding: 2px 6px; border-radius: 3px; font-size: 11px;'>{categoria}</span>", unsafe_allow_html=True)
+                
+                # Coluna Produto
+                with col_prod:
+                    st.caption(produto)
+                
+                # Coluna Data
+                with col_data:
+                    st.markdown(f"📅 {data_salvo}")
+                
+                # Coluna Hora
+                with col_hora:
+                    st.markdown(f"🕐 {hora_salvo}")
+                
+                # Coluna Usuário
+                with col_user:
+                    st.markdown(f"<span style='background-color: #fce7f3; padding: 2px 6px; border-radius: 3px; font-size: 11px;'>👤 {usuario_salvo}</span>", unsafe_allow_html=True)
+                
+                # Coluna Ações (Botões)
+                with col_act:
+                    btn_col1, btn_col2 = st.columns(2)
+                    with btn_col1:
+                        if st.button("🔄", key=f"rest_{sim_id}", help=f"Restaurar v{versao_num}", use_container_width=True):
+                            restaurar_simulacao(sim_id)
+                            st.rerun()
+                    with btn_col2:
+                        if st.button("🗑️", key=f"del_{sim_id}", help=f"Excluir v{versao_num}", use_container_width=True):
+                            deletar_simulacao(sim_id)
+                            st.rerun()
 
     # Atualiza session_state com os filtros selecionados APENAS se mudou
     novo_filtro = {

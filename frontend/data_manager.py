@@ -384,6 +384,7 @@ def adicionar_simulacao(nome, categoria, produto, taxa_crescimento,
     Adiciona uma nova simulação ao session_state.
     TAMBÉM persiste a curva ajustada e atualiza o DataFrame.
     IMPORTANTE: Salva um SNAPSHOT COMPLETO de todas as curvas ajustadas.
+    Agora também salva Data, Hora e Usuário.
     """
     usuario = st.session_state.get("usuario", "anonimo")
     cliente = cenarios.get("Cliente", "Todos")
@@ -396,6 +397,11 @@ def adicionar_simulacao(nome, categoria, produto, taxa_crescimento,
     # Isso permite restaurar o estado COMPLETO de todas as curvas
     import copy
     snapshot_curvas = copy.deepcopy(st.session_state.curvas_ajustadas_persistentes)
+    
+    # Data e hora da simulação
+    dt_agora = datetime.now()
+    data_str = dt_agora.strftime("%d/%m/%Y")  # Formato brasileiro
+    hora_str = dt_agora.strftime("%H:%M:%S")
     
     simulacao = {
         "id": f"{usuario}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
@@ -410,30 +416,20 @@ def adicionar_simulacao(nome, categoria, produto, taxa_crescimento,
         "ajustada": curva_ajustada,
         "snapshot_curvas": snapshot_curvas,  # SNAPSHOT de TODAS as curvas
         "data_criacao": datetime.now().isoformat(),
+        "data_salvo": data_str,  # Data formatada (DD/MM/YYYY)
+        "hora_salvo": hora_str,  # Hora formatada (HH:MM:SS)
+        "usuario": usuario,  # Nome do usuário que salvou
         "status": "Ativa"
     }
     
-    print(f"[SIMULAÇÃO] Salva: {nome} | {cliente}/{categoria}/{produto} | Snapshot com {len(snapshot_curvas)} curvas")
+    print(f"[SIMULAÇÃO] Salva: {nome} | {cliente}/{categoria}/{produto} | Usuário: {usuario} | Data: {data_str} {hora_str} | Snapshot com {len(snapshot_curvas)} curvas")
     
-    # Adiciona à lista do usuário
+    # Adiciona à lista do usuário (SEMPRE cria uma nova versão, não atualiza)
     if usuario not in st.session_state.simulacoes_salvas:
         st.session_state.simulacoes_salvas[usuario] = []
     
-    # Verifica se já existe simulação com mesmo nome para mesma combo
-    combo_key = f"{categoria}::{produto}::{cliente}"
-    existente = None
-    for i, sim in enumerate(st.session_state.simulacoes_salvas[usuario]):
-        sim_combo = f"{sim.get('categoria')}::{sim.get('produto')}::{sim.get('cliente', 'Todos')}"
-        if sim.get("nome") == nome and sim_combo == combo_key:
-            existente = i
-            break
-    
-    if existente is not None:
-        # Atualiza simulação existente
-        st.session_state.simulacoes_salvas[usuario][existente] = simulacao
-    else:
-        # Adiciona nova
-        st.session_state.simulacoes_salvas[usuario].append(simulacao)
+    # SEMPRE adiciona como nova simulação ao histórico (permite múltiplas versões)
+    st.session_state.simulacoes_salvas[usuario].append(simulacao)
     
     # Mantém compatibilidade com lista antiga
     st.session_state.simulacoes.append(simulacao)
@@ -442,10 +438,43 @@ def adicionar_simulacao(nome, categoria, produto, taxa_crescimento,
 
 
 def get_simulacoes_usuario(usuario=None):
-    """Retorna todas as simulações do usuário"""
+    """
+    Retorna todas as simulações do usuário com dados normalizados.
+    Automaticamente adiciona data_salvo, hora_salvo, usuario e número de versão para simulações antigas.
+    Retorna em ordem DECRESCENTE (mais recentes primeiro).
+    """
     if usuario is None:
         usuario = st.session_state.get("usuario", "anonimo")
-    return st.session_state.simulacoes_salvas.get(usuario, [])
+    
+    simulacoes = st.session_state.simulacoes_salvas.get(usuario, [])
+    
+    # Normaliza simulações antigas para ter sempre os campos de data/hora/usuario
+    simulacoes_normalizadas = []
+    for sim in simulacoes:
+        sim_copia = sim.copy()
+        
+        # Se não tem data_salvo, tenta extrair de data_criacao
+        if "data_salvo" not in sim_copia:
+            if "data_criacao" in sim_copia:
+                try:
+                    dt = datetime.fromisoformat(sim_copia["data_criacao"])
+                    sim_copia["data_salvo"] = dt.strftime("%d/%m/%Y")
+                    sim_copia["hora_salvo"] = dt.strftime("%H:%M:%S")
+                except:
+                    sim_copia["data_salvo"] = "-"
+                    sim_copia["hora_salvo"] = "-"
+            else:
+                sim_copia["data_salvo"] = "-"
+                sim_copia["hora_salvo"] = "-"
+        
+        # Se não tem usuario, adiciona padrão
+        if "usuario" not in sim_copia:
+            sim_copia["usuario"] = "anonimo"
+        
+        simulacoes_normalizadas.append(sim_copia)
+    
+    # Retorna em ordem DECRESCENTE (mais recentes primeiro)
+    return list(reversed(simulacoes_normalizadas))
 
 
 def get_simulacao_por_combo(categoria, produto, cliente="Todos"):
