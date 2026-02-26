@@ -776,7 +776,7 @@ def renderizar():
 
     # =============== PANDAS STYLER - TABELA PROFISSIONAL COM DESTAQUE =================
     # Aqui tbl_data está COMPLETO, com todas as colunas e linhas (incluindo media e cres)
-    import pandas as pd
+    # pandas já está importado no topo do arquivo (import pandas as pd)
     
     df_tbl = pd.DataFrame(tbl_data)
     df_tbl.index = df_tbl["Mes"]  # Usar "Mes" como índice
