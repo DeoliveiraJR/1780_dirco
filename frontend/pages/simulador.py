@@ -774,75 +774,12 @@ def renderizar():
     tbl_data["Var_Mer_Disp"] = _build_var_disp_column(tbl_data["Var_Mer"])
     tbl_data["Var_Ajs_Disp"] = _build_var_disp_column(tbl_data["Var_Ajs"])
 
-    # =============== PANDAS STYLER - TABELA PROFISSIONAL COM DESTAQUE =================
-    # Aqui tbl_data está COMPLETO, com todas as colunas e linhas (incluindo media e cres)
-    # pandas já está importado no topo do arquivo (import pandas as pd)
-    
-    df_tbl = pd.DataFrame(tbl_data)
-    df_tbl.index = df_tbl["Mes"]  # Usar "Mes" como índice
-    df_tbl = df_tbl.drop(columns=["Mes", "Mes_Ord"])  # Remove colunas redundantes
-    
-    def highlight_last_two(row):
-        """Aplica estilos especiais para as duas últimas linhas (MÉDIA e CRESC)"""
-        if row.name == "MÉDIA / VAR%":
-            # Linha de média: fundo rosa/roxo com borda
-            return [
-                'background: linear-gradient(90deg, #fce7f3 0%, #f8fafc 100%); '
-                'font-weight: bold; color: #c026d3; border-top: 2px solid #f9a8d4; border-bottom: 1px solid #f9a8d4;'
-            ] * len(row)
-        elif row.name == "CRESC. VOL":
-            # Linha de crescimento: fundo verde com borda
-            return [
-                'background: linear-gradient(90deg, #f0fdf4 0%, #f8fafc 100%); '
-                'font-weight: bold; color: #059669; border-bottom: 2px solid #34d399;'
-            ] * len(row)
-        else:
-            # Linhas normais: coloração alternada
-            return [''] * len(row)
-    
-    # Criar styler  
-    styler = df_tbl.style
-    styler = styler.apply(highlight_last_two, axis=1)
-    styler = styler.set_table_styles([
-        {'selector': 'th', 'props': [
-            ('background', 'linear-gradient(90deg, #e0e7ff 0%, #f8fafc 100%)'),
-            ('color', '#0c3a66'),
-            ('font-size', '0.95rem'),
-            ('font-weight', '600'),
-            ('border-bottom', '2px solid #6366f1'),
-            ('padding', '8px 10px'),
-            ('text-align', 'right'),
-        ]},
-        {'selector': 'td', 'props': [
-            ('padding', '7px 10px'),
-            ('font-size', '0.90rem'),
-            ('border-bottom', '1px solid #e5e7eb'),
-        ]},
-        {'selector': 'tbody tr:nth-child(even) td', 'props': [
-            ('background', '#f8fafc'),
-        ]},
-        {'selector': 'table', 'props': [
-            ('border-radius', '12px'),
-            ('box-shadow', '0 2px 8px rgba(0,0,0,0.06)'),
-            ('border-collapse', 'separate'),
-            ('width', '100%'),
-        ]},
-    ])
-    styler = styler.set_properties(**{'text-align': 'right'})
-    styler = styler.set_properties(subset=pd.IndexSlice[:, df_tbl.columns[0]], **{'text-align': 'left'})
-    
-    # Exibir tabela formatada
-    st.markdown("<h4 style='margin:0.5rem 0 0.25rem 0;color:#0c3a66;'>📊 Tabela Resumo (Visual Profissional)</h4>", unsafe_allow_html=True)
-    st.markdown(styler.to_html(), unsafe_allow_html=True)
-    st.markdown("---")
-
     tbl_src = ColumnDataSource(tbl_data)
 
     CURRENCY_TMPL = "<%= (value==null || isNaN(value)) ? '—' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(value) %>"
     
     # Template destacado para coluna Ajustada (editável via clique duplo)
     AJUSTADA_TMPL = '<span style="color:#1a5f7a;font-weight:600;cursor:pointer;" title="Clique duplo para editar"><%= (value==null || isNaN(value)) ? "—" : new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(value) %></span>'
-    
     # Editor para coluna Ajustada (step de 1 bilhão)
     ajustada_editor = NumberEditor(step=1_000_000_000)
 
