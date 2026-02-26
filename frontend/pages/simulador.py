@@ -87,49 +87,6 @@ def _recarregar_opcoes(df, cliente_escolhido):
 
 
 def renderizar():
-    st.markdown("# 🎯 Simulador de Projeções")
-
-    # CSS para espaçamento compacto global - reduz gaps entre seções
-    st.markdown("""
-    <style>
-      /* Container principal */
-      section.main > div.block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 1rem !important;
-      }
-      /* Reduz gap vertical entre blocos */
-      div[data-testid="stVerticalBlock"] > div {
-        gap: 0.5rem !important;
-      }
-      /* Remove margem inferior de elementos */
-      div[data-testid="stVerticalBlockBorderWrapper"] {
-        padding: 0 !important;
-      }
-      /* Colunas do Streamlit - reduz gap */
-      div[data-testid="column"] {
-        padding: 0 0.25rem !important;
-      }
-      /* Elementos inside columns */
-      div[data-testid="stHorizontalBlock"] {
-        gap: 0.5rem !important;
-      }
-      /* Bokeh widgets */
-      .stBokeh {
-        margin-top: 0 !important;
-        margin-bottom: 0.5rem !important;
-      }
-      /* Headers compactos */
-      h1 { margin-bottom: 0.5rem !important; }
-      h2 { margin: 0.75rem 0 0.5rem 0 !important; font-size: 1.3rem !important; }
-      h3, h4 { margin: 0.5rem 0 0.25rem 0 !important; font-size: 1.1rem !important; }
-      hr { margin: 0.5rem 0 !important; }
-      /* iFrames */
-      iframe { border: none !important; }
-      /* Markdown headers na seção de categorias */
-      .uan-sec { margin-top: 0.5rem !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
     # ==================== FILTROS NO TOPO DA PÁGINA ====================
     df_upload = get_dados_upload()
     
@@ -215,39 +172,34 @@ def renderizar():
     simulacoes_usuario = get_simulacoes_usuario()
     
     # Container para simulações salvas - sempre aparece
+    st.markdown("""
+    <style>
+        .sim-table-row { border-radius: 8px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.04); margin-bottom: 4px; }
+        .sim-table-row.alt { background: #f8fafc; }
+        .sim-table-row.total, .sim-table-row.uan-row-media { background: linear-gradient(90deg, #fce7f3 0%, #f8fafc 100%) !important; font-weight: bold; border: 2px solid #f9a8d4; }
+        .sim-table-row.total span, .sim-table-row.total div, .sim-table-row.uan-row-media span, .sim-table-row.uan-row-media div { color: #c026d3 !important; }
+        .sim-table-row.uan-row-cresc { background: linear-gradient(90deg, #f0fdf4 0%, #f8fafc 100%) !important; font-weight: bold; border-bottom: 2px solid #34d399; }
+        .sim-table-row.uan-row-cresc span, .sim-table-row.uan-row-cresc div { color: #059669 !important; }
+        .sim-table-row .sim-cell { padding: 6px 8px; font-size: 0.95rem; }
+        .sim-table-row .sim-cell.version { font-weight: 600; color: #0c3a66; }
+        .sim-table-row .sim-cell.actions button { background: #f1f5f9 !important; border-radius: 6px !important; color: #0c3a66 !important; border: 1px solid #e2e8f0 !important; font-weight: 500 !important; }
+        .sim-table-row .sim-cell.actions button:hover { background: #fce7f3 !important; color: #c026d3 !important; border-color: #c026d3 !important; }
+    </style>
+    """, unsafe_allow_html=True)
     with st.expander(f"📂 Simulações Salvas ({len(simulacoes_usuario)})", expanded=len(simulacoes_usuario) > 0):
         if not simulacoes_usuario:
             st.info("📋 Nenhuma simulação salva ainda. Use o botão 💾 Salvar para guardar sua simulação.")
         else:
-            # Cabeçalho da tabela com colunas
-            col_v, col_nome, col_cat, col_prod, col_data, col_hora, col_user, col_act = st.columns([0.8, 2, 1.5, 2, 1.2, 1.2, 1.5, 1.5])
-            
-            with col_v:
-                st.markdown("**🏷️ V.**")
-            with col_nome:
-                st.markdown("**📌 Nome**")
-            with col_cat:
-                st.markdown("**📁 Cat.**")
-            with col_prod:
-                st.markdown("**🛍️ Produto**")
-            with col_data:
-                st.markdown("**📅 Data**")
-            with col_hora:
-                st.markdown("**🕐 Hora**")
-            with col_user:
-                st.markdown("**👤 Usuário**")
-            with col_act:
-                st.markdown("**⚙️ Ações**")
-            
+            # Cabeçalho da tabela
+            cols = st.columns([0.8, 2, 1.5, 2, 1.2, 1.2, 1.5, 1.5])
+            headers = ["🏷️ V.", "📌 Nome", "📁 Cat.", "🛍️ Produto", "📅 Data", "🕐 Hora", "👤 Usuário", "⚙️ Ações"]
+            for i, h in enumerate(headers):
+                with cols[i]:
+                    st.markdown(f"<div style='font-weight:600;font-size:1rem;color:#0c3a66;'>{h}</div>", unsafe_allow_html=True)
             st.divider()
-            
-            # Renderiza cada simulação em uma linha
             total_sims = len(simulacoes_usuario)
             for idx, sim in enumerate(simulacoes_usuario):
                 versao_num = total_sims - idx
-                
-                col_v, col_nome, col_cat, col_prod, col_data, col_hora, col_user, col_act = st.columns([0.8, 2, 1.5, 2, 1.2, 1.2, 1.5, 1.5])
-                
                 sim_id = sim.get("id")
                 nome = sim.get("nome", "Sem nome")
                 categoria = sim.get("categoria", "-")
@@ -255,37 +207,30 @@ def renderizar():
                 data_salvo = sim.get("data_salvo", "-")
                 hora_salvo = sim.get("hora_salvo", "-")
                 usuario_salvo = sim.get("usuario", "anonimo")[:15]
-                
-                # Coluna Versão
-                with col_v:
-                    st.markdown(f"**v{versao_num}**")
-                
-                # Coluna Nome
-                with col_nome:
-                    st.markdown(f"`{nome}`")
-                
-                # Coluna Categoria
-                with col_cat:
-                    st.markdown(f"<span style='background-color: #eff6ff; padding: 2px 6px; border-radius: 3px; font-size: 11px;'>{categoria}</span>", unsafe_allow_html=True)
-                
-                # Coluna Produto
-                with col_prod:
-                    st.caption(produto)
-                
-                # Coluna Data
-                with col_data:
-                    st.markdown(f"📅 {data_salvo}")
-                
-                # Coluna Hora
-                with col_hora:
-                    st.markdown(f"🕐 {hora_salvo}")
-                
-                # Coluna Usuário
-                with col_user:
-                    st.markdown(f"<span style='background-color: #fce7f3; padding: 2px 6px; border-radius: 3px; font-size: 11px;'>👤 {usuario_salvo}</span>", unsafe_allow_html=True)
-                
-                # Coluna Ações (Botões)
-                with col_act:
+                # Destacar as duas últimas linhas com classes customizadas
+                row_class = "sim-table-row"
+                if idx == total_sims - 2:
+                    row_class += " uan-row-media"
+                elif idx == total_sims - 1:
+                    row_class += " uan-row-cresc"
+                elif idx % 2 == 1:
+                    row_class += " alt"
+                cols = st.columns([0.8, 2, 1.5, 2, 1.2, 1.2, 1.5, 1.5])
+                with cols[0]:
+                    st.markdown(f"<div class='sim-cell version {row_class}'>v{versao_num}</div>", unsafe_allow_html=True)
+                with cols[1]:
+                    st.markdown(f"<div class='sim-cell {row_class}'><span>{nome}</span></div>", unsafe_allow_html=True)
+                with cols[2]:
+                    st.markdown(f"<div class='sim-cell {row_class}'><span style='background:#eff6ff;padding:2px 6px;border-radius:3px;font-size:11px;'>{categoria}</span></div>", unsafe_allow_html=True)
+                with cols[3]:
+                    st.markdown(f"<div class='sim-cell {row_class}'><span>{produto}</span></div>", unsafe_allow_html=True)
+                with cols[4]:
+                    st.markdown(f"<div class='sim-cell {row_class}'>📅 {data_salvo}</div>", unsafe_allow_html=True)
+                with cols[5]:
+                    st.markdown(f"<div class='sim-cell {row_class}'>🕐 {hora_salvo}</div>", unsafe_allow_html=True)
+                with cols[6]:
+                    st.markdown(f"<div class='sim-cell {row_class}'><span style='background:#fce7f3;padding:2px 6px;border-radius:3px;font-size:11px;'>👤 {usuario_salvo}</span></div>", unsafe_allow_html=True)
+                with cols[7]:
                     btn_col1, btn_col2 = st.columns(2)
                     with btn_col1:
                         if st.button("🔄", key=f"rest_{sim_id}", help=f"Restaurar v{versao_num}", use_container_width=True):
@@ -328,7 +273,6 @@ def renderizar():
         st.rerun()  # Força rerun para atualizar a lista de simulações
 
     st.markdown("---")
-
     # ==================== LÓGICA DO SIMULADOR ====================
     filtros = st.session_state.get("filtros", {}) or {}
 
@@ -565,8 +509,8 @@ def renderizar():
                     
                     with c1:
                         st.button("➖", key=f"dec_{mes_idx}", 
-                                  on_click=lambda i=mes_idx, s=inc_step: _ajustar_mes(i, -s),
-                                  use_container_width=True)
+                                on_click=lambda i=mes_idx, s=inc_step: _ajustar_mes(i, -s),
+                                use_container_width=True)
                     
                     with c2:
                         st.markdown(f"""
@@ -578,16 +522,16 @@ def renderizar():
                     
                     with c3:
                         st.button("➕", key=f"inc_{mes_idx}",
-                                  on_click=lambda i=mes_idx, s=inc_step: _ajustar_mes(i, s),
-                                  use_container_width=True)
+                                on_click=lambda i=mes_idx, s=inc_step: _ajustar_mes(i, s),
+                                use_container_width=True)
                     
                     with c4:
                         # Botão de replicar (só aparece se não for o último mês)
                         if mes_idx < 11:
                             st.button("⬇️", key=f"rep_{mes_idx}",
-                                      on_click=lambda i=mes_idx: _replicar_ajuste(i),
-                                      use_container_width=True,
-                                      help=f"Replicar ajuste de {mes_nome} para meses seguintes")
+                                    on_click=lambda i=mes_idx: _replicar_ajuste(i),
+                                    use_container_width=True,
+                                    help=f"Replicar ajuste de {mes_nome} para meses seguintes")
                     
                     # Espaçador entre linhas
                     if row_idx < 3:
@@ -609,7 +553,7 @@ def renderizar():
             </span>
         </div>
         """, unsafe_allow_html=True)
-    
+        
     realizados_dict = _obter_realizados_por_ano(df_upload, cliente, categoria, produto, mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS)
     anos_realizados = sorted(realizados_dict.keys())
     variacoes_rlzd = {ano: _variacao_mensal(realizados_dict[ano]) for ano in anos_realizados}
@@ -659,7 +603,7 @@ def renderizar():
         LegendItem(label="Projeção Mercado",  renderers=[r_mer]),
         LegendItem(label="Projeção Ajustada", renderers=[r_ajs]),
     ], click_policy="mute", orientation="horizontal", label_text_font_size="11pt",
-       location="bottom_center", background_fill_alpha=0.8, border_line_alpha=0.3)
+    location="bottom_center", background_fill_alpha=0.8, border_line_alpha=0.3)
     p.add_layout(legend, "below")
     
     # Configura toolbar mais completo (right side)
@@ -677,8 +621,8 @@ def renderizar():
                     background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); 
                     border-radius:8px; border: 1px solid #e2e8f0;
                     box-shadow: 0 1px 3px rgba(0,0,0,0.05);'>
-                 <span style='color:#0c3a66; font-weight:600;'>📊 Curva Ajustada:</span> 
-                 {valores_html_inicial}</div>""",
+                <span style='color:#0c3a66; font-weight:600;'>📊 Curva Ajustada:</span> 
+                {valores_html_inicial}</div>""",
         sizing_mode="stretch_width"
     )
     
@@ -714,7 +658,7 @@ def renderizar():
     soma_analitica_js = sum(analitica) if analitica else 1
     cb_atualiza_div = CustomJS(
         args=dict(src=src_ajs, div=div_valores, div_incr=div_incremento, 
-                  meses=MESES_ABR_LIST, soma_ana=soma_analitica_js), 
+                meses=MESES_ABR_LIST, soma_ana=soma_analitica_js), 
         code="""
         const y = src.data['y'];
         if (!y || y.length < 12) return;
@@ -830,6 +774,68 @@ def renderizar():
     tbl_data["Var_Mer_Disp"] = _build_var_disp_column(tbl_data["Var_Mer"])
     tbl_data["Var_Ajs_Disp"] = _build_var_disp_column(tbl_data["Var_Ajs"])
 
+    # =============== PANDAS STYLER - TABELA PROFISSIONAL COM DESTAQUE =================
+    # Aqui tbl_data está COMPLETO, com todas as colunas e linhas (incluindo media e cres)
+    import pandas as pd
+    
+    df_tbl = pd.DataFrame(tbl_data)
+    df_tbl.index = df_tbl["Mes"]  # Usar "Mes" como índice
+    df_tbl = df_tbl.drop(columns=["Mes", "Mes_Ord"])  # Remove colunas redundantes
+    
+    def highlight_last_two(row):
+        """Aplica estilos especiais para as duas últimas linhas (MÉDIA e CRESC)"""
+        if row.name == "MÉDIA / VAR%":
+            # Linha de média: fundo rosa/roxo com borda
+            return [
+                'background: linear-gradient(90deg, #fce7f3 0%, #f8fafc 100%); '
+                'font-weight: bold; color: #c026d3; border-top: 2px solid #f9a8d4; border-bottom: 1px solid #f9a8d4;'
+            ] * len(row)
+        elif row.name == "CRESC. VOL":
+            # Linha de crescimento: fundo verde com borda
+            return [
+                'background: linear-gradient(90deg, #f0fdf4 0%, #f8fafc 100%); '
+                'font-weight: bold; color: #059669; border-bottom: 2px solid #34d399;'
+            ] * len(row)
+        else:
+            # Linhas normais: coloração alternada
+            return [''] * len(row)
+    
+    # Criar styler  
+    styler = df_tbl.style
+    styler = styler.apply(highlight_last_two, axis=1)
+    styler = styler.set_table_styles([
+        {'selector': 'th', 'props': [
+            ('background', 'linear-gradient(90deg, #e0e7ff 0%, #f8fafc 100%)'),
+            ('color', '#0c3a66'),
+            ('font-size', '0.95rem'),
+            ('font-weight', '600'),
+            ('border-bottom', '2px solid #6366f1'),
+            ('padding', '8px 10px'),
+            ('text-align', 'right'),
+        ]},
+        {'selector': 'td', 'props': [
+            ('padding', '7px 10px'),
+            ('font-size', '0.90rem'),
+            ('border-bottom', '1px solid #e5e7eb'),
+        ]},
+        {'selector': 'tbody tr:nth-child(even) td', 'props': [
+            ('background', '#f8fafc'),
+        ]},
+        {'selector': 'table', 'props': [
+            ('border-radius', '12px'),
+            ('box-shadow', '0 2px 8px rgba(0,0,0,0.06)'),
+            ('border-collapse', 'separate'),
+            ('width', '100%'),
+        ]},
+    ])
+    styler = styler.set_properties(**{'text-align': 'right'})
+    styler = styler.set_properties(subset=pd.IndexSlice[:, df_tbl.columns[0]], **{'text-align': 'left'})
+    
+    # Exibir tabela formatada
+    st.markdown("<h4 style='margin:0.5rem 0 0.25rem 0;color:#0c3a66;'>📊 Tabela Resumo (Visual Profissional)</h4>", unsafe_allow_html=True)
+    st.markdown(styler.to_html(), unsafe_allow_html=True)
+    st.markdown("---")
+
     tbl_src = ColumnDataSource(tbl_data)
 
     CURRENCY_TMPL = "<%= (value==null || isNaN(value)) ? '—' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(value) %>"
@@ -873,6 +879,28 @@ def renderizar():
         reorderable=False,  # Desabilita reordenação (evita warning jquery-ui)
         stylesheets=[make_stylesheet()],
     )
+
+    # CSS customizado para destacar as duas últimas linhas
+    st.markdown('''
+    <style>
+    .bk-data-table .uan-row-media td, .bk-data-table .uan-row-media {
+        background: linear-gradient(90deg, #fce7f3 0%, #f8fafc 100%) !important;
+        font-weight: bold !important;
+        color: #c026d3 !important;
+        border-top: 2px solid #f9a8d4 !important;
+        border-bottom: 1px solid #f9a8d4 !important;
+    }
+    .bk-data-table .uan-row-cresc td, .bk-data-table .uan-row-cresc {
+        background: linear-gradient(90deg, #f0fdf4 0%, #f8fafc 100%) !important;
+        font-weight: bold !important;
+        color: #059669 !important;
+        border-bottom: 2px solid #34d399 !important;
+    }
+    .bk-data-table .uan-row-alt td, .bk-data-table .uan-row-alt {
+        background: #f8fafc !important;
+    }
+    </style>
+    ''', unsafe_allow_html=True)
 
     # ==== CustomJS (corrigido: parênteses) ====
     cb = CustomJS(args=dict(src=src_ajs, tbl=tbl_src), code="""
@@ -1006,8 +1034,8 @@ def renderizar():
         analitica, mercado, ajustada, ano_proj, style_top, src_ajs_ref=src_ajs
     )
     g2 = _grafico_serie_historica(df_upload, cliente, categoria, produto,
-                                  analitica, mercado, ajustada, ano_proj,
-                                  style_top, src_ajs_ref=src_ajs)
+                                analitica, mercado, ajustada, ano_proj,
+                                style_top, src_ajs_ref=src_ajs)
 
     layout_topo = column(
         row(div_valores, div_incremento, sizing_mode="stretch_width"),
@@ -1083,8 +1111,8 @@ def renderizar():
     with col_sync:
         # Botão Sincronizar com estilo elegante via HTML
         sync_clicked = st.button("🔄 Sincronizar", key=f"sync_{combo}", 
-                                  help="Aplicar alterações do drag-and-drop",
-                                  use_container_width=True)
+                                help="Aplicar alterações do drag-and-drop",
+                                use_container_width=True)
         if sync_clicked:
             st.session_state["sync_counter"] = sync_counter + 1
             st.rerun()
@@ -1092,8 +1120,8 @@ def renderizar():
     with col_reset:
         # Botão Resetar com estilo elegante
         reset_clicked = st.button("↩️ Resetar", key=f"reset_{combo}",
-                                   help="Voltar para curva analítica original",
-                                   use_container_width=True)
+                                help="Voltar para curva analítica original",
+                                use_container_width=True)
         if reset_clicked:
             resetar_simulacao_atual()
             limpar_localStorage(key=f"sim_bokeh_{combo}")
