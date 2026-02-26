@@ -177,15 +177,16 @@ else:
                     return f"R$ {valor:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
             
             # ===== CÁLCULO EM TEMPO REAL DOS PARÂMETROS =====
-            # Ler dados e filtros - prefere as keys dos widgets (mais atualizadas)
+            # Ler dados e filtros - SEMPRE ATUALIZAR para evitar delay
             df_upload = get_dados_upload()
             
-            # Ler diretamente das keys dos widgets do simulador (prioridade) ou do filtros
-            cliente = st.session_state.get("sim_cliente_page") or st.session_state.get("filtros", {}).get("cliente", "Todos")
-            categoria = st.session_state.get("sim_categoria_page") or st.session_state.get("filtros", {}).get("categoria", "")
-            produto = st.session_state.get("sim_produto_page") or st.session_state.get("filtros", {}).get("produto", "")
+            # Ler filtros atuais (SEMPRE dos widgets do simulador, que são a fonte de verdade)
+            filtros_atuais = st.session_state.get("filtros", {})
+            cliente = filtros_atuais.get("cliente", "Todos")
+            categoria = filtros_atuais.get("categoria", "")
+            produto = filtros_atuais.get("produto", "")
             
-            # Validar e auto-detectar categoria/produto
+            # Validar e auto-detectar categoria/produto se necessário
             if df_upload is not None and not df_upload.empty:
                 # Buscar categorias disponíveis
                 cats_disponiveis = []
@@ -210,7 +211,17 @@ else:
                     if prods_disponiveis:
                         produto = prods_disponiveis[0]
             
-            # Calcular curva analítica com base nos filtros
+            # Detectar mudança de combo para sincronização em tempo real
+            combo_atual = f"{cliente}::{categoria}::{produto}"
+            combo_anterior = st.session_state.get("_ultimo_combo_sidebar", "")
+            
+            if combo_atual != combo_anterior:
+                # Combo mudou, força atualização dos parâmetros
+                st.session_state["_ultimo_combo_sidebar"] = combo_atual
+                # Garante que session_state geral também tem o combo atualizado
+                st.session_state["_sidebar_sync"] = True
+            
+            # Calcular curva analítica com base nos filtros ATUAIS
             qtd_meses = 12
             primeiro_pjtd = 0
             ultimo_pjtd = 0
@@ -221,9 +232,15 @@ else:
                 try:
                     analitica, _, _ = _carregar_curvas_base(df_upload, cliente, categoria, produto)
                     if analitica and len(analitica) >= 12:
-                        # Usar valores ajustados se disponíveis, senão usar analítica
+                        # Usar valores ajustados se disponíveis E do combo atual, senão usar analítica
                         ajustada = st.session_state.get("ajustada", None)
-                        curva_exibir = ajustada if ajustada and len(ajustada) == 12 else analitica
+                        last_combo = st.session_state.get("last_combo", "")
+                        
+                        # SÓ USAR AJUSTADA se for do mesmo combo
+                        if ajustada and len(ajustada) == 12 and last_combo == combo_atual:
+                            curva_exibir = ajustada
+                        else:
+                            curva_exibir = analitica
                         
                         primeiro_pjtd = curva_exibir[0] if curva_exibir[0] else 0
                         ultimo_pjtd = curva_exibir[11] if curva_exibir[11] else 0
@@ -318,11 +335,100 @@ else:
             
             st.markdown('<div style="height: 12px;"></div>', unsafe_allow_html=True)
             
-            # --- CAMPOS EDITÁVEIS (Sliders) ---
-            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #94a3b8; margin: 0 0 8px 0;'>🎛️ AJUSTES</p>", unsafe_allow_html=True)
+            # --- SEÇÃO DE ROTAÇÃO DE CURVA ---
+            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #94a3b8; margin: 0 0 8px 0;'>🔄 ROTACIONAR CURVA</p>", unsafe_allow_html=True)
             
-            st.slider("🔄 Rotacionar Curva", 1, 10, 5, key="sim_rotacionar_curva")
-            st.slider("📏 Ajuste mensal final", 1, 10, 5, key="sim_ajuste_mensal_final")
+            # Slider para multiplicador de inclinação com range EXTREMAMENTE AUMENTADO para impacto visual máximo
+            mult_rotacao = st.slider(
+                "Multiplicador de Inclinação (MULT)", 
+                min_value=-10.0, 
+                max_value=50.0, 
+                value=1.0, 
+                step=1.0,
+                help="""
+                Controla o multiplicador da inclinação da curva:
+                • -10.0x a -1.0x: Inverte/reduz significativamente a tendência
+                • 0.0x: Curva totalmente plana (sem inclinação)
+                • 1.0x: Inclinação original (sem mudança)
+                • 10.0x: 10x a inclinação original
+                • 25.0x: 25x a inclinação original
+                • 50.0x: 50x a inclinação original (impacto máximo)
+                """,
+                key="sim_rotacionar_mult"
+            )
+            
+            # Exibir indicador visual do multiplicador
+            mult_color = "#10b981" if mult_rotacao >= 1.0 else "#ef4444"
+            mult_icon = "📈" if mult_rotacao >= 1.0 else "📉"
+            
+            col_display, col_button = st.columns([1.5, 1])
+            with col_display:
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, {'#f0fdf4' if mult_rotacao >= 1.0 else '#fef2f2'} 0%, #f8fafc 100%); 
+                            border-left: 4px solid {mult_color};
+                            border-radius: 8px; padding: 12px;
+                            margin-bottom: 8px;">
+                    <p style="margin: 0; font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase;">
+                        {mult_icon} VALOR ATUAL
+                    </p>
+                    <p style="margin: 4px 0 0 0; font-size: 18px; color: {mult_color}; font-weight: 700;">
+                        {mult_rotacao:+.2f}x
+                    </p>
+                    <p style="margin: 4px 0 0 0; font-size: 9px; color: #78716c;">
+                        Variação: {(mult_rotacao - 1.0) * 100:+.0f}%
+                    </p>
+                    <div style="margin-top: 8px; display: flex; gap: 4px; justify-content: space-around;">
+                        <button onclick="document.querySelector('[data-testid=stSlider]').style.opacity='0.8'" style="background: #ef4444; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: 600; cursor: pointer;">⬇️ -10</button>
+                        <button onclick="document.querySelector('[data-testid=stSlider]').style.opacity='0.8'" style="background: #f97316; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: 600; cursor: pointer;">⬇️ -5</button>
+                        <button onclick="document.querySelector('[data-testid=stSlider]').style.opacity='0.8'" style="background: #10b981; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: 600; cursor: pointer;">⬆️ +5</button>
+                        <button onclick="document.querySelector('[data-testid=stSlider]').style.opacity='0.8'" style="background: #06b6d4; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: 600; cursor: pointer;">⬆️ +10</button>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_button:
+                if st.button("✅ Aplicar", use_container_width=True, key="btn_aplicar_rotacao", help="Aplica a rotação à curva ajustada"):
+                    # Função para calcular curva rotacionada
+                    def _calcular_curva_rotacionada_sidebar(mult_rot):
+                        # Monta a curva analítica atual
+                        df_upload = get_dados_upload()
+                        cliente_atual = st.session_state.get("filtros", {}).get("cliente", "Todos")
+                        categoria_atual = st.session_state.get("filtros", {}).get("categoria", "")
+                        produto_atual = st.session_state.get("filtros", {}).get("produto", "")
+                        
+                        analitica, _, _ = _carregar_curvas_base(df_upload, cliente_atual, categoria_atual, produto_atual)
+                        
+                        if not analitica or len(analitica) < 12:
+                            return None
+                        
+                        qtd = 12
+                        primeiro = analitica[0] if analitica[0] else 0
+                        ultimo = analitica[11] if analitica[11] else 0
+                        incl = (ultimo - primeiro) / (qtd - 1) if qtd > 1 else 0
+                        
+                        # Calcula novo ajuste de inclinação (multiplicado pelo fator)
+                        incl_novo = incl * mult_rot
+                        
+                        # Distribui a nova inclinação linearmente ao longo dos 12 meses
+                        # Mantém o primeiro valor constante e varia o resto
+                        curva_rot = []
+                        for i in range(qtd):
+                            fator = i / (qtd - 1)  # vai de 0 a 1 ao longo dos 12 meses
+                            # Calcula o ajuste incremental baseado na nova inclinação
+                            ajuste = fator * (incl_novo - incl)
+                            valor = analitica[i] + ajuste
+                            curva_rot.append(max(0, valor))
+                        
+                        return curva_rot
+                    
+                    # Aplica a rotação
+                    curva_rot = _calcular_curva_rotacionada_sidebar(mult_rotacao)
+                    if curva_rot:
+                        st.session_state["ajustada"] = curva_rot
+                        st.success(f"✅ Curva rotacionada com {mult_rotacao:+.2f}x inclinação!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Erro ao calcular rotação. Verifique os filtros.")
 
         st.markdown("---")
         

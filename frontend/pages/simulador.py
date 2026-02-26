@@ -250,6 +250,8 @@ def renderizar():
     }
     if st.session_state.get("filtros") != novo_filtro:
         st.session_state["filtros"] = novo_filtro
+        # Força re-renderização da sidebar para atualizar parâmetros em tempo real
+        st.rerun()
 
     # Ação do botão salvar
     if salvar_clicked:
