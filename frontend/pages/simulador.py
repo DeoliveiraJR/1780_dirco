@@ -560,6 +560,23 @@ def renderizar():
     anos_realizados = sorted(realizados_dict.keys())
     variacoes_rlzd = {ano: _variacao_mensal(realizados_dict[ano]) for ano in anos_realizados}
 
+    # ==================== OBTER MÊS/ANO ATUAL ====================
+    from datetime import datetime
+    agora = datetime.now()
+    mes_atual = agora.month  # 1-12
+    ano_atual = agora.year   # 2026 em fevereiro de 2026
+    
+    # O próximo ano para projeção (2027 se estamos em 2026)
+    ano_projecao_proxima = ano_atual + 1
+    
+    # Se 2027 (ou o próximo ano) ainda não está em realizados_dict, adicionar como lista vazia
+    if ano_projecao_proxima not in realizados_dict:
+        # Será substituído pelos dados de projeção (analítica) para meses futuros
+        # e por dados de realizado quando o mês passar
+        realizados_dict[ano_projecao_proxima] = [0.0] * 12
+        anos_realizados = sorted(realizados_dict.keys())
+        variacoes_rlzd = {ano: _variacao_mensal(realizados_dict[ano]) for ano in anos_realizados}
+
     style_top = make_stylesheet()
 
     # -------------------- GRÁFICO PRINCIPAL ----------------------------------
@@ -720,15 +737,73 @@ def renderizar():
         tbl_data[f"Rlzd_{ano}"] = realizados_dict[ano]
         tbl_data[f"Var_{ano}"]  = variacoes_rlzd[ano]
 
-    tbl_data["Analitica"] = analitica
-    tbl_data["Var_Ana"]   = var_ana
-    tbl_data["Mercado"]   = mercado
-    tbl_data["Var_Mer"]   = var_mer
-    tbl_data["Ajustada"]  = ajustada
-    tbl_data["Var_Ajs"]   = var_ajs
+    # Valores realizados para o ano atual (2026)
+    rlzd_ano_atual = realizados_dict.get(ano_atual, [0.0] * 12)
+    
+    # Aplicar regra: meses passados = realizado (se houver), meses futuros = projeção
+    ana_com_realizado = []
+    mer_com_realizado = []
+    ajs_com_realizado = []
+    
+    for mes_idx in range(12):
+        mes_numero = mes_idx + 1  # 1-12
+        
+        # Se o mês já passou E TEM realizado (não é 0 ou NaN), usar realizado
+        # Senão, usar projeção
+        rlzd_val = rlzd_ano_atual[mes_idx]
+        tem_realizado = rlzd_val is not None and not np.isnan(rlzd_val) if isinstance(rlzd_val, (float, int)) else rlzd_val
+        tem_realizado = tem_realizado and rlzd_val != 0.0
+        
+        if mes_numero <= mes_atual and tem_realizado:
+            # Usar valor realizado do ano atual (2026)
+            ana_com_realizado.append(rlzd_val)
+            mer_com_realizado.append(rlzd_val)
+            ajs_com_realizado.append(rlzd_val)
+        else:
+            # Usar projeção
+            ana_com_realizado.append(analitica[mes_idx])
+            mer_com_realizado.append(mercado[mes_idx])
+            ajs_com_realizado.append(ajustada[mes_idx])
+    
+    # Atribuir aos dados da tabela
+    tbl_data["Analitica"] = ana_com_realizado
+    tbl_data["Var_Ana"]   = _variacao_mensal(ana_com_realizado)
+    tbl_data["Mercado"]   = mer_com_realizado
+    tbl_data["Var_Mer"]   = _variacao_mensal(mer_com_realizado)
+    tbl_data["Ajustada"]  = ajs_com_realizado
+    tbl_data["Var_Ajs"]   = _variacao_mensal(ajs_com_realizado)
+    
+    # Recalcular o incremento líquido com base nos novos valores (que incluem realizados)
+    incremento_liquido_new = [ajs_com_realizado[i] - ana_com_realizado[i] for i in range(12)]
+    
+    # Adicionar colunas de Projeção para o ano atual (2026)
+    # Usar as mesmas listas que foram criadas para as colunas principais
+    tbl_data[f"Prj_Ana_{ano_atual}"] = ana_com_realizado
+    tbl_data[f"Var_PrjAna_{ano_atual}"] = _variacao_mensal(ana_com_realizado)
+    tbl_data[f"Prj_Mer_{ano_atual}"] = mer_com_realizado
+    tbl_data[f"Var_PrjMer_{ano_atual}"] = _variacao_mensal(mer_com_realizado)
+    tbl_data[f"Prj_Ajs_{ano_atual}"] = ajs_com_realizado
+    tbl_data[f"Var_PrjAjs_{ano_atual}"] = _variacao_mensal(ajs_com_realizado)
     
     # Coluna de Ajuste (incremento líquido = Ajustada - Analítica)
-    tbl_data["Ajuste"] = incremento_liquido
+    tbl_data["Ajuste"] = incremento_liquido_new[:]
+    
+    # ==================== INTEGRAR MESES PASSADOS = REALIZADO ====================
+    # Marca quais meses já passaram (para formatação de cor)
+    # NÃO substitui os valores de Analítica/Mercado/Ajustada
+    # Apenas marca quais foram realizados para poder colorir depois
+    tbl_data["_eh_realizado"] = []
+    
+    # Para cada mês, verificar se já passou
+    for mes_idx in range(12):
+        mes_numero = mes_idx + 1  # 1-12
+        
+        # Se o mês(número) <= mês atual, então já passou ou é o mês atual
+        if mes_numero <= mes_atual:
+            # Este mês já passou, marcar como realizado
+            tbl_data["_eh_realizado"].append(True)
+        else:
+            tbl_data["_eh_realizado"].append(False)
 
     def _mean_safe(v):
         v = np.array(v, dtype=float)
@@ -767,21 +842,54 @@ def renderizar():
             tbl_data[k] = tbl_data[k] + [media_row["Mes"], cres_row["Mes"]]
         elif k == "Mes_Ord":
             tbl_data[k] = tbl_data[k] + [media_row["Mes_Ord"], cres_row["Mes_Ord"]]
+        elif k == "_eh_realizado":
+            # As linhas de média e crescimento não são realizado
+            tbl_data[k] = tbl_data[k] + [False, False]
         else:
             tbl_data[k] = tbl_data[k] + [media_row.get(k, 0.0), cres_row.get(k, 0.0)]
 
     for ano in anos_realizados:
-        tbl_data[f"Var_{ano}_Disp"] = _build_var_disp_column(tbl_data[f"Var_{ano}"])
+        if f"Var_{ano}" in tbl_data:
+            tbl_data[f"Var_{ano}_Disp"] = _build_var_disp_column(tbl_data[f"Var_{ano}"])
     tbl_data["Var_Ana_Disp"] = _build_var_disp_column(tbl_data["Var_Ana"])
     tbl_data["Var_Mer_Disp"] = _build_var_disp_column(tbl_data["Var_Mer"])
     tbl_data["Var_Ajs_Disp"] = _build_var_disp_column(tbl_data["Var_Ajs"])
+    
+    # Calcular variações para as projeções do ano atual
+    tbl_data[f"Var_PrjAna_{ano_atual}_Disp"] = _build_var_disp_column(tbl_data[f"Var_PrjAna_{ano_atual}"])
+    tbl_data[f"Var_PrjMer_{ano_atual}_Disp"] = _build_var_disp_column(tbl_data[f"Var_PrjMer_{ano_atual}"])
+    tbl_data[f"Var_PrjAjs_{ano_atual}_Disp"] = _build_var_disp_column(tbl_data[f"Var_PrjAjs_{ano_atual}"])
 
     tbl_src = ColumnDataSource(tbl_data)
 
-    CURRENCY_TMPL = "<%= (value==null || isNaN(value)) ? '—' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(value) %>"
+    # Templates de formatação - FORMATO ABREVIADO (M = Milhões, B = Bilhões)
+    CURRENCY_TMPL = """
+    <% 
+      function formatShort(val) {
+        if (val == null || isNaN(val)) return '—';
+        const absVal = Math.abs(val);
+        if (absVal >= 1e9) return (val/1e9).toFixed(1) + 'B';
+        if (absVal >= 1e6) return (val/1e6).toFixed(1) + 'M';
+        return val.toLocaleString('pt-BR', {maximumFractionDigits:0});
+      }
+    %>
+    <%= formatShort(value) %>
+    """
+    AJUSTADA_TMPL = """
+    <span style="color:#1a5f7a;font-weight:600;cursor:pointer;" title="Clique duplo para editar">
+    <% 
+      function formatShort(val) {
+        if (val == null || isNaN(val)) return '—';
+        const absVal = Math.abs(val);
+        if (absVal >= 1e9) return (val/1e9).toFixed(1) + 'B';
+        if (absVal >= 1e6) return (val/1e6).toFixed(1) + 'M';
+        return val.toLocaleString('pt-BR', {maximumFractionDigits:0});
+      }
+    %>
+    <%= formatShort(value) %>
+    </span>
+    """
     
-    # Template destacado para coluna Ajustada (editável via clique duplo)
-    AJUSTADA_TMPL = '<span style="color:#1a5f7a;font-weight:600;cursor:pointer;" title="Clique duplo para editar"><%= (value==null || isNaN(value)) ? "—" : new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(value) %></span>'
     # Editor para coluna Ajustada (step de 1 bilhão)
     ajustada_editor = NumberEditor(step=1_000_000_000)
 
@@ -805,6 +913,13 @@ def renderizar():
         TableColumn(field="Ajustada",      title="Ajustada",          formatter=HTMLTemplateFormatter(template=AJUSTADA_TMPL), editor=ajustada_editor),
         TableColumn(field="Var_Ajs_Disp",  title="Var. % Ajustada",   formatter=HTMLTemplateFormatter(template="<%= value %>")),
         TableColumn(field="Ajuste",        title="Ajuste (Δ)",        formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:600;"><%= (value==null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(value)) %></span>')),
+        # Colunas de Projeção para o ano atual (2026)
+        TableColumn(field=f"Prj_Ana_{ano_atual}",     title=f"Proj. Analítica {ano_atual}",         formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
+        TableColumn(field=f"Var_PrjAna_{ano_atual}_Disp",  title=f"Var. % Proj. Analítica {ano_atual}",  formatter=HTMLTemplateFormatter(template="<%= value %>")),
+        TableColumn(field=f"Prj_Mer_{ano_atual}",       title=f"Proj. Mercado {ano_atual}",           formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
+        TableColumn(field=f"Var_PrjMer_{ano_atual}_Disp",  title=f"Var. % Proj. Mercado {ano_atual}",    formatter=HTMLTemplateFormatter(template="<%= value %>")),
+        TableColumn(field=f"Prj_Ajs_{ano_atual}",      title=f"Proj. Ajustada {ano_atual}",         formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
+        TableColumn(field=f"Var_PrjAjs_{ano_atual}_Disp",  title=f"Var. % Proj. Ajustada {ano_atual}",   formatter=HTMLTemplateFormatter(template="<%= value %>")),
     ])
 
     tbl = DataTable(
@@ -812,16 +927,30 @@ def renderizar():
         columns=columns,
         index_position=None,
         sizing_mode="stretch_width",
-        width=1400,
-        height=420,
+        width=5000,  # Largura para bom espaçamento das 23 colunas
+        height=450,  # Altura reduzida para deixar espaço para os gráficos abaixo
         editable=True,  # Habilita edição na tabela
         reorderable=False,  # Desabilita reordenação (evita warning jquery-ui)
         stylesheets=[make_stylesheet()],
     )
 
-    # CSS customizado para destacar as duas últimas linhas
+    # CSS customizado para destacar as duas últimas linhas e melhorar espaçamento
     st.markdown('''
     <style>
+    /* Melhorar espaçamento e legibilidade das células */
+    .bk-data-table td {
+        padding: 8px 12px !important;
+        font-size: 0.95rem !important;
+    }
+    .bk-data-table th {
+        padding: 10px 12px !important;
+        font-size: 0.9rem !important;
+        font-weight: 600 !important;
+    }
+    .bk-data-table tbody tr {
+        height: 36px !important;
+    }
+    
     .bk-data-table .uan-row-media td, .bk-data-table .uan-row-media {
         background: linear-gradient(90deg, #fce7f3 0%, #f8fafc 100%) !important;
         font-weight: bold !important;
@@ -1094,8 +1223,7 @@ def renderizar():
     
     # Renderiza o gráfico Bokeh (drag-and-drop salva valores no localStorage)
     bokeh_editable(
-        layout_topo, 
-        height=1200,
+        layout_topo,
         key=f"sim_bokeh_{combo}"
     )
     
