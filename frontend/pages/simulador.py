@@ -33,7 +33,7 @@ from utils_ext.display import _badge_html_from_value, _build_var_disp_column
 
 from services.aggregations import (
     _carregar_curvas_base, _obter_realizados_por_ano, _agregados_por_categoria,
-    _carregar_ajustada_produto
+    _carregar_ajustada_produto, _carregar_proximos_12_meses
 )
 
 from components.lines import _grafico_visao_anual_linhas, _grafico_serie_historica
@@ -589,8 +589,18 @@ def renderizar():
         y_br=[fmt_br(v, 0) for v in ajustada]
     ))
 
+    # -------------------- GRÁFICO PRINCIPAL ----------------------------------
+    src_ana = ColumnDataSource(dict(x=MESES_NUM, y=analitica))
+    src_mer = ColumnDataSource(dict(x=MESES_NUM, y=mercado))
+    src_ajs = ColumnDataSource(dict(
+        x=MESES_NUM,
+        xm=MESES_ABR_LIST,
+        y=ajustada,
+        y_br=[fmt_br(v, 0) for v in ajustada]
+    ))
+
     p = figure(
-        height=380, sizing_mode="stretch_width",
+        height=400, sizing_mode="stretch_width",
         x_range=(0.5,12.5), x_axis_label="Mês", y_axis_label="Valor (R$)",
         toolbar_location="right",
         title="",  # Título removido (exibido via Streamlit acima)
@@ -672,6 +682,30 @@ def renderizar():
         sizing_mode="fixed",
         width=130
     )
+    incr_inicial_pct = ((soma_ajs_inicial / soma_ana_inicial) - 1) * 100 if soma_ana_inicial > 0 else 0
+    incr_color = "#10b981" if incr_inicial_pct >= 0 else "#ef4444"
+    incr_icon = "📈" if incr_inicial_pct >= 0 else "📉"
+    
+    div_incremento = Div(
+        text=f"""<div id="div_incremento" style="
+            background: linear-gradient(145deg, {'#ecfdf5' if incr_inicial_pct >= 0 else '#fef2f2'} 0%, #ffffff 100%);
+            border: 2px solid {incr_color};
+            border-radius: 12px;
+            padding: 6px 16px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            min-width: 110px;
+        ">
+            <div style="font-size: 0.7rem; color: #64748b; font-weight: 500;">
+                {incr_icon} Incremento
+            </div>
+            <div style="font-size: 1.3rem; font-weight: 700; color: {incr_color};">
+                {incr_inicial_pct:+.2f}%
+            </div>
+        </div>""",
+        sizing_mode="fixed",
+        width=130
+    )
     
     # Callback JS para atualizar o Div de valores E o Div de incremento
     soma_analitica_js = sum(analitica) if analitica else 1
@@ -724,13 +758,15 @@ def renderizar():
     """)
     src_ajs.js_on_change("data", cb_atualiza_div)
 
-    # -------------------- TABELA ---------------------------------------------
+    # -------------------- TABELA : VOLTANDO AO LAYOUT ANTERIOR --------------------
     var_ana = _variacao_mensal(analitica)
     var_mer = _variacao_mensal(mercado)
     var_ajs = _variacao_mensal(ajustada)
 
     mes_display = MESES_ABR_LIST[:]
     mes_ord    = list(range(1,13))
+    
+    # ============ TABELA 1: RESUMO (sem dados históricos) ============
     tbl_data = dict(Mes=mes_display, Mes_Ord=mes_ord)
 
     for ano in anos_realizados:
@@ -773,20 +809,8 @@ def renderizar():
     tbl_data["Ajustada"]  = ajs_com_realizado
     tbl_data["Var_Ajs"]   = _variacao_mensal(ajs_com_realizado)
     
-    # Recalcular o incremento líquido com base nos novos valores (que incluem realizados)
-    incremento_liquido_new = [ajs_com_realizado[i] - ana_com_realizado[i] for i in range(12)]
-    
-    # Adicionar colunas de Projeção para o ano atual (2026)
-    # Usar as mesmas listas que foram criadas para as colunas principais
-    tbl_data[f"Prj_Ana_{ano_atual}"] = ana_com_realizado
-    tbl_data[f"Var_PrjAna_{ano_atual}"] = _variacao_mensal(ana_com_realizado)
-    tbl_data[f"Prj_Mer_{ano_atual}"] = mer_com_realizado
-    tbl_data[f"Var_PrjMer_{ano_atual}"] = _variacao_mensal(mer_com_realizado)
-    tbl_data[f"Prj_Ajs_{ano_atual}"] = ajs_com_realizado
-    tbl_data[f"Var_PrjAjs_{ano_atual}"] = _variacao_mensal(ajs_com_realizado)
-    
     # Coluna de Ajuste (incremento líquido = Ajustada - Analítica)
-    tbl_data["Ajuste"] = incremento_liquido_new[:]
+    tbl_data["Ajuste"] = [ajs_com_realizado[i] - ana_com_realizado[i] for i in range(12)]
     
     # ==================== INTEGRAR MESES PASSADOS = REALIZADO ====================
     # Marca quais meses já passaram (para formatação de cor)
@@ -854,11 +878,6 @@ def renderizar():
     tbl_data["Var_Ana_Disp"] = _build_var_disp_column(tbl_data["Var_Ana"])
     tbl_data["Var_Mer_Disp"] = _build_var_disp_column(tbl_data["Var_Mer"])
     tbl_data["Var_Ajs_Disp"] = _build_var_disp_column(tbl_data["Var_Ajs"])
-    
-    # Calcular variações para as projeções do ano atual
-    tbl_data[f"Var_PrjAna_{ano_atual}_Disp"] = _build_var_disp_column(tbl_data[f"Var_PrjAna_{ano_atual}"])
-    tbl_data[f"Var_PrjMer_{ano_atual}_Disp"] = _build_var_disp_column(tbl_data[f"Var_PrjMer_{ano_atual}"])
-    tbl_data[f"Var_PrjAjs_{ano_atual}_Disp"] = _build_var_disp_column(tbl_data[f"Var_PrjAjs_{ano_atual}"])
 
     tbl_src = ColumnDataSource(tbl_data)
 
@@ -890,87 +909,7 @@ def renderizar():
     </span>
     """
     
-    # Editor para coluna Ajustada (step de 1 bilhão)
-    ajustada_editor = NumberEditor(step=1_000_000_000)
-
-    columns = [
-        TableColumn(field="Mes", title="Mês", formatter=StringFormatter(text_color="#0b1320"), sortable=False)
-    ]
-    for ano in anos_realizados:
-        columns.append(TableColumn(
-            field=f"Rlzd_{ano}", title=f"RLZD {ano}",
-            formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)
-        ))
-        columns.append(TableColumn(
-            field=f"Var_{ano}_Disp", title=f"VAR. % {ano}",
-            formatter=HTMLTemplateFormatter(template="<%= value %>")
-        ))
-    columns.extend([
-        TableColumn(field="Analitica",     title="Analítica",         formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
-        TableColumn(field="Var_Ana_Disp",  title="Var. % Analítica",  formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field="Mercado",       title="Mercado",           formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
-        TableColumn(field="Var_Mer_Disp",  title="Var. % Mercado",    formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field="Ajustada",      title="Ajustada",          formatter=HTMLTemplateFormatter(template=AJUSTADA_TMPL), editor=ajustada_editor),
-        TableColumn(field="Var_Ajs_Disp",  title="Var. % Ajustada",   formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field="Ajuste",        title="Ajuste (Δ)",        formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:600;"><%= (value==null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(value)) %></span>')),
-        # Colunas de Projeção para o ano atual (2026)
-        TableColumn(field=f"Prj_Ana_{ano_atual}",     title=f"Proj. Analítica {ano_atual}",         formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
-        TableColumn(field=f"Var_PrjAna_{ano_atual}_Disp",  title=f"Var. % Proj. Analítica {ano_atual}",  formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field=f"Prj_Mer_{ano_atual}",       title=f"Proj. Mercado {ano_atual}",           formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
-        TableColumn(field=f"Var_PrjMer_{ano_atual}_Disp",  title=f"Var. % Proj. Mercado {ano_atual}",    formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field=f"Prj_Ajs_{ano_atual}",      title=f"Proj. Ajustada {ano_atual}",         formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
-        TableColumn(field=f"Var_PrjAjs_{ano_atual}_Disp",  title=f"Var. % Proj. Ajustada {ano_atual}",   formatter=HTMLTemplateFormatter(template="<%= value %>")),
-    ])
-
-    tbl = DataTable(
-        source=tbl_src,
-        columns=columns,
-        index_position=None,
-        sizing_mode="stretch_width",
-        width=5000,  # Largura para bom espaçamento das 23 colunas
-        height=450,  # Altura reduzida para deixar espaço para os gráficos abaixo
-        editable=True,  # Habilita edição na tabela
-        reorderable=False,  # Desabilita reordenação (evita warning jquery-ui)
-        stylesheets=[make_stylesheet()],
-    )
-
-    # CSS customizado para destacar as duas últimas linhas e melhorar espaçamento
-    st.markdown('''
-    <style>
-    /* Melhorar espaçamento e legibilidade das células */
-    .bk-data-table td {
-        padding: 8px 12px !important;
-        font-size: 0.95rem !important;
-    }
-    .bk-data-table th {
-        padding: 10px 12px !important;
-        font-size: 0.9rem !important;
-        font-weight: 600 !important;
-    }
-    .bk-data-table tbody tr {
-        height: 36px !important;
-    }
-    
-    .bk-data-table .uan-row-media td, .bk-data-table .uan-row-media {
-        background: linear-gradient(90deg, #fce7f3 0%, #f8fafc 100%) !important;
-        font-weight: bold !important;
-        color: #c026d3 !important;
-        border-top: 2px solid #f9a8d4 !important;
-        border-bottom: 1px solid #f9a8d4 !important;
-    }
-    .bk-data-table .uan-row-cresc td, .bk-data-table .uan-row-cresc {
-        background: linear-gradient(90deg, #f0fdf4 0%, #f8fafc 100%) !important;
-        font-weight: bold !important;
-        color: #059669 !important;
-        border-bottom: 2px solid #34d399 !important;
-    }
-    .bk-data-table .uan-row-alt td, .bk-data-table .uan-row-alt {
-        background: #f8fafc !important;
-    }
-    </style>
-    ''', unsafe_allow_html=True)
-
-    # ==== CustomJS (corrigido: parênteses) ====
+    # ==== CustomJS para sincronizar Gráfico <-> Tabela ====
     cb = CustomJS(args=dict(src=src_ajs, tbl=tbl_src), code="""
         function recomputeAll() {
             const y = src.data['y']; if (!y) return;
@@ -1063,7 +1002,7 @@ def renderizar():
             recomputeAll();
         }
     """)
-
+    
     src_ajs.js_on_change("patching", cb)
     src_ajs.js_on_change("data", cb)
 
@@ -1106,10 +1045,9 @@ def renderizar():
                                 style_top, src_ajs_ref=src_ajs)
 
     layout_topo = column(
-        row(div_valores, div_incremento, sizing_mode="stretch_width"),
+        row(div_valores, div_incremento, sizing_mode="stretch_width", height=100),
         p,
-        tbl,
-        row(g1, g2, sizing_mode="stretch_width"),
+        row(g1, g2, sizing_mode="stretch_width", height=450),
         sizing_mode="stretch_width",
     )
     
@@ -1222,12 +1160,179 @@ def renderizar():
     """, unsafe_allow_html=True)
     
     # Renderiza o gráfico Bokeh (drag-and-drop salva valores no localStorage)
+    st.markdown("""
+    <style>
+        /* Controlar altura do container Bokeh para evitar espaço em branco excessivo */
+        [data-testid="stIFrame"]:has(iframe.bk-root) {
+            margin-bottom: 0 !important;
+            padding-bottom: 0 !important;
+        }
+        
+        /* Remover espaços em branco após o container Bokeh */
+        div.stHorizontalBlock {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
     bokeh_editable(
         layout_topo,
+        height=950,  # 100 + 400 + 450 + padding
         key=f"sim_bokeh_{combo}"
     )
     
-    # -------------------- Seção: Análises por Categoria ----------------------
+    # ====================== TABELA SÉRIE HISTÓRICA (COM TODOS OS ANOS) ========================
+    st.markdown("<h3 style='margin:1rem 0 0.5rem 0; padding-top:1rem; border-top:2px solid #e2e8f0;'>📊 SÉRIE HISTÓRICA • Realizado vs Projeções</h3>", unsafe_allow_html=True)
+    
+    # Montar dados da série histórica com TODOS os anos disponíveis
+    tbl_hist_data = dict(Mes=mes_display, Mes_Ord=mes_ord)
+    
+    # Adicionar todos os anos realizados com suas variações
+    for ano in anos_realizados:
+        tbl_hist_data[f"Rlzd_{ano}"] = realizados_dict[ano]
+        tbl_hist_data[f"Var_{ano}"]  = variacoes_rlzd[ano]
+    
+    # Adicionar projeções do ano atual
+    tbl_hist_data["Analitica"]  = ana_com_realizado
+    tbl_hist_data["Var_Ana"]    = _variacao_mensal(ana_com_realizado)
+    tbl_hist_data["Mercado"]    = mer_com_realizado
+    tbl_hist_data["Var_Mer"]    = _variacao_mensal(mer_com_realizado)
+    tbl_hist_data["Ajustada"]   = ajs_com_realizado
+    tbl_hist_data["Var_Ajs"]    = _variacao_mensal(ajs_com_realizado)
+    tbl_hist_data["Ajuste"]     = [ajs_com_realizado[i] - ana_com_realizado[i] for i in range(12)]
+    
+    # Calcular linhas de MÉDIA e CRESCIMENTO para série histórica
+    def _mean_safe(v):
+        v = np.array(v, dtype=float)
+        return float(np.nanmean(v)) if v.size else 0.0
+
+    def _delta_first_last(v):
+        v = list(map(float, v))
+        if not v: return 0.0
+        return float(v[-1] - v[0])
+
+    media_row_hist = {"Mes": "MÉDIA / VAR%", "Mes_Ord": 13}
+    for ano in anos_realizados:
+        media_row_hist[f"Rlzd_{ano}"] = _mean_safe(tbl_hist_data[f"Rlzd_{ano}"])
+        media_row_hist[f"Var_{ano}"]  = _mean_safe(tbl_hist_data[f"Var_{ano}"])
+    media_row_hist["Analitica"] = _mean_safe(tbl_hist_data["Analitica"])
+    media_row_hist["Var_Ana"]   = _mean_safe(tbl_hist_data["Var_Ana"])
+    media_row_hist["Mercado"]   = _mean_safe(tbl_hist_data["Mercado"])
+    media_row_hist["Var_Mer"]   = _mean_safe(tbl_hist_data["Var_Mer"])
+    media_row_hist["Ajustada"]  = _mean_safe(tbl_hist_data["Ajustada"])
+    media_row_hist["Var_Ajs"]   = _mean_safe(tbl_hist_data["Var_Ajs"])
+    media_row_hist["Ajuste"]    = _mean_safe(tbl_hist_data["Ajuste"])
+
+    cres_row_hist = {"Mes": "CRESC. VOL", "Mes_Ord": 14}
+    for ano in anos_realizados:
+        delta = _delta_first_last(tbl_hist_data[f"Rlzd_{ano}"])
+        cres_row_hist[f"Rlzd_{ano}"] = delta
+        cres_row_hist[f"Var_{ano}"]  = 1.0 if delta > 0 else (-1.0 if delta < 0 else 0.0)
+    for field_val, field_var in [("Analitica","Var_Ana"),("Mercado","Var_Mer"),("Ajustada","Var_Ajs")]:
+        delta = _delta_first_last(tbl_hist_data[field_val])
+        cres_row_hist[field_val] = delta
+        cres_row_hist[field_var] = 1.0 if delta > 0 else (-1.0 if delta < 0 else 0.0)
+    cres_row_hist["Ajuste"] = _delta_first_last(tbl_hist_data["Ajuste"])
+
+    # Adicionar linhas de média e crescimento
+    for k in list(tbl_hist_data.keys()):
+        if k == "Mes":
+            tbl_hist_data[k] = tbl_hist_data[k] + [media_row_hist["Mes"], cres_row_hist["Mes"]]
+        elif k == "Mes_Ord":
+            tbl_hist_data[k] = tbl_hist_data[k] + [media_row_hist["Mes_Ord"], cres_row_hist["Mes_Ord"]]
+        else:
+            tbl_hist_data[k] = tbl_hist_data[k] + [media_row_hist.get(k, 0.0), cres_row_hist.get(k, 0.0)]
+
+    # Criar colunas de display para variações formatadas com cores
+    for ano in anos_realizados:
+        if f"Var_{ano}" in tbl_hist_data:
+            tbl_hist_data[f"Var_{ano}_Disp"] = _build_var_disp_column(tbl_hist_data[f"Var_{ano}"])
+    tbl_hist_data["Var_Ana_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Ana"])
+    tbl_hist_data["Var_Mer_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Mer"])
+    tbl_hist_data["Var_Ajs_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Ajs"])
+
+    tbl_hist_src = ColumnDataSource(tbl_hist_data)
+
+    # Construir colunas para série histórica
+    columns_hist = [
+        TableColumn(field="Mes", title="Mês", formatter=StringFormatter(text_color="#0b1320"), sortable=False)
+    ]
+    for ano in anos_realizados:
+        columns_hist.append(TableColumn(
+            field=f"Rlzd_{ano}", title=f"RLZD {ano}",
+            formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)
+        ))
+        columns_hist.append(TableColumn(
+            field=f"Var_{ano}_Disp", title=f"VAR. % {ano}",
+            formatter=HTMLTemplateFormatter(template="<%= value %>")
+        ))
+    
+    columns_hist.extend([
+        TableColumn(field="Analitica", title="Analítica", formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
+        TableColumn(field="Var_Ana_Disp", title="Var. % Anal", formatter=HTMLTemplateFormatter(template="<%= value %>")),
+        TableColumn(field="Mercado", title="Mercado", formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
+        TableColumn(field="Var_Mer_Disp", title="Var. % Merc", formatter=HTMLTemplateFormatter(template="<%= value %>")),
+        TableColumn(field="Ajustada", title="Ajustada", formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
+        TableColumn(field="Var_Ajs_Disp", title="Var. % Ajs", formatter=HTMLTemplateFormatter(template="<%= value %>")),
+        TableColumn(field="Ajuste", title="Ajuste (Δ)", formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:600;"><%= (value==null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(value)) %></span>'))
+    ])
+
+    tbl_hist = DataTable(
+        source=tbl_hist_src,
+        columns=columns_hist,
+        index_position=None,
+        sizing_mode=None,  # Remove stretch_width para dar controle total da altura
+        width=8000,
+        height=1800,
+        editable=False,
+        reorderable=False,
+        stylesheets=[make_stylesheet()],
+    )
+    
+    # CSS para renderizar tabela completa sem scroll vertical
+    st.markdown("""
+    <style>
+        /* Força container Bokeh a respeitar altura da tabela */
+        [data-testid="stIFrame"]:has(iframe.bk-root) {
+            height: auto !important;
+            overflow: visible !important;
+        }
+        
+        /* DataTable expande para mostrar todas as linhas */
+        .bk-root .bk-data-table {
+            width: 100% !important;
+        }
+        
+        /* Viewport - sem scroll vertical, apenas horizontal */
+        .bk-root .slick-viewport {
+            height: auto !important;
+            overflow: visible !important;
+        }
+        
+        /* Grid - render completo */
+        .bk-root .slick-canvas {
+            width: 100% !important;
+        }
+        
+        /* Scrollbar apenas horizontal */
+        .bk-root .bk-data-table::-webkit-scrollbar {
+            height: 10px;
+            width: 0px;
+        }
+        
+        .bk-root .bk-data-table::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        
+        .bk-root .bk-data-table::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 5px;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    streamlit_bokeh(tbl_hist, use_container_width=True, key=f"hist_{combo}")
     st.markdown("<h2 class='uan-sec' style='margin:8px 0 4px 0;padding:4px 0;font-size:1.2rem;border-top:1px solid #e2e8f0;'>🗂️ Análises por Categoria</h2>", unsafe_allow_html=True)
     
     # Carrega dados agregados por categoria

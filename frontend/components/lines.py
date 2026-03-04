@@ -15,7 +15,7 @@ from utils_ext.series import _norm_txt, _mes_to_num, _ensure_cli_n, _mask_traili
 
 def _grafico_visao_anual_linhas(realizados_dict: dict, ana: list, mer: list, ajs: list,
                                 ano_proj: int, stylesheet, src_ajs_ref: ColumnDataSource | None = None):
-    p = figure(height=320, sizing_mode="stretch_width",
+    p = figure(height=380, sizing_mode="stretch_width",
                x_range=(0.5,12.5),
                title="📊 VISÃO ANUAL • Realizado vs Projeções",
                stylesheets=[stylesheet], toolbar_location="right")
@@ -70,7 +70,7 @@ def _grafico_serie_historica(df_upload: pd.DataFrame, cliente: str,
                              ana: list, mer: list, ajs: list,
                              ano_proj: int, stylesheet,
                              src_ajs_ref: ColumnDataSource | None = None):
-    p = figure(height=320, sizing_mode="stretch_width", x_axis_type="datetime",
+    p = figure(height=380, sizing_mode="stretch_width", x_axis_type="datetime",
                title="🕒 SÉRIE HISTÓRICA • Realizado vs Projeções",
                stylesheets=[stylesheet], toolbar_location="right")
     p.background_fill_color="#f7fbff"; p.grid.grid_line_alpha=0.22

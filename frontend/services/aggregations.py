@@ -41,6 +41,130 @@ def _carregar_curvas_base(df_upload: pd.DataFrame, cliente: str, categoria: str,
     mer = (grp["PROJETADO_MERCADO"].astype(float).tolist() + [0.0]*12)[:12]
     return ana, mer, ano
 
+def _carregar_curvas_por_ano(df_upload: pd.DataFrame, cliente: str, categoria: str, produto: str, ano_proj: int):
+    """
+    Carrega curvas analítica, mercado e ajustada para um ano específico.
+    Retorna: (ana[12], mer[12], ajustada[12])
+    """
+    if df_upload is None or df_upload.empty:
+        return [0.0]*12, [0.0]*12, [0.0]*12
+    
+    dff = _ensure_cli_n(df_upload)
+    if "CAT_N" not in dff.columns:
+        dff["CAT_N"] = dff["CATEGORIA"].astype(str).apply(_norm_txt)
+    if "PROD_N" not in dff.columns:
+        dff["PROD_N"] = dff["PRODUTO"].astype(str).apply(_norm_txt)
+    if "MES_NUM" not in dff.columns:
+        dff["MES_NUM"] = dff["MES"].apply(_mes_to_num) if "MES" in dff.columns else np.nan
+    if "ANO_NUM" not in dff.columns:
+        dff["ANO_NUM"] = pd.to_numeric(dff.get("ANO", 0), errors="coerce").fillna(0).astype(int)
+
+    if cliente and cliente != "Todos":
+        dff = dff[dff["CLI_N"] == _norm_txt(cliente)]
+    
+    dff = dff[(dff["CAT_N"] == _norm_txt(categoria)) & (dff["PROD_N"] == _norm_txt(produto))]
+    dff = dff[(dff["ANO_NUM"] == int(ano_proj)) & (pd.to_numeric(dff["MES_NUM"], errors="coerce").between(1, 12))]
+    
+    if dff.empty:
+        return [0.0]*12, [0.0]*12, [0.0]*12
+
+    grp = dff.groupby("MES_NUM", as_index=True).agg(
+        PROJETADO_ANALITICO=("PROJETADO_ANALITICO", "sum"),
+        PROJETADO_MERCADO=("PROJETADO_MERCADO", "sum"),
+        PROJETADO_AJUSTADO=("PROJETADO_AJUSTADO", "sum") if "PROJETADO_AJUSTADO" in dff.columns else ("PROJETADO_ANALITICO", "sum")
+    ).reindex(range(1, 13)).fillna(0.0)
+
+    ana = (grp["PROJETADO_ANALITICO"].astype(float).tolist() + [0.0]*12)[:12]
+    mer = (grp["PROJETADO_MERCADO"].astype(float).tolist() + [0.0]*12)[:12]
+    ajs = (grp["PROJETADO_AJUSTADO"].astype(float).tolist() + [0.0]*12)[:12]
+    
+    return ana, mer, ajs
+
+
+def _carregar_proximos_12_meses(df_upload: pd.DataFrame, cliente: str, categoria: str, produto: str, mes_atual: int, ano_atual: int, mascarar_zeros_finais: bool = True):
+    """
+    Carrega dados para os próximos 12 meses, combinando anos se necessário.
+    
+    Retorna:
+    {
+        "meses": ["Mar 2026", "Abr 2026", ..., "Mar 2027"],
+        "meses_num": [3, 4, ..., 12, 1, 2, 3],
+        "anos": [2026, 2026, ..., 2027],
+        "rlzd": [value, ...],      # Realizado (se houver)
+        "ana": [value, ...],       # Projeção Analítica
+        "mer": [value, ...],       # Projeção Mercado
+        "ajs": [value, ...],       # Projeção Ajustada
+    }
+    """
+    from utils_ext.constants import MESES_ABR_LIST
+    
+    if df_upload is None or df_upload.empty:
+        return None
+    
+    resultado = {
+        "meses": [],
+        "meses_num": [],
+        "anos": [],
+        "rlzd": [],
+        "ana": [],
+        "mer": [],
+        "ajs": []
+    }
+    
+    # Carrega realizados para ambos os anos
+    r_ano_atual = _obter_realizados_por_ano(df_upload, cliente, categoria, produto, mascarar_zeros_finais=mascarar_zeros_finais)
+    
+    # Carrega projeções para ano atual e próximo ano
+    ana_atual, mer_atual, ajs_atual = _carregar_curvas_por_ano(df_upload, cliente, categoria, produto, ano_atual)
+    ano_proximo = ano_atual + 1
+    ana_proximo, mer_proximo, ajs_proximo = _carregar_curvas_por_ano(df_upload, cliente, categoria, produto, ano_proximo)
+    
+    rlzd_ano_atual = r_ano_atual.get(ano_atual, [0.0]*12) if r_ano_atual else [0.0]*12
+    rlzd_ano_proximo = r_ano_atual.get(ano_proximo, [0.0]*12) if r_ano_atual else [0.0]*12
+    
+    # Constrói 12 meses a partir do mês atual até 12 meses à frente
+    for i in range(12):
+        # Mês no intervalo de 0-11
+        mes_idx_absoluto = (mes_atual - 1 + i)  # 0-23 (depe do mês_atual)
+        ano = ano_atual if mes_idx_absoluto < 12 else ano_proximo
+        
+        # Mês em 1-12 para o ano específico
+        mes_num = (mes_idx_absoluto % 12) + 1  # 1-12
+        mes_idx = mes_num - 1  # 0-11 para indexação de array
+        
+        # Valor realizado
+        if ano == ano_atual:
+            rlzd_val = rlzd_ano_atual[mes_idx] if mes_idx < len(rlzd_ano_atual) else 0.0
+        else:
+            rlzd_val = rlzd_ano_proximo[mes_idx] if mes_idx < len(rlzd_ano_proximo) else 0.0
+        
+        # Projeções
+        if ano == ano_atual:
+            ana_val = ana_atual[mes_idx] if mes_idx < len(ana_atual) else 0.0
+            mer_val = mer_atual[mes_idx] if mes_idx < len(mer_atual) else 0.0
+            ajs_val = ajs_atual[mes_idx] if mes_idx < len(ajs_atual) else 0.0
+        else:
+            ana_val = ana_proximo[mes_idx] if mes_idx < len(ana_proximo) else 0.0
+            mer_val = mer_proximo[mes_idx] if mes_idx < len(mer_proximo) else 0.0
+            ajs_val = ajs_proximo[mes_idx] if mes_idx < len(ajs_proximo) else 0.0
+        
+        # Regra: se mês já passou E tem realizado, usar realizado
+        if ano == ano_atual and mes_num <= mes_atual and rlzd_val != 0.0:
+            ana_val = rlzd_val
+            mer_val = rlzd_val
+            ajs_val = rlzd_val
+        
+        resultado["meses"].append(f"{MESES_ABR_LIST[mes_num-1]} {ano}")
+        resultado["meses_num"].append(mes_num)
+        resultado["anos"].append(ano)
+        resultado["rlzd"].append(rlzd_val)
+        resultado["ana"].append(ana_val)
+        resultado["mer"].append(mer_val)
+        resultado["ajs"].append(ajs_val)
+    
+    return resultado
+
+
 def _carregar_ajustada_produto(df_upload: pd.DataFrame, cliente: str, categoria: str, produto: str, ano_proj: int):
     """
     Série [12] do produto/ano: PROJETADO_AJUSTADO (fallback Analítico).
