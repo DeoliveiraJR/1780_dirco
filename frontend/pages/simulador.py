@@ -1185,10 +1185,10 @@ def renderizar():
     # ====================== TABELA SÉRIE HISTÓRICA (COM TODOS OS ANOS) ========================
     st.markdown("<h3 style='margin:1rem 0 0.5rem 0; padding-top:1rem; border-top:2px solid #e2e8f0;'>📊 SÉRIE HISTÓRICA • Realizado vs Projeções</h3>", unsafe_allow_html=True)
     
-    # Montar dados da série histórica - APENAS ÚLTIMO ANO REALIZADO (2025)
+    # Montar dados da série histórica
     tbl_hist_data = dict(Mes=mes_display, Mes_Ord=mes_ord)
     
-    # ============ FILTRAR: APENAS REALIZADO DE 2025 (ÚLTIMO ANO) ============
+    # ============ FILTRAR: APENAS REALIZADO DE 2025 (ÚLTIMO ANO ANTERIOR AO ATUAL) ============
     # Encontrar o último ano realizado (que seria 2025)
     ano_realizado_ultimo = max([a for a in anos_realizados if a < ano_atual], default=None)
     
@@ -1199,6 +1199,12 @@ def renderizar():
     else:
         anos_realizado_para_tbl = []
     
+    # ============ ADICIONAR REALIZADO DO ANO ATUAL (2026) ============
+    # Traz os dados realizados do ano atual conforme foram até agora
+    rlzd_ano_atual = realizados_dict.get(ano_atual, [0.0] * 12)
+    tbl_hist_data[f"Rlzd_{ano_atual}"] = rlzd_ano_atual
+    tbl_hist_data[f"Var_{ano_atual}"]  = variacoes_rlzd.get(ano_atual, [0.0]*12)
+    
     # Adicionar projeções do ano ATUAL (2026)
     tbl_hist_data["Analitica_2026"]  = ana_com_realizado
     tbl_hist_data["Var_Ana_2026"]    = _variacao_mensal(ana_com_realizado)
@@ -1207,20 +1213,20 @@ def renderizar():
     tbl_hist_data["Ajustada_2026"]   = ajs_com_realizado
     tbl_hist_data["Var_Ajs_2026"]    = _variacao_mensal(ajs_com_realizado)
     
-    # ============ ADICIONAR PROJEÇÕES PARA PRÓXIMO ANO (2027) ============
-    # Usa os dados originais (sem substituição por realizado) para as projeções de 2027
-    tbl_hist_data["Analitica_2027"]  = analitica[:]
-    tbl_hist_data["Var_Ana_2027"]    = _variacao_mensal(analitica)
-    tbl_hist_data["Mercado_2027"]    = mercado[:]
-    tbl_hist_data["Var_Mer_2027"]    = _variacao_mensal(mercado)
-    tbl_hist_data["Ajustada_2027"]   = ajustada[:]
-    tbl_hist_data["Var_Ajs_2027"]    = _variacao_mensal(ajustada)
+    # ============ ADICIONAR PROJEÇÕES PARA PRÓXIMO ANO (2027) - SEM DADOS ============
+    # 2027 não tem dados baseados em realizado ainda, preenche com zeros
+    tbl_hist_data["Analitica_2027"]  = [0.0] * 12
+    tbl_hist_data["Var_Ana_2027"]    = [0.0] * 12
+    tbl_hist_data["Mercado_2027"]    = [0.0] * 12
+    tbl_hist_data["Var_Mer_2027"]    = [0.0] * 12
+    tbl_hist_data["Ajustada_2027"]   = [0.0] * 12
+    tbl_hist_data["Var_Ajs_2027"]    = [0.0] * 12
     
-    # Ajuste (diferença entre Ajustada e Analítica) para ambos os anos
+    # Ajuste (diferença entre Ajustada e Analítica)
     tbl_hist_data["Ajuste_2026"] = [ajs_com_realizado[i] - ana_com_realizado[i] for i in range(12)]
-    tbl_hist_data["Ajuste_2027"] = [ajustada[i] - analitica[i] for i in range(12)]
+    tbl_hist_data["Ajuste_2027"] = [0.0] * 12  # Sem dados para 2027
     
-    # ============ MARCAR CÉLULAS DONDE REALIZADO SUBSTITIU PROJEÇÃO ============
+    # ============ MARCAR CÉLULAS CONDE REALIZADO SUBSTITUI PROJEÇÃO ============
     # Flag para identificar células com realizado (para colorir diferente)
     tbl_hist_data["_eh_realizado_2026"] = [mes_idx + 1 <= mes_atual for mes_idx in range(12)]
     tbl_hist_data["_eh_realizado_2027"] = [False] * 12  # Nenhum mês de 2027 é realizado
@@ -1237,10 +1243,14 @@ def renderizar():
 
     media_row_hist = {"Mes": "MÉDIA / VAR%", "Mes_Ord": 13}
     
-    # MÉDIA: apenas do último ano realizado
+    # MÉDIA: último ano realizado (2025)
     if ano_realizado_ultimo is not None:
         media_row_hist[f"Rlzd_{ano_realizado_ultimo}"] = _mean_safe(tbl_hist_data[f"Rlzd_{ano_realizado_ultimo}"])
         media_row_hist[f"Var_{ano_realizado_ultimo}"]  = _mean_safe(tbl_hist_data[f"Var_{ano_realizado_ultimo}"])
+    
+    # MÉDIA: realizado do ano atual (2026)
+    media_row_hist[f"Rlzd_{ano_atual}"] = _mean_safe(tbl_hist_data[f"Rlzd_{ano_atual}"])
+    media_row_hist[f"Var_{ano_atual}"]  = _mean_safe(tbl_hist_data[f"Var_{ano_atual}"])
     
     # MÉDIA: projeções 2026 e 2027
     media_row_hist["Analitica_2026"] = _mean_safe(tbl_hist_data["Analitica_2026"])
@@ -1261,11 +1271,16 @@ def renderizar():
 
     cres_row_hist = {"Mes": "CRESC. VOL", "Mes_Ord": 14}
     
-    # CRESCIMENTO: apenas do último ano realizado
+    # CRESCIMENTO: último ano realizado (2025)
     if ano_realizado_ultimo is not None:
         delta = _delta_first_last(tbl_hist_data[f"Rlzd_{ano_realizado_ultimo}"])
         cres_row_hist[f"Rlzd_{ano_realizado_ultimo}"] = delta
         cres_row_hist[f"Var_{ano_realizado_ultimo}"]  = 1.0 if delta > 0 else (-1.0 if delta < 0 else 0.0)
+    
+    # CRESCIMENTO: realizado do ano atual (2026)
+    delta = _delta_first_last(tbl_hist_data[f"Rlzd_{ano_atual}"])
+    cres_row_hist[f"Rlzd_{ano_atual}"] = delta
+    cres_row_hist[f"Var_{ano_atual}"]  = 1.0 if delta > 0 else (-1.0 if delta < 0 else 0.0)
     
     # CRESCIMENTO: projeções
     for year_suf in ["2026", "2027"]:
@@ -1292,6 +1307,9 @@ def renderizar():
     # Criar colunas de display para variações formatadas com cores
     if ano_realizado_ultimo is not None:
         tbl_hist_data[f"Var_{ano_realizado_ultimo}_Disp"] = _build_var_disp_column(tbl_hist_data[f"Var_{ano_realizado_ultimo}"])
+    
+    # Adicionar Var Disp para RLZD 2026 (ano atual)
+    tbl_hist_data[f"Var_{ano_atual}_Disp"] = _build_var_disp_column(tbl_hist_data[f"Var_{ano_atual}"])
     
     tbl_hist_data["Var_Ana_2026_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Ana_2026"])
     tbl_hist_data["Var_Mer_2026_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Mer_2026"])
@@ -1349,7 +1367,7 @@ def renderizar():
         TableColumn(field="Mes", title="Mês", formatter=StringFormatter(text_color="#0b1320"), sortable=False)
     ]
     
-    # ============ APENAS ÚLTIMO ANO REALIZADO ============
+    # ============ APENAS ÚLTIMO ANO REALIZADO (2025) ============
     if ano_realizado_ultimo is not None:
         columns_hist.append(TableColumn(
             field=f"Rlzd_{ano_realizado_ultimo}", title=f"RLZD {ano_realizado_ultimo}",
@@ -1359,6 +1377,14 @@ def renderizar():
             field=f"Var_{ano_realizado_ultimo}_Disp", title=f"VAR. % {ano_realizado_ultimo}",
             formatter=HTMLTemplateFormatter(template="<%= value %>")
         ))
+    
+    # ============ REALIZADO DO ANO ATUAL (2026) ============
+    columns_hist.extend([
+        TableColumn(field=f"Rlzd_{ano_atual}", title=f"RLZD {ano_atual}",
+            formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
+        TableColumn(field=f"Var_{ano_atual}_Disp", title=f"VAR. % {ano_atual}",
+            formatter=HTMLTemplateFormatter(template="<%= value %>"))
+    ])
     
     # ============ PROJEÇÕES 2026 ============
     # Separador visual
