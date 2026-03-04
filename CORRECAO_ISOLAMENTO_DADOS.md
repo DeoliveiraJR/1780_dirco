@@ -345,3 +345,44 @@ O problema foi **resolvido** através de:
 ---
 
 **Status**: ✅ **CORRIGIDO E TESTADO**
+
+## 🧪 Testes de Validação
+
+### Teste Automatizado: `test_isolamento.py`
+
+Para validar que o isolamento está funcionando:
+
+```bash
+python test_isolamento.py
+```
+
+**O que o teste faz:**
+1. Cria base compartilhada dummy (se não existir)
+2. Usuário "teste" salva primeira simulação
+3. ✅ Valida que `base_usuario_usr_002.xlsx` foi criado
+4. Usuário "admin" salva sua simulação
+5. ✅ Valida que `base_usuario_usr_001.xlsx` foi criado
+6. ✅ Valida que cada usuário carrega sua própria base
+
+**Resultado esperado:**
+```
+✅ ISOLAMENTO DE DADOS FUNCIONANDO ✅
+Teste carrega sua cópia: base_usuario_usr_002.xlsx
+Admin carrega sua cópia: base_usuario_usr_001.xlsx
+```
+
+### Teste Manual na Interface Streamlit
+
+1. **Login como "teste"** (email: teste@uan.com.br, senha: 123456)
+2. Ir para **Simulador**
+3. Editar uma curva qualquer e salvar como "teste_simulacao_1"
+4. **Logout**
+5. **Login como "admin"** (email: admin@uan.com.br, senha: admin123)
+6. Ir para **Simulador**
+7. **Verificar**: "teste_simulacao_1" NÃO deve aparecer na lista ✓
+8. Navegar para **Arquivo** (ou verificar debug):
+   ```
+   backend/database/uploads/
+   ├── base_usuario_usr_001.xlsx (admin)
+   └── base_usuario_usr_002.xlsx (teste isolado)
+   ```
