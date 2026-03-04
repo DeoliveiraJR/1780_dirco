@@ -1226,9 +1226,16 @@ def renderizar():
     tbl_hist_data["Ajuste_2026"] = [ajs_com_realizado[i] - ana_com_realizado[i] for i in range(12)]
     tbl_hist_data["Ajuste_2027"] = [0.0] * 12  # Sem dados para 2027
     
-    # ============ MARCAR CÉLULAS CONDE REALIZADO SUBSTITUI PROJEÇÃO ============
+    # ============ MARCAR CÉLULAS ONDE REALIZADO SUBSTITUI PROJEÇÃO ============
     # Flag para identificar células com realizado (para colorir diferente)
-    tbl_hist_data["_eh_realizado_2026"] = [mes_idx + 1 <= mes_atual for mes_idx in range(12)]
+    # Marca como realizado APENAS se: (1) mês já passou, (2) existe valor realizado válido e não-zero
+    tbl_hist_data["_eh_realizado_2026"] = [
+        (mes_idx + 1 <= mes_atual) and 
+        (rlzd_ano_atual[mes_idx] is not None) and 
+        (not (isinstance(rlzd_ano_atual[mes_idx], float) and np.isnan(rlzd_ano_atual[mes_idx]))) and
+        (float(rlzd_ano_atual[mes_idx]) != 0)
+        for mes_idx in range(12)
+    ]
     tbl_hist_data["_eh_realizado_2027"] = [False] * 12  # Nenhum mês de 2027 é realizado
     
     # Calcular linhas de MÉDIA e CRESCIMENTO para série histórica
