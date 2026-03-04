@@ -1185,22 +1185,45 @@ def renderizar():
     # ====================== TABELA SÉRIE HISTÓRICA (COM TODOS OS ANOS) ========================
     st.markdown("<h3 style='margin:1rem 0 0.5rem 0; padding-top:1rem; border-top:2px solid #e2e8f0;'>📊 SÉRIE HISTÓRICA • Realizado vs Projeções</h3>", unsafe_allow_html=True)
     
-    # Montar dados da série histórica com TODOS os anos disponíveis
+    # Montar dados da série histórica - APENAS ÚLTIMO ANO REALIZADO (2025)
     tbl_hist_data = dict(Mes=mes_display, Mes_Ord=mes_ord)
     
-    # Adicionar todos os anos realizados com suas variações
-    for ano in anos_realizados:
-        tbl_hist_data[f"Rlzd_{ano}"] = realizados_dict[ano]
-        tbl_hist_data[f"Var_{ano}"]  = variacoes_rlzd[ano]
+    # ============ FILTRAR: APENAS REALIZADO DE 2025 (ÚLTIMO ANO) ============
+    # Encontrar o último ano realizado (que seria 2025)
+    ano_realizado_ultimo = max([a for a in anos_realizados if a < ano_atual], default=None)
     
-    # Adicionar projeções do ano atual
-    tbl_hist_data["Analitica"]  = ana_com_realizado
-    tbl_hist_data["Var_Ana"]    = _variacao_mensal(ana_com_realizado)
-    tbl_hist_data["Mercado"]    = mer_com_realizado
-    tbl_hist_data["Var_Mer"]    = _variacao_mensal(mer_com_realizado)
-    tbl_hist_data["Ajustada"]   = ajs_com_realizado
-    tbl_hist_data["Var_Ajs"]    = _variacao_mensal(ajs_com_realizado)
-    tbl_hist_data["Ajuste"]     = [ajs_com_realizado[i] - ana_com_realizado[i] for i in range(12)]
+    if ano_realizado_ultimo is not None:
+        tbl_hist_data[f"Rlzd_{ano_realizado_ultimo}"] = realizados_dict.get(ano_realizado_ultimo, [0.0]*12)
+        tbl_hist_data[f"Var_{ano_realizado_ultimo}"]  = variacoes_rlzd.get(ano_realizado_ultimo, [0.0]*12)
+        anos_realizado_para_tbl = [ano_realizado_ultimo]
+    else:
+        anos_realizado_para_tbl = []
+    
+    # Adicionar projeções do ano ATUAL (2026)
+    tbl_hist_data["Analitica_2026"]  = ana_com_realizado
+    tbl_hist_data["Var_Ana_2026"]    = _variacao_mensal(ana_com_realizado)
+    tbl_hist_data["Mercado_2026"]    = mer_com_realizado
+    tbl_hist_data["Var_Mer_2026"]    = _variacao_mensal(mer_com_realizado)
+    tbl_hist_data["Ajustada_2026"]   = ajs_com_realizado
+    tbl_hist_data["Var_Ajs_2026"]    = _variacao_mensal(ajs_com_realizado)
+    
+    # ============ ADICIONAR PROJEÇÕES PARA PRÓXIMO ANO (2027) ============
+    # Usa os dados originais (sem substituição por realizado) para as projeções de 2027
+    tbl_hist_data["Analitica_2027"]  = analitica[:]
+    tbl_hist_data["Var_Ana_2027"]    = _variacao_mensal(analitica)
+    tbl_hist_data["Mercado_2027"]    = mercado[:]
+    tbl_hist_data["Var_Mer_2027"]    = _variacao_mensal(mercado)
+    tbl_hist_data["Ajustada_2027"]   = ajustada[:]
+    tbl_hist_data["Var_Ajs_2027"]    = _variacao_mensal(ajustada)
+    
+    # Ajuste (diferença entre Ajustada e Analítica) para ambos os anos
+    tbl_hist_data["Ajuste_2026"] = [ajs_com_realizado[i] - ana_com_realizado[i] for i in range(12)]
+    tbl_hist_data["Ajuste_2027"] = [ajustada[i] - analitica[i] for i in range(12)]
+    
+    # ============ MARCAR CÉLULAS DONDE REALIZADO SUBSTITIU PROJEÇÃO ============
+    # Flag para identificar células com realizado (para colorir diferente)
+    tbl_hist_data["_eh_realizado_2026"] = [mes_idx + 1 <= mes_atual for mes_idx in range(12)]
+    tbl_hist_data["_eh_realizado_2027"] = [False] * 12  # Nenhum mês de 2027 é realizado
     
     # Calcular linhas de MÉDIA e CRESCIMENTO para série histórica
     def _mean_safe(v):
@@ -1213,27 +1236,46 @@ def renderizar():
         return float(v[-1] - v[0])
 
     media_row_hist = {"Mes": "MÉDIA / VAR%", "Mes_Ord": 13}
-    for ano in anos_realizados:
-        media_row_hist[f"Rlzd_{ano}"] = _mean_safe(tbl_hist_data[f"Rlzd_{ano}"])
-        media_row_hist[f"Var_{ano}"]  = _mean_safe(tbl_hist_data[f"Var_{ano}"])
-    media_row_hist["Analitica"] = _mean_safe(tbl_hist_data["Analitica"])
-    media_row_hist["Var_Ana"]   = _mean_safe(tbl_hist_data["Var_Ana"])
-    media_row_hist["Mercado"]   = _mean_safe(tbl_hist_data["Mercado"])
-    media_row_hist["Var_Mer"]   = _mean_safe(tbl_hist_data["Var_Mer"])
-    media_row_hist["Ajustada"]  = _mean_safe(tbl_hist_data["Ajustada"])
-    media_row_hist["Var_Ajs"]   = _mean_safe(tbl_hist_data["Var_Ajs"])
-    media_row_hist["Ajuste"]    = _mean_safe(tbl_hist_data["Ajuste"])
+    
+    # MÉDIA: apenas do último ano realizado
+    if ano_realizado_ultimo is not None:
+        media_row_hist[f"Rlzd_{ano_realizado_ultimo}"] = _mean_safe(tbl_hist_data[f"Rlzd_{ano_realizado_ultimo}"])
+        media_row_hist[f"Var_{ano_realizado_ultimo}"]  = _mean_safe(tbl_hist_data[f"Var_{ano_realizado_ultimo}"])
+    
+    # MÉDIA: projeções 2026 e 2027
+    media_row_hist["Analitica_2026"] = _mean_safe(tbl_hist_data["Analitica_2026"])
+    media_row_hist["Var_Ana_2026"]   = _mean_safe(tbl_hist_data["Var_Ana_2026"])
+    media_row_hist["Mercado_2026"]   = _mean_safe(tbl_hist_data["Mercado_2026"])
+    media_row_hist["Var_Mer_2026"]   = _mean_safe(tbl_hist_data["Var_Mer_2026"])
+    media_row_hist["Ajustada_2026"]  = _mean_safe(tbl_hist_data["Ajustada_2026"])
+    media_row_hist["Var_Ajs_2026"]   = _mean_safe(tbl_hist_data["Var_Ajs_2026"])
+    media_row_hist["Ajuste_2026"]    = _mean_safe(tbl_hist_data["Ajuste_2026"])
+    
+    media_row_hist["Analitica_2027"] = _mean_safe(tbl_hist_data["Analitica_2027"])
+    media_row_hist["Var_Ana_2027"]   = _mean_safe(tbl_hist_data["Var_Ana_2027"])
+    media_row_hist["Mercado_2027"]   = _mean_safe(tbl_hist_data["Mercado_2027"])
+    media_row_hist["Var_Mer_2027"]   = _mean_safe(tbl_hist_data["Var_Mer_2027"])
+    media_row_hist["Ajustada_2027"]  = _mean_safe(tbl_hist_data["Ajustada_2027"])
+    media_row_hist["Var_Ajs_2027"]   = _mean_safe(tbl_hist_data["Var_Ajs_2027"])
+    media_row_hist["Ajuste_2027"]    = _mean_safe(tbl_hist_data["Ajuste_2027"])
 
     cres_row_hist = {"Mes": "CRESC. VOL", "Mes_Ord": 14}
-    for ano in anos_realizados:
-        delta = _delta_first_last(tbl_hist_data[f"Rlzd_{ano}"])
-        cres_row_hist[f"Rlzd_{ano}"] = delta
-        cres_row_hist[f"Var_{ano}"]  = 1.0 if delta > 0 else (-1.0 if delta < 0 else 0.0)
-    for field_val, field_var in [("Analitica","Var_Ana"),("Mercado","Var_Mer"),("Ajustada","Var_Ajs")]:
-        delta = _delta_first_last(tbl_hist_data[field_val])
-        cres_row_hist[field_val] = delta
-        cres_row_hist[field_var] = 1.0 if delta > 0 else (-1.0 if delta < 0 else 0.0)
-    cres_row_hist["Ajuste"] = _delta_first_last(tbl_hist_data["Ajuste"])
+    
+    # CRESCIMENTO: apenas do último ano realizado
+    if ano_realizado_ultimo is not None:
+        delta = _delta_first_last(tbl_hist_data[f"Rlzd_{ano_realizado_ultimo}"])
+        cres_row_hist[f"Rlzd_{ano_realizado_ultimo}"] = delta
+        cres_row_hist[f"Var_{ano_realizado_ultimo}"]  = 1.0 if delta > 0 else (-1.0 if delta < 0 else 0.0)
+    
+    # CRESCIMENTO: projeções
+    for year_suf in ["2026", "2027"]:
+        for field_val, field_var in [(f"Analitica_{year_suf}", f"Var_Ana_{year_suf}"), 
+                                       (f"Mercado_{year_suf}", f"Var_Mer_{year_suf}"),
+                                       (f"Ajustada_{year_suf}", f"Var_Ajs_{year_suf}")]:
+            delta = _delta_first_last(tbl_hist_data[field_val])
+            cres_row_hist[field_val] = delta
+            cres_row_hist[field_var] = 1.0 if delta > 0 else (-1.0 if delta < 0 else 0.0)
+        cres_row_hist[f"Ajuste_{year_suf}"] = _delta_first_last(tbl_hist_data[f"Ajuste_{year_suf}"])
 
     # Adicionar linhas de média e crescimento
     for k in list(tbl_hist_data.keys()):
@@ -1241,41 +1283,104 @@ def renderizar():
             tbl_hist_data[k] = tbl_hist_data[k] + [media_row_hist["Mes"], cres_row_hist["Mes"]]
         elif k == "Mes_Ord":
             tbl_hist_data[k] = tbl_hist_data[k] + [media_row_hist["Mes_Ord"], cres_row_hist["Mes_Ord"]]
+        elif k.startswith("_eh_realizado"):
+            # Marcar linhas de média/crescimento como não-realizado
+            tbl_hist_data[k] = tbl_hist_data[k] + [False, False]
         else:
             tbl_hist_data[k] = tbl_hist_data[k] + [media_row_hist.get(k, 0.0), cres_row_hist.get(k, 0.0)]
 
     # Criar colunas de display para variações formatadas com cores
-    for ano in anos_realizados:
-        if f"Var_{ano}" in tbl_hist_data:
-            tbl_hist_data[f"Var_{ano}_Disp"] = _build_var_disp_column(tbl_hist_data[f"Var_{ano}"])
-    tbl_hist_data["Var_Ana_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Ana"])
-    tbl_hist_data["Var_Mer_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Mer"])
-    tbl_hist_data["Var_Ajs_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Ajs"])
+    if ano_realizado_ultimo is not None:
+        tbl_hist_data[f"Var_{ano_realizado_ultimo}_Disp"] = _build_var_disp_column(tbl_hist_data[f"Var_{ano_realizado_ultimo}"])
+    
+    tbl_hist_data["Var_Ana_2026_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Ana_2026"])
+    tbl_hist_data["Var_Mer_2026_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Mer_2026"])
+    tbl_hist_data["Var_Ajs_2026_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Ajs_2026"])
+    
+    tbl_hist_data["Var_Ana_2027_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Ana_2027"])
+    tbl_hist_data["Var_Mer_2027_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Mer_2027"])
+    tbl_hist_data["Var_Ajs_2027_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Ajs_2027"])
+
+    # ============ CRIAR DISPLAY COM FORMATAÇÃO DE REALIZADO ============
+    def _format_value_with_realizado(values_list, eh_realizado_list):
+        """Formata valores mostrando com fundo amarelo quando é realizado."""
+        result = []
+        for i, (val, eh_real) in enumerate(zip(values_list, eh_realizado_list)):
+            if val is None or (isinstance(val, float) and np.isnan(val)):
+                result.append("—")
+            else:
+                # Formata valor (M para milhões, B para bilhões)
+                abs_val = abs(val)
+                if abs_val >= 1e9:
+                    formatted = f"{val/1e9:.1f}B"
+                elif abs_val >= 1e6:
+                    formatted = f"{val/1e6:.1f}M"
+                else:
+                    formatted = f"{int(val)}"
+                
+                # Se é realizado, adiciona estilo de fundo amarelo
+                if eh_real and i < 12:  # Apenas linhas de meses, não média/crescimento
+                    result.append(f'<span style="background-color: #fef08a; padding: 2px 6px; border-radius: 3px; font-weight: 600; color: #92400e;">{formatted}</span>')
+                else:
+                    result.append(formatted)
+        return result
+    
+    # Aplicar formatação para 2026 (onde pode ter realizado)
+    tbl_hist_data["Analitica_2026_Disp"] = _format_value_with_realizado(
+        tbl_hist_data["Analitica_2026"], 
+        tbl_hist_data["_eh_realizado_2026"]
+    )
+    tbl_hist_data["Mercado_2026_Disp"] = _format_value_with_realizado(
+        tbl_hist_data["Mercado_2026"], 
+        tbl_hist_data["_eh_realizado_2026"]
+    )
+    tbl_hist_data["Ajustada_2026_Disp"] = _format_value_with_realizado(
+        tbl_hist_data["Ajustada_2026"], 
+        tbl_hist_data["_eh_realizado_2026"]
+    )
 
     tbl_hist_src = ColumnDataSource(tbl_hist_data)
+
+    # TEMPLATE para célula com realizado - formato simple já que estamos usando _Disp
+    REALIZADO_TMPL = """<%= value %>"""
 
     # Construir colunas para série histórica
     columns_hist = [
         TableColumn(field="Mes", title="Mês", formatter=StringFormatter(text_color="#0b1320"), sortable=False)
     ]
-    for ano in anos_realizados:
+    
+    # ============ APENAS ÚLTIMO ANO REALIZADO ============
+    if ano_realizado_ultimo is not None:
         columns_hist.append(TableColumn(
-            field=f"Rlzd_{ano}", title=f"RLZD {ano}",
+            field=f"Rlzd_{ano_realizado_ultimo}", title=f"RLZD {ano_realizado_ultimo}",
             formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)
         ))
         columns_hist.append(TableColumn(
-            field=f"Var_{ano}_Disp", title=f"VAR. % {ano}",
+            field=f"Var_{ano_realizado_ultimo}_Disp", title=f"VAR. % {ano_realizado_ultimo}",
             formatter=HTMLTemplateFormatter(template="<%= value %>")
         ))
     
+    # ============ PROJEÇÕES 2026 ============
+    # Separador visual
     columns_hist.extend([
-        TableColumn(field="Analitica", title="Analítica", formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
-        TableColumn(field="Var_Ana_Disp", title="Var. % Anal", formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field="Mercado", title="Mercado", formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
-        TableColumn(field="Var_Mer_Disp", title="Var. % Merc", formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field="Ajustada", title="Ajustada", formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
-        TableColumn(field="Var_Ajs_Disp", title="Var. % Ajs", formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field="Ajuste", title="Ajuste (Δ)", formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:600;"><%= (value==null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(value)) %></span>'))
+        TableColumn(field="Analitica_2026_Disp", title="📅 2026 | Analítica", formatter=HTMLTemplateFormatter(template=REALIZADO_TMPL)),
+        TableColumn(field="Var_Ana_2026_Disp", title="Var. % Anal", formatter=HTMLTemplateFormatter(template="<%= value %>")),
+        TableColumn(field="Mercado_2026_Disp", title="Mercado", formatter=HTMLTemplateFormatter(template=REALIZADO_TMPL)),
+        TableColumn(field="Var_Mer_2026_Disp", title="Var. % Merc", formatter=HTMLTemplateFormatter(template="<%= value %>")),
+        TableColumn(field="Ajustada_2026_Disp", title="Ajustada", formatter=HTMLTemplateFormatter(template=REALIZADO_TMPL)),
+        TableColumn(field="Var_Ajs_2026_Disp", title="Var. % Ajs", formatter=HTMLTemplateFormatter(template="<%= value %>")),
+        TableColumn(field="Ajuste_2026", title="Ajuste (Δ)", formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:600;"><%= (value==null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(value)) %></span>'))
+    ])
+    
+    # ============ PROJEÇÕES 2027 ============
+    columns_hist.extend([
+        TableColumn(field="Analitica_2027", title="📅 2027 | Analítica", formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
+        TableColumn(field="Var_Ana_2027_Disp", title="Var. % Anal", formatter=HTMLTemplateFormatter(template="<%= value %>")),
+        TableColumn(field="Mercado_2027", title="Mercado", formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
+        TableColumn(field="Var_Mer_2027_Disp", title="Var. % Merc", formatter=HTMLTemplateFormatter(template="<%= value %>")),
+        TableColumn(field="Ajustada_2027", title="Ajustada", formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
+        TableColumn(field="Var_Ajs_2027_Disp", title="Var. % Ajs", formatter=HTMLTemplateFormatter(template="<%= value %>")),
+        TableColumn(field="Ajuste_2027", title="Ajuste (Δ)", formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:600;"><%= (value==null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(value)) %></span>'))
     ])
 
     tbl_hist = DataTable(
@@ -1283,7 +1388,7 @@ def renderizar():
         columns=columns_hist,
         index_position=None,
         sizing_mode=None,  # Remove stretch_width para dar controle total da altura
-        width=8000,
+        width=10000,  # Aumentado para acomodar projeções de 2026 e 2027
         height=1800,
         editable=False,
         reorderable=False,
