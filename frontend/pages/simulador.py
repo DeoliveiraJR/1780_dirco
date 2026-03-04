@@ -1420,8 +1420,8 @@ def renderizar():
         source=tbl_hist_src,
         columns=columns_hist,
         index_position=None,
-        sizing_mode=None,  # Remove stretch_width para dar controle total da altura
-        width=10000,  # Aumentado para acomodar projeções de 2026 e 2027
+        sizing_mode="stretch_width",  # Expande para ocupar toda a largura disponível
+        width=10000,  # Mantém fallback, mas stretched width é prioritário
         height=1800,
         editable=False,
         reorderable=False,
