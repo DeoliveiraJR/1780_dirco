@@ -1,89 +1,63 @@
 # 🏦 UAN Dashboard - Sistema de Projeções Financeiras
 
-Sistema de análise e simulação de projeções financeiras desenvolvido para equipe da DIRCO. A aplicação permite visualizar, validar e ajustar projeções de resultados financeiros de forma interativa.
+Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário** e **controle de permissões**.
 
 ---
 
 ## 📋 Sobre o Projeto
 
-O **UAN Dashboard** é uma aplicação web desenvolvida em **Streamlit** que centraliza a gestão de projeções financeiras. O sistema foi projetado para atender analistas de controladoria, oferecendo:
+O **UAN Dashboard** é uma aplicação web desenvolvida em **Streamlit** que centraliza a gestão de projeções financeiras com funcionalidades avançadas:
 
-- **Upload e validação** de dados financeiros via Excel
-- **Dashboard analítico** com KPIs e visualizações interativas
-- **Simulador de projeções** com ajustes manuais em tempo real
-- **Persistência de simulações** individuais por usuário
-- **Autenticação** para controle de acesso
-
-### Arquitetura
-
-O projeto segue uma arquitetura modular separando frontend e backend:
-
-```
-├── frontend/          # Aplicação Streamlit (UI/UX)
-│   ├── pages/         # Páginas da aplicação
-│   ├── components/    # Componentes visuais (gráficos)
-│   ├── services/      # Lógica de agregações e cálculos
-│   └── utils_ext/     # Utilitários e constantes
-├── backend/           # API Flask (serviços de dados)
-│   ├── routes/        # Endpoints da API
-│   └── services/      # Serviços de processamento
-└── data/              # Dados mockados para desenvolvimento
-```
+- ✅ **Upload e validação** de arquivos Excel
+- ✅ **Dashboard analítico** com KPIs e visualizações interativas
+- ✅ **Simulador de projeções** com ajustes manuais em tempo real
+- ✅ **Persistência durável** de simulações por usuário
+- ✅ **Isolamento de dados** entre usuários
+- ✅ **Autenticação** com controle de permissões (Admin + Usuário)
+- ✅ **Base compartilhada** para todos os usuários
+- ✅ **Sincronização automática** entre login/logout
 
 ---
 
 ## 🚀 Principais Funcionalidades
 
-### 📤 Upload de Dados
+### 📤 **Upload de Dados (Admin Only)**
 - Importação de arquivos Excel (.xlsx) com projeções financeiras
 - Validação automática de colunas obrigatórias
 - Normalização de dados (datas, meses, categorias)
-- Suporte a múltiplos formatos de nomenclatura
+- Apenas administradores podem fazer upload
+- Base salva e compartilhada com todos os usuários
 
-### 📊 Dashboard de Análises
+### 📊 **Dashboard de Análises**
 - Visualização de KPIs principais (valor total, realizado, acurácia)
 - Gráficos interativos de evolução mensal
 - Filtros por cliente, categoria e produto
 - Comparativo entre períodos
 
-### 🎯 Simulador de Projeções
+### 🎯 **Simulador de Projeções**
 - Curvas de projeção: **Analítica**, **Mercado** e **Ajustada**
-- Edição interativa de valores mensais
-- Comparativo visual entre anos realizados e projeções
+- Edição interativa de valores mensais (drag-and-drop)
+- Período contínuo de 12 meses (cruza anos quando necessário)
 - Cálculo automático de variações mensais
-- Suporte a ajustes por categoria/produto
+- **Cada usuário tem suas curvas isoladas e persistidas**
 
-### 👤 Perfil e Autenticação
-- Sistema de login para controle de acesso
-- Perfil de usuário com simulações salvas
-- Histórico de alterações
+### 👤 **Autenticação e Controle de Acesso**
+- Sistema de login seguro
+- Dois tipos de usuários: **Admin** e **Usuário Comum**
+- Perfil com simulações salvas automaticamente
+
+### 🔒 **Isolamento Multi-Usuário**
+- Cada usuário tem sua própria cópia da base ao editar
+- Dados isolados completamente entre usuários
+- Sincronização automática ao login/logout
 
 ---
 
 ## 🛠️ Stack Tecnológica
 
-### Frontend
-| Tecnologia | Descrição |
-|------------|-----------|
-| **Streamlit** | Framework principal para aplicação web interativa |
-| **Bokeh** | Gráficos interativos e editáveis (simulador) |
-| **Plotly** | Visualizações do dashboard |
-| **Pandas** | Manipulação e análise de dados |
-| **NumPy** | Cálculos numéricos |
-| **Pillow** | Processamento de imagens |
-
-### Backend
-| Tecnologia | Descrição |
-|------------|-----------|
-| **Flask** | API REST para serviços de dados |
-| **Flask-CORS** | Suporte a requisições cross-origin |
-| **OpenPyXL** | Leitura de arquivos Excel |
-
-### Infraestrutura
-| Tecnologia | Descrição |
-|------------|-----------|
-| **Docker** | Containerização da aplicação |
-| **Python 3.11** | Runtime |
+- **Frontend**: Streamlit, Bokeh, Plotly, Pandas, NumPy, openpyxl
+- **Backend**: Python com persistência em arquivos (mock database)
+- **Infraestrutura**: Docker, Python 3.11+
 
 ---
 
@@ -91,82 +65,174 @@ O projeto segue uma arquitetura modular separando frontend e backend:
 
 ### Pré-requisitos
 - Python 3.11+
-- Docker (opcional)
+- pip
 
 ### Instalação Local
 
 ```bash
-# Clonar repositório
+# 1. Clonar repositório
 git clone https://github.com/DeoliveiraJR/1780_dirco.git
 cd 1780_dirco
 
-# Criar ambiente virtual
+# 2. Criar ambiente virtual
 python -m venv .venv
 source .venv/bin/activate  # Linux/Mac
 # .venv\Scripts\activate   # Windows
 
-# Instalar dependências
+# 3. Instalar dependências
 pip install -r requirements.txt
 
-# Executar aplicação
+# 4. Executar aplicação
 streamlit run frontend/app.py --server.port=8503
 ```
+
+A aplicação estará disponível em: **http://localhost:8503**
 
 ### Execução com Docker
 
 ```bash
-# Construir imagem
 docker build -t uan-dashboard .
-
-# Executar container
 docker run -p 8503:8503 uan-dashboard
 ```
 
-A aplicação estará disponível em: `http://localhost:8503`
+---
+
+## 🔐 Credenciais de Teste
+
+### Admin (Pode fazer upload e criar simulações)
+```
+Email: admin@uan.com.br
+Senha: admin123
+```
+
+### Usuário Comum (Pode criar simulações, não pode fazer upload)
+```
+Email: teste@uan.com.br
+Senha: 123456
+```
 
 ---
 
-## 📂 Estrutura de Dados
+## 📂 Estrutura do Projeto
 
-O sistema espera arquivos Excel com as seguintes colunas:
-
-| Coluna | Descrição |
-|--------|-----------|
-| `DATA_COMPLETA` | Data de referência |
-| `MES` | Mês (nome ou número) |
-| `ANO` | Ano de referência |
-| `CATEGORIA` | Categoria do produto |
-| `PRODUTO` | Nome do produto |
-| `CURVA_REALIZADO` | Valores realizados |
-| `PROJETADO_ANALITICO` | Projeção analítica |
-| `PROJETADO_MERCADO` | Projeção de mercado |
-| `PROJETADO_AJUSTADO` | Projeção ajustada |
-| `TIPO_CLIENTE` | Tipo de cliente (opcional) |
+```
+/workspaces/1780_dirco/
+├── README.md                          # 📖 Documentação completa
+├── PROGRESSO_PROJETO.md               # 📋 Histórico de implementações
+├── frontend/                          # 🎨 Interface Streamlit
+│   ├── app.py                         # Aplicação principal
+│   ├── pages/                         # Páginas
+│   ├── components/                    # Componentes visuais
+│   ├── services/                      # Agregações de dados
+│   └── utils_ext/                     # Utilitários
+├── backend/                           # ⚙️ Backend e Persistência
+│   ├── database.py                    # 🗄️ Mock Database
+│   ├── database/
+│   │   ├── users.json                 # Usuários cadastrados
+│   │   ├── uploads/                   # Base compartilhada
+│   │   ├── simulacoes/                # Simulações por usuário
+│   │   └── metadata/                  # Auditoria
+│   └── app/                           # Backend Flask (opcional)
+├── requirements.txt                   # Dependências
+├── test_isolamento.py                 # Testes de isolamento
+└── test_database.py                   # Testes automatizados
+```
 
 ---
 
-## 🔮 Roadmap
+## 🔄 Sistema de Persistência de Dados
+
+### Arquitetura Implementada
+
+O sistema utiliza um **mock database em arquivos** (pronto para migração a BD real):
+
+**Base Compartilhada** (Todos veem)
+```
+backend/database/uploads/base_dados_compartilhada.xlsx
+```
+
+**Bases Personalizadas por Usuário** (Isolamento)
+```
+backend/database/uploads/base_usuario_{usuario_id}.xlsx
+```
+
+**Simulações Individuais** (Persiste entre logins)
+```
+backend/database/simulacoes/{usuario_id}_simulacoes.json
+```
+
+### Fluxo de Isolamento
+
+```
+1. Usuário faz login → carrega base_dados_compartilhada.xlsx
+2. Usuário edita curva e salva → sistema cria base_usuario_XXX.xlsx
+3. Próximos logins → carregam sua cópia pessoal
+4. ✅ Resultado: ISOLAMENTO COMPLETO
+```
+
+---
+
+## 🔐 Controle de Acesso
+
+| Feature | Admin | Usuário Comum |
+|---------|-------|---------------|
+| Login | ✅ | ✅ |
+| Fazer Upload | ✅ | ❌ |
+| Acessar Simulador | ✅ | ✅ |
+| Ver Próprias Simulações | ✅ | ✅ |
+| Ver Simulações de Outros | ❌ | ❌ |
+
+---
+
+## 🧪 Testes Automatizados
+
+```bash
+# Teste de isolamento
+python test_isolamento.py
+# Resultado: ✅ ISOLAMENTO DE DADOS FUNCIONANDO ✅
+
+# Teste completo
+python test_database.py
+# Resultado: ✅ TODOS OS TESTES PASSARAM!
+```
+
+---
+
+## 📊 Estrutura de Dados (Excel)
+
+| Coluna | Descrição | Exemplo |
+|--------|-----------|---------|
+| `DATA_COMPLETA` | Data de referência | 01/01/2026 |
+| `MES` | Mês (nome ou número) | janeiro / 1 |
+| `ANO` | Ano de referência | 2026 |
+| `CATEGORIA` | Categoria do produto | Eletrônicos |
+| `PRODUTO` | Nome do produto | Notebook X1 |
+| `CURVA_REALIZADO` | Valores realizados | 1500 |
+| `PROJETADO_ANALITICO` | Projeção analítica | 1600 |
+| `PROJETADO_MERCADO` | Projeção de mercado | 1550 |
+| `PROJETADO_AJUSTADO` | Projeção ajustada | 1700 |
+
+---
+
+## 🔮 Roadmap Futuro
 
 - [ ] Integração com banco de dados PostgreSQL
-- [ ] Persistência de simulações no backend
-- [ ] Exportação de relatórios em PDF
 - [ ] Sistema de notificações
+- [ ] Exportação de relatórios em PDF/CSV
 - [ ] API de integração com ERPs
-- [ ] Dashboards personalizáveis por usuário
+- [ ] Dashboards personalizáveis
+- [ ] Versionamento de simulações
+- [ ] Backup automático de bases personalizadas
 
 ---
 
-## 👥 Equipe
+## 📚 Documentação Adicional
 
-Desenvolvido para a equipe de **DIRCO** - Sistema de análise e simulação de projeções financeiras.
-
----
-
-## 📄 Licença
-
-Este projeto é de uso interno e proprietário.
+- **[PROGRESSO_PROJETO.md](./PROGRESSO_PROJETO.md)** - Histórico completo de implementações
+- **[QUICKSTART.md](./QUICKSTART.md)** - Guia rápido para começar
 
 ---
 
-> **Versão:** 1.0.0-dev  
-> **Última atualização:** Fevereiro 2026
+> **Versão:** 1.2.0  
+> **Status:** ✅ Produção Pronto  
+> **Última atualização:** Março 2026
