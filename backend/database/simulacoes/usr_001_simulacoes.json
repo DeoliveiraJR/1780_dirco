@@ -1,0 +1,26 @@
+[
+  {
+    "id": "Todos::Outra Categoria::Outro Produto_20260304204443",
+    "combo_key": "Todos::Outra Categoria::Outro Produto",
+    "cliente": "Todos",
+    "categoria": "Outra Categoria",
+    "produto": "Outro Produto",
+    "curva": [
+      50,
+      50,
+      50,
+      50,
+      50,
+      50,
+      50,
+      50,
+      50,
+      50,
+      50,
+      50
+    ],
+    "nome": "Simulação Todos::Outra Categoria::Outro Produto",
+    "data_criacao": "2026-03-04T20:44:43.935885",
+    "data_atualizacao": "2026-03-04T20:44:43.935891"
+  }
+]

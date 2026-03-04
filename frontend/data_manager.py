@@ -6,8 +6,9 @@ Armazena dados do upload, simulações e curvas ajustadas persistentes
 import pandas as pd
 import streamlit as st
 import json
+import os
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 
 
 # ============================================================================
@@ -163,8 +164,23 @@ def set_dados_upload(df):
 
 
 def get_dados_upload():
-    """Recupera dados do upload (com curvas ajustadas aplicadas)"""
-    return st.session_state.dados_upload
+    """
+    Recupera dados do upload (com curvas ajustadas aplicadas).
+    Se não houver dados em session_state, tenta carregar da base compartilhada.
+    """
+    # Se tem dados em session_state, retorna
+    if st.session_state.dados_upload is not None and not st.session_state.dados_upload.empty:
+        return st.session_state.dados_upload
+    
+    # Senão, tenta carregar da base compartilhada
+    df_compartilhada = carregar_base_dados_compartilhada()
+    if df_compartilhada is not None and not df_compartilhada.empty:
+        # Cache no session_state
+        st.session_state.dados_upload = df_compartilhada
+        st.session_state.dados_upload_original = df_compartilhada.copy()
+        return df_compartilhada
+    
+    return None
 
 
 def get_dados_upload_original():
@@ -678,6 +694,200 @@ def gerar_dados_exemplo():
                 })
     
     return pd.DataFrame(dados)
+
+
+# ============================================================================
+# INTEGRAÇÃO COM MOCK DATABASE (PERSISTÊNCIA EM ARQUIVOS)
+# ============================================================================
+def carregar_base_dados_compartilhada():
+    """
+    Carrega a base de dados compartilhada do arquivo mockado.
+    Todos os usuários veem a mesma base.
+    
+    Returns:
+        DataFrame com dados da base ou None
+    """
+    try:
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+        from database import carregar_base_dados_compartilhada as db_carregar
+        
+        df = db_carregar()
+        if df is not None:
+            # Garante coluna PROJETADO_AJUSTADO existe
+            if "PROJETADO_AJUSTADO" not in df.columns:
+                if "PROJETADO_ANALITICO" in df.columns:
+                    df["PROJETADO_AJUSTADO"] = df["PROJETADO_ANALITICO"].copy()
+                else:
+                    df["PROJETADO_AJUSTADO"] = 0.0
+            return df
+        return None
+    except Exception as e:
+        print(f"[DATA_MANAGER] Erro ao carregar base compartilhada: {e}")
+        return None
+
+
+def salvar_upload_admin(arquivo_bytes: bytes, nome_arquivo: str) -> Tuple[bool, str]:
+    """
+    Salva um upload feito por admin na base de dados compartilhada.
+    Atualiza para todos os usuários.
+    
+    Args:
+        arquivo_bytes: Bytes do arquivo Excel
+        nome_arquivo: Nome do arquivo original
+        
+    Returns:
+        (sucesso, mensagem)
+    """
+    try:
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+        from database import salvar_upload_admin as db_salvar, eh_admin, obter_usuario_por_email
+        
+        usuario_email = st.session_state.get("usuario_email", "")
+        usuario_id = st.session_state.get("usuario_id", "")
+        
+        if not usuario_email or not usuario_id:
+            return False, "Usuário não autenticado"
+        
+        # Valida se é admin via database
+        usuario = obter_usuario_por_email(usuario_email)
+        if not usuario or not eh_admin(usuario):
+            return False, "Apenas administradores podem fazer upload"
+        
+        # Salva no database
+        sucesso, msg = db_salvar(arquivo_bytes, nome_arquivo, usuario_id)
+        
+        if sucesso:
+            # Invalida cache do session_state para forçar recarga
+            st.session_state.dados_upload = None
+            st.session_state.dados_upload_original = None
+            st.session_state._curvas_aplicadas_sessao = False
+            print(f"[DATA_MANAGER] Upload salvo com sucesso: {nome_arquivo}")
+        
+        return sucesso, msg
+        
+    except Exception as e:
+        return False, f"Erro ao salvar upload: {str(e)}"
+
+
+def eh_usuario_admin() -> bool:
+    """Verifica se o usuário autenticado é um admin"""
+    try:
+        return st.session_state.get("usuario_role") == "admin"
+    except:
+        return False
+
+
+def sincronizar_curva_com_arquivo(cliente: str, categoria: str, 
+                                  produto: str, curva: List[float]) -> bool:
+    """
+    Sincroniza uma curva ajustada com o arquivo de simulações do usuário.
+    Salva em: backend/database/simulacoes/{usuario_id}_simulacoes.json
+    
+    Args:
+        cliente: Nome do cliente
+        categoria: Categoria do produto
+        produto: Nome do produto
+        curva: Lista com 12 valores
+        
+    Returns:
+        True se sincronizado com sucesso
+    """
+    try:
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+        from database import salvar_curva_usuario
+        
+        usuario_id = st.session_state.get("usuario_id", "")
+        usuario_nome = st.session_state.get("usuario_nome", "")
+        
+        if not usuario_id:
+            print("[DATA_MANAGER] Usuário não autenticado, não sincronizando")
+            return False
+        
+        # Salva no arquivo
+        sucesso, msg = salvar_curva_usuario(
+            usuario_id=usuario_id,
+            cliente=cliente or "Todos",
+            categoria=categoria,
+            produto=produto,
+            curva=curva
+        )
+        
+        if sucesso:
+            print(f"[DATA_MANAGER] Curva sincronizada com arquivo: {usuario_nome}/{categoria}/{produto}")
+        
+        return sucesso
+        
+    except Exception as e:
+        print(f"[DATA_MANAGER] Erro ao sincronizar curva: {e}")
+        return False
+
+
+def carregar_curvas_usuario_do_arquivo() -> Dict[str, List[float]]:
+    """
+    Carrega todas as curvas salvas do usuário atual do arquivo.
+    
+    Returns:
+        Dicionário {combo_key: lista_com_12_valores}
+    """
+    try:
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+        from database import carregar_curvas_usuario
+        
+        usuario_id = st.session_state.get("usuario_id", "")
+        
+        if not usuario_id:
+            return {}
+        
+        simulacoes = carregar_curvas_usuario(usuario_id)
+        
+        # Converte para dicionário de combo_key -> curva
+        resultado = {}
+        for sim in simulacoes:
+            combo_key = sim.get("combo_key")
+            curva = sim.get("curva")
+            if combo_key and curva:
+                resultado[combo_key] = curva
+        
+        return resultado
+        
+    except Exception as e:
+        print(f"[DATA_MANAGER] Erro ao carregar curvas do arquivo: {e}")
+        return {}
+
+
+def restaurar_curvas_de_arquivo() -> int:
+    """
+    Restaura todas as curvas do usuário do arquivo para o session_state.
+    Útil ao fazer login ou recarregar a página.
+    
+    Returns:
+        Quantidade de curvas restauradas
+    """
+    try:
+        curvas_arquivo = carregar_curvas_usuario_do_arquivo()
+        
+        if not curvas_arquivo:
+            return 0
+        
+        for combo_key, curva in curvas_arquivo.items():
+            # Reconstitui os dados
+            partes = combo_key.split("::")
+            if len(partes) >= 3:
+                cliente, categoria, produto = partes[0], partes[1], partes[2]
+                
+                # Salva no session_state (compatibilidade)
+                salvar_curva_ajustada(cliente, categoria, produto, curva)
+        
+        print(f"[DATA_MANAGER] {len(curvas_arquivo)} curvas restauradas do arquivo")
+        return len(curvas_arquivo)
+        
+    except Exception as e:
+        print(f"[DATA_MANAGER] Erro ao restaurar curvas: {e}")
+        return 0
 
 
 # Inicializar ao importar

@@ -1,0 +1,24 @@
+[
+  {
+    "id": "usr_001",
+    "email": "admin@uan.com.br",
+    "nome": "Admin DIRCO",
+    "senha": "admin123",
+    "role": "admin",
+    "departamento": "DIRCO",
+    "funcao": "Administrador",
+    "data_criacao": "2026-01-01T00:00:00",
+    "ativo": true
+  },
+  {
+    "id": "usr_002",
+    "email": "teste@uan.com.br",
+    "nome": "Analista Teste",
+    "senha": "123456",
+    "role": "usuario",
+    "departamento": "Análise de Dados",
+    "funcao": "Analista de Projeções",
+    "data_criacao": "2026-02-01T00:00:00",
+    "ativo": true
+  }
+]

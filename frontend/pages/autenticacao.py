@@ -3,10 +3,17 @@ import time
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..', 'backend'))
 
 from styles import CORES, CSS_CUSTOM, aplicar_tema
+from database import validar_login, inicializar_database, carregar_usuarios
 
 def renderizar():
+    # Inicializa database na primeira execução
+    if "db_inicializado" not in st.session_state:
+        inicializar_database()
+        st.session_state.db_inicializado = True
+    
     if "autenticado" not in st.session_state:
         st.session_state.autenticado = False
 
@@ -49,33 +56,57 @@ def renderizar():
         
         if btn_login:
             if email and senha:
-                if email.lower() == "teste@uan.com.br" and senha == "123456":
+                # Valida usando o sistema de database mockado
+                autenticado, usuario = validar_login(email, senha)
+                
+                if autenticado:
                     st.session_state.autenticado = True
+                    st.session_state.usuario_email = email
+                    st.session_state.usuario_id = usuario.get("id")
+                    st.session_state.usuario_nome = usuario.get("nome")
+                    st.session_state.usuario_role = usuario.get("role")
+                    st.session_state.usuario_departamento = usuario.get("departamento")
+                    # Compatibilidade com código antigo
                     st.session_state.usuario = email
-                    st.success("Login realizado com sucesso!")
+                    
+                    role_display = "Administrador" if usuario.get("role") == "admin" else "Usuário"
+                    st.success(f"✓ Login realizado! Bem-vindo, {usuario.get('nome')} ({role_display})")
                     time.sleep(1)
                     st.rerun()
                 else:
-                    st.error("Email ou senha invalidos")
+                    st.error("❌ Email ou senha inválidos")
             else:
-                st.warning("Preencha email e senha")
+                st.warning("⚠️ Preencha email e senha")
         
         if btn_register:
-            st.info("Registro em desenvolvimento")
+            st.info("📝 Registro em desenvolvimento")
         
         st.markdown("---")
         
-        st.markdown("### Credenciais de Teste")
-        st.code("Email: teste@uan.com.br")
-        st.code("Senha: 123456")
+        st.markdown("### 📋 Credenciais de Teste")
+        
+        col_admin, col_user = st.columns(2)
+        
+        with col_admin:
+            st.markdown("**👨‍💼 Admin (Upload)**")
+            st.code("Email: admin@uan.com.br\nSenha: admin123", language="text")
+        
+        with col_user:
+            st.markdown("**👤 Usuário Comum**")
+            st.code("Email: teste@uan.com.br\nSenha: 123456", language="text")
         
         st.markdown("---")
         
-        st.markdown("**Sobre o Sistema**")
+        st.markdown("**ℹ️ Informações do Sistema**")
         st.write("""
-        UAN Dashboard eh uma plataforma para:
-        - Analise de dados financeiros
-        - Projecoes e simulacoes
-        - Visualizacao de tendencias
-        - Gerenciamento de carteira
+        **UAN Dashboard** é uma plataforma para:
+        - ✓ Análise de dados financeiros
+        - ✓ Projeções e simulações
+        - ✓ Visualização de tendências
+        - ✓ Gerenciamento com controle de permissões
+        
+        **Versão com Persistência de Dados**
+        - Base de dados compartilhada (admin pode atualizar)
+        - Simulações individuais por usuário
+        - Armazenamento em arquivos (mock database)
         """)

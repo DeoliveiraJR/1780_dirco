@@ -14,7 +14,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data_manager import set_dados_upload, get_dados_upload
+from data_manager import set_dados_upload, get_dados_upload, salvar_upload_admin, eh_usuario_admin
 
 # ==============================
 # Configurações / Constantes
@@ -224,6 +224,32 @@ def _consolidar_duplicatas(df: pd.DataFrame, metodo: str = "sum") -> pd.DataFram
 def renderizar():
     st.markdown("### 📤 Upload da base de dados")
     st.markdown("---")
+    
+    # ============== CONTROLE DE PERMISSÕES ==============
+    if not eh_usuario_admin():
+        st.error("""
+        🔒 **Acesso Restrito**
+        
+        Apenas usuários com permissão de **Administrador** podem fazer upload de dados.
+        
+        **O que você pode fazer:**
+        - ✓ Visualizar a base de dados compartilhada
+        - ✗ Fazer upload de novos dados (apenas admin)
+        - ✓ Criar suas próprias simulações
+        """)
+        
+        st.markdown("---")
+        st.markdown("#### 📊 Base de Dados Atual")
+        dados_carregados()
+        return
+    
+    # ============== INTERFACE PARA ADMIN ==============
+    st.info("""
+    ✓ **Você é Administrador**
+    
+    Você pode fazer upload de novos arquivos que serão compartilhados com todos os usuários do sistema.
+    """)
+    
     tab1, tab2 = st.tabs(["📤 Carregar Dados", "📊 Dados Carregados"])
     with tab1:
         upload_interface()
@@ -322,6 +348,38 @@ def processar_dados(df_raw: pd.DataFrame):
         except requests.exceptions.RequestException:
             st.warning("⚠️ Backend indisponível. Dados salvos localmente.")
             st.session_state.dados_carregados = dados_json
+        
+        # ============== NOVO: Salvar na base de dados compartilhada (admin) ==============
+        if eh_usuario_admin():
+            st.markdown("---")
+            st.markdown("#### 💾 Salvar na Base de Dados Compartilhada")
+            
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                st.info("✓ Como administrador, você pode salvar este arquivo como a nova base de dados compartilhada que será utilizada por todos os usuários.")
+            
+            with col2:
+                if st.button("💾 Salvar como Base Compartilhada", type="primary", use_container_width=True):
+                    # Converte DataFrame para bytes Excel
+                    from io import BytesIO
+                    import openpyxl
+                    
+                    # Salva em memória
+                    buffer = BytesIO()
+                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                        df_clean.to_excel(writer, sheet_name='Dados', index=False)
+                    
+                    arquivo_bytes = buffer.getvalue()
+                    nome_arquivo = "base_dados_compartilhada.xlsx"
+                    
+                    # Salva no database
+                    sucesso, mensagem = salvar_upload_admin(arquivo_bytes, nome_arquivo)
+                    
+                    if sucesso:
+                        st.success(f"✅ {mensagem}")
+                        st.info("📢 Todos os usuários do sistema verão esta base de dados no próximo acesso.")
+                    else:
+                        st.error(f"❌ {mensagem}")
 
     except Exception as e:
         st.error(f"❌ Erro ao processar dados: {str(e)}")
