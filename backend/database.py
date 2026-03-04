@@ -203,6 +203,9 @@ def salvar_curva_usuario(usuario_id: str, cliente: str, categoria: str,
     Salva a curva ajustada de um usuário específico.
     Cada usuário tem suas curvas isoladas em um arquivo JSON.
     
+    IMPORTANTE: Ao primeira vez que salva, cria uma cópia da base para o usuário
+    (para garantir isolamento de dados).
+    
     Args:
         usuario_id: ID único do usuário
         cliente: Nome do cliente
@@ -215,7 +218,14 @@ def salvar_curva_usuario(usuario_id: str, cliente: str, categoria: str,
         (sucesso, mensagem)
     """
     try:
-        # Cria arquivo específico do usuário
+        # ============== NOVO: Cria cópia da base na primeira simulação do usuário ==============
+        # Sempre tenta criar a base personalizada se não existir (operação idempotente)
+        if not usuario_tem_base_editada(usuario_id):
+            sucesso_copia, msg_copia = criar_base_usuario_copia(usuario_id)
+            if sucesso_copia:
+                print(f"[DB] Base personalizada criada automaticamente ao salvar simulação")
+        
+        # Cria arquivo específico do usuário para simulações
         arquivo_usuario = SIMULACOES_DIR / f"{usuario_id}_simulacoes.json"
         
         # Carrega simulações existentes do usuário
@@ -370,6 +380,129 @@ def listar_usuarios_com_simulacoes() -> Dict[str, int]:
         print(f"[DB] Erro ao listar usuários com simulações: {e}")
     
     return resultado
+
+
+# ============================================================================
+# GERENCIAMENTO DE BASE POR USUÁRIO (NOVO)
+# ============================================================================
+
+def obter_nome_arquivo_base_usuario(usuario_id: str) -> str:
+    """Gera nome padronizado do arquivo da base do usuário"""
+    return f"base_usuario_{usuario_id}.xlsx"
+
+
+def usuario_tem_base_editada(usuario_id: str) -> bool:
+    """
+    Verifica se o usuário já tem sua própria cópia da base (alterada).
+    Se sim, ele tem uma versão personalizada.
+    Se não, usa a base compartilhada.
+    
+    Args:
+        usuario_id: ID do usuário
+        
+    Returns:
+        True se usuário tem arquivo próprio
+    """
+    arquivo_usuario = UPLOADS_DIR / obter_nome_arquivo_base_usuario(usuario_id)
+    return arquivo_usuario.exists()
+
+
+def carregar_base_usuario(usuario_id: str) -> Optional[pd.DataFrame]:
+    """
+    Carrega a base de dados do usuário.
+    
+    Fluxo:
+    1. Se usuário tem base editada → carrega sua cópia
+    2. Se não tem → carrega base compartilhada
+    
+    Args:
+        usuario_id: ID do usuário
+        
+    Returns:
+        DataFrame com dados ou None
+    """
+    # Verifica se usuário tem sua própria cópia editada
+    if usuario_tem_base_editada(usuario_id):
+        arquivo_usuario = UPLOADS_DIR / obter_nome_arquivo_base_usuario(usuario_id)
+        try:
+            df = pd.read_excel(arquivo_usuario)
+            print(f"[DB] Base personalizada do usuário {usuario_id} carregada: {len(df)} linhas")
+            return df
+        except Exception as e:
+            print(f"[DB] Erro ao carregar base personalizada: {e}")
+            # Fallback: carrega compartilhada
+            return carregar_base_dados_compartilhada()
+    else:
+        # Carrega base compartilhada
+        df = carregar_base_dados_compartilhada()
+        if df is not None:
+            print(f"[DB] Base compartilhada carregada para usuário {usuario_id}")
+        return df
+
+
+def criar_base_usuario_copia(usuario_id: str) -> Tuple[bool, str]:
+    """
+    Cria uma cópia personalizada da base para o usuário.
+    Chamado quando usuário salva sua primeira simulação/curva.
+    
+    Args:
+        usuario_id: ID do usuário
+        
+    Returns:
+        (sucesso, mensagem)
+    """
+    try:
+        # Se já tem cópia, não faz nada
+        if usuario_tem_base_editada(usuario_id):
+            return True, "Usuário já tem base personalizada"
+        
+        # Carrega base compartilhada
+        df_compartilhada = carregar_base_dados_compartilhada()
+        if df_compartilhada is None or df_compartilhada.empty:
+            return False, "Base compartilhada não encontrada"
+        
+        # Cria cópia personalizada
+        arquivo_usuario = UPLOADS_DIR / obter_nome_arquivo_base_usuario(usuario_id)
+        
+        with pd.ExcelWriter(arquivo_usuario, engine='openpyxl') as writer:
+            df_compartilhada.to_excel(writer, sheet_name='Dados', index=False)
+        
+        print(f"[DB] Base personalizada criada para usuário {usuario_id}: {arquivo_usuario}")
+        return True, f"Base personalizada criada para o usuário"
+        
+    except Exception as e:
+        print(f"[DB] Erro ao criar base personalizada: {e}")
+        return False, f"Erro ao criar base: {str(e)}"
+
+
+def salvar_base_usuario(usuario_id: str, df: pd.DataFrame) -> Tuple[bool, str]:
+    """
+    Salva as alterações na base do usuário.
+    
+    Args:
+        usuario_id: ID do usuário
+        df: DataFrame com alterações
+        
+    Returns:
+        (sucesso, mensagem)
+    """
+    try:
+        # Primeiro cria cópia se não existir
+        if not usuario_tem_base_editada(usuario_id):
+            criar_base_usuario_copia(usuario_id)
+        
+        # Salva as alterações
+        arquivo_usuario = UPLOADS_DIR / obter_nome_arquivo_base_usuario(usuario_id)
+        
+        with pd.ExcelWriter(arquivo_usuario, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='Dados', index=False)
+        
+        print(f"[DB] Base do usuário {usuario_id} salva: {arquivo_usuario}")
+        return True, "Base do usuário atualizada"
+        
+    except Exception as e:
+        print(f"[DB] Erro ao salvar base do usuário: {e}")
+        return False, f"Erro ao salvar: {str(e)}"
 
 
 # ============================================================================

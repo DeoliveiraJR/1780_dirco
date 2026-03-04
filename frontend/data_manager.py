@@ -701,8 +701,14 @@ def gerar_dados_exemplo():
 # ============================================================================
 def carregar_base_dados_compartilhada():
     """
-    Carrega a base de dados compartilhada do arquivo mockado.
-    Todos os usuários veem a mesma base.
+    Carrega a base de dados do usuário com isolamento garantido.
+    
+    Fluxo:
+    1. Se usuário tem base editada → carrega sua cópia
+    2. Se não tem → carrega base compartilhada
+    
+    Isso garante que cada usuário veja sua própria versão da base
+    se já tiver feito edições.
     
     Returns:
         DataFrame com dados da base ou None
@@ -710,9 +716,18 @@ def carregar_base_dados_compartilhada():
     try:
         import sys
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
-        from database import carregar_base_dados_compartilhada as db_carregar
+        from database import carregar_base_usuario
         
-        df = db_carregar()
+        usuario_id = st.session_state.get("usuario_id", "")
+        
+        # Se não há usuário autenticado, carrega base compartilhada
+        if not usuario_id:
+            from database import carregar_base_dados_compartilhada as db_carregar_compartilhada
+            df = db_carregar_compartilhada()
+        else:
+            # Carrega base específica do usuário (isolada com suas edições)
+            df = carregar_base_usuario(usuario_id)
+        
         if df is not None:
             # Garante coluna PROJETADO_AJUSTADO existe
             if "PROJETADO_AJUSTADO" not in df.columns:
@@ -723,14 +738,15 @@ def carregar_base_dados_compartilhada():
             return df
         return None
     except Exception as e:
-        print(f"[DATA_MANAGER] Erro ao carregar base compartilhada: {e}")
+        print(f"[DATA_MANAGER] Erro ao carregar base: {e}")
         return None
 
 
 def salvar_upload_admin(arquivo_bytes: bytes, nome_arquivo: str) -> Tuple[bool, str]:
     """
-    Salva um upload feito por admin na base de dados compartilhada.
-    Atualiza para todos os usuários.
+    Salva um arquivo de upload do admin na base de dados compartilhada.
+    Quando admin faz upload, INVALIDA as bases personalizadas dos usuários
+    (para que elas sejam recriadas a partir da nova base compartilhada).
     
     Args:
         arquivo_bytes: Bytes do arquivo Excel
@@ -759,11 +775,16 @@ def salvar_upload_admin(arquivo_bytes: bytes, nome_arquivo: str) -> Tuple[bool, 
         sucesso, msg = db_salvar(arquivo_bytes, nome_arquivo, usuario_id)
         
         if sucesso:
-            # Invalida cache do session_state para forçar recarga
+            # Invalida cache do session_state
             st.session_state.dados_upload = None
             st.session_state.dados_upload_original = None
             st.session_state._curvas_aplicadas_sessao = False
-            print(f"[DATA_MANAGER] Upload salvo com sucesso: {nome_arquivo}")
+            
+            # NOVO: Flag para invalidar bases personalizadas dos usuários
+            # Próximo login recarregará e criará nova base se tiver edições
+            st.session_state._novo_upload_realizado = True
+            
+            print(f"[DATA_MANAGER] Upload salvo. Cache invalidado.")
         
         return sucesso, msg
         

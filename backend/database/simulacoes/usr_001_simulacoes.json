@@ -1,6 +1,6 @@
 [
   {
-    "id": "Todos::Outra Categoria::Outro Produto_20260304204443",
+    "id": "Todos::Outra Categoria::Outro Produto_20260304212558",
     "combo_key": "Todos::Outra Categoria::Outro Produto",
     "cliente": "Todos",
     "categoria": "Outra Categoria",
@@ -20,7 +20,31 @@
       50
     ],
     "nome": "Simulação Todos::Outra Categoria::Outro Produto",
-    "data_criacao": "2026-03-04T20:44:43.935885",
-    "data_atualizacao": "2026-03-04T20:44:43.935891"
+    "data_criacao": "2026-03-04T21:25:58.919246",
+    "data_atualizacao": "2026-03-04T21:25:58.919250"
+  },
+  {
+    "id": "Todos::Admin::Produto Admin_20260304212532",
+    "combo_key": "Todos::Admin::Produto Admin",
+    "cliente": "Todos",
+    "categoria": "Admin",
+    "produto": "Produto Admin",
+    "curva": [
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      200
+    ],
+    "nome": "Simulação do Admin",
+    "data_criacao": "2026-03-04T21:25:32.111230",
+    "data_atualizacao": "2026-03-04T21:25:32.111236"
   }
 ]
