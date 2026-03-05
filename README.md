@@ -1,10 +1,4 @@
-# 🏦 UAN Dashboard - Sistema de Projeções Financeiras
-
-Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário** e **controle de permissões**.
-
----
-
-## 📋 Sobre o Projeto
+# 🏦 UAN Dashboard - Sistema de Projeções Financeiras\n\nSistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário** e **controle de permissões**.\n\n---\n\n## 🔄 Últimas Alterações (Março 2026)\n\n### ✅ Implementado:\n- **Tabela Expandida** - Height aumentada de 1800px → 2100px (linha 1442 em `simulador.py`)\n  - Resultado: 2 últimas linhas (MÉDIA e CRESC) agora visíveis sem scroll vertical\n- **Gráfico Dinâmico** - Implementado cálculo de próximos 12 meses (linhas 599-601 em `simulador.py`)\n  - Resultado: Gráfico agora mostra sempre próximos 12 meses, não mais Jan-Dez fixo\n- **Validações de Erro** - Tratamento gracioso para dados incompletos\n  - Resultado: Mensagens user-friendly quando dados faltam\n\n**Detalhes completos:** Veja [ULTIMAS_ALTERACOES.md](ULTIMAS_ALTERACOES.md)\n\n---\n\n## 📋 Sobre o Projeto
 
 O **UAN Dashboard** é uma aplicação web desenvolvida em **Streamlit** que centraliza a gestão de projeções financeiras com funcionalidades avançadas:
 

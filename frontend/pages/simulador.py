@@ -99,6 +99,20 @@ def renderizar():
     if df_upload is None or df_upload.empty:
         st.warning("⚠️ Nenhum dado carregado. Vá em **Upload** e importe o Excel.")
         return
+    
+    # Validar colunas essenciais para simulador
+    colunas_requeridas = ["PROJETADO_ANALITICO", "PROJETADO_MERCADO", "CATEGORIA", "PRODUTO"]
+    colunas_faltantes = [c for c in colunas_requeridas if c not in df_upload.columns]
+    
+    if colunas_faltantes:
+        st.error(f"""
+        ❌ **Dados Incompletos para Simulador**
+        
+        As seguintes colunas esperadas não foram encontradas: {', '.join(colunas_faltantes)}
+        
+        Por favor, verifique o upload de dados e tente novamente.
+        """)
+        return
 
     # --- Carrega opções de clientes ---
     clientes_opcoes = ["Todos"]
@@ -579,22 +593,19 @@ def renderizar():
 
     style_top = make_stylesheet()
 
-    # -------------------- GRÁFICO PRINCIPAL ----------------------------------
-    src_ana = ColumnDataSource(dict(x=MESES_NUM, y=analitica))
-    src_mer = ColumnDataSource(dict(x=MESES_NUM, y=mercado))
-    src_ajs = ColumnDataSource(dict(
-        x=MESES_NUM,
-        xm=MESES_ABR_LIST,
-        y=ajustada,
-        y_br=[fmt_br(v, 0) for v in ajustada]
-    ))
+    # ==================== CÁLCULO DOS PRÓXIMOS 12 MESES ====================
+    # Determina quais meses (Jan-Dez) serão exibidos: sempre os próximos 12 meses após realizado
+    # Exemplo: se estamos em março/2026 com realizado de jan/26, mostra mar/26 até fev/27
+    meses_indices = [(mes_atual - 1 + i) % 12 for i in range(12)]  # Índices 0-11
+    meses_rotulos = [MESES_ABR_LIST[idx] for idx in meses_indices]  # Rótulos (Mar, Abr, ..., Fev)
+    meses_numeros = [idx + 1 for idx in meses_indices]  # Números 1-12 para x_range
 
     # -------------------- GRÁFICO PRINCIPAL ----------------------------------
-    src_ana = ColumnDataSource(dict(x=MESES_NUM, y=analitica))
-    src_mer = ColumnDataSource(dict(x=MESES_NUM, y=mercado))
+    src_ana = ColumnDataSource(dict(x=meses_numeros, y=analitica))
+    src_mer = ColumnDataSource(dict(x=meses_numeros, y=mercado))
     src_ajs = ColumnDataSource(dict(
-        x=MESES_NUM,
-        xm=MESES_ABR_LIST,
+        x=meses_numeros,
+        xm=meses_rotulos,  # Usa rótulos dos próximos 12 meses
         y=ajustada,
         y_br=[fmt_br(v, 0) for v in ajustada]
     ))
@@ -611,7 +622,7 @@ def renderizar():
     p.yaxis.formatter = NumeralTickFormatter(format="0.00a")
     p.title.text_font_size = "0pt"  # Oculta título
     p.xaxis.ticker = MESES_NUM
-    p.xaxis.major_label_overrides = {i: MESES_ABR[i] for i in MESES_NUM}
+    p.xaxis.major_label_overrides = {i: meses_rotulos[i-1] for i in MESES_NUM}
     p.xaxis.major_label_text_font_size = "12px"
     p.yaxis.major_label_text_font_size = "12px"
     p.outline_line_color = "#e2e8f0"
@@ -1422,7 +1433,7 @@ def renderizar():
         index_position=None,
         sizing_mode="stretch_width",  # Expande para ocupar toda a largura disponível
         width=10000,  # Mantém fallback, mas stretched width é prioritário
-        height=1800,
+        height=2100,  # Aumentado de 1800 para mostrar as 2 últimas linhas sem scroll
         editable=False,
         reorderable=False,
         stylesheets=[make_stylesheet()],

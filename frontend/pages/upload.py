@@ -324,6 +324,20 @@ def processar_dados(df_raw: pd.DataFrame):
         df_clean = df_clean[(df_clean["MES_NUM"] >= 1) & (df_clean["MES_NUM"] <= 12)]
         df_clean = df_clean[df_clean["ANO_NUM"] > 0]
         df_clean = df_clean.drop_duplicates()
+        
+        # VALIDAÇÃO CRÍTICA: Garantir que há dados após limpeza
+        if len(df_clean) == 0:
+            st.error("""
+            ❌ **Nenhum dado válido após processamento**
+            
+            Possíveis causas:
+            - Meses não reconhecidos ou vazios
+            - Anos não especificados ou inválidos
+            - Valores numéricos ausentes nas colunas de projeção
+            
+            Por favor, verifique o arquivo e tente novamente.
+            """)
+            return
 
         set_dados_upload(df_clean)
 
@@ -386,8 +400,24 @@ def processar_dados(df_raw: pd.DataFrame):
 
 def dados_carregados():
     df = get_dados_upload()
+    
+    # Validar se há dados
     if df is None or len(df) == 0:
         st.info("ℹ️ Nenhum dado carregado ainda. Faça upload na aba anterior.")
+        return
+    
+    # Validar colunas essenciais
+    cols_requeridas = ["CATEGORIA", "PRODUTO", "MES_NUM"]
+    colunas_faltantes = [c for c in cols_requeridas if c not in df.columns]
+    
+    if colunas_faltantes:
+        st.error(f"""
+        ❌ **Dados Incompletos**
+        
+        As colunas esperadas não foram encontradas: {', '.join(colunas_faltantes)}
+        
+        Por favor, verifique o arquivo e faça upload novamente.
+        """)
         return
 
     st.markdown(f"#### Total de Registros (limpos): {len(df)}")

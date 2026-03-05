@@ -891,6 +891,20 @@ def renderizar():
             """)
         return
     
+    # Validar colunas essenciais
+    colunas_requeridas = ["ANO_NUM", "CATEGORIA", "CURVA_REALIZADO"]
+    colunas_faltantes = [c for c in colunas_requeridas if c not in df_upload.columns]
+    
+    if colunas_faltantes:
+        st.error(f"""
+        ❌ **Dados Incompletos no Dashboard**
+        
+        As seguintes colunas esperadas não foram encontradas: {', '.join(colunas_faltantes)}
+        
+        Por favor, verifique o upload de dados e tente novamente.
+        """)
+        return
+    
     # Preparar dados
     df = _preparar_dados(df_upload)
     

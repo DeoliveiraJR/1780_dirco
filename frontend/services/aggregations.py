@@ -9,6 +9,12 @@ from utils_ext.series import (
 def _carregar_curvas_base(df_upload: pd.DataFrame, cliente: str, categoria: str, produto: str):
     if df_upload is None or len(df_upload) == 0:
         return [0.0]*12, [0.0]*12, None
+    
+    # Validar colunas essenciais
+    colunas_requeridas = ["PROJETADO_ANALITICO", "PROJETADO_MERCADO"]
+    if not all(col in df_upload.columns for col in colunas_requeridas):
+        return [0.0]*12, [0.0]*12, None
+    
     dff = _ensure_cli_n(df_upload)
     if "CAT_N" not in dff.columns:
         dff["CAT_N"] = dff["CATEGORIA"].astype(str).apply(_norm_txt)
