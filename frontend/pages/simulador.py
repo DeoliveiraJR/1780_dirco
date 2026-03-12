@@ -372,32 +372,179 @@ def renderizar():
         if valores_localStorage is not None and len(valores_localStorage) == 12:
             st.session_state["ajustada"] = valores_localStorage
     
+    # Carrega os valores dos estados (FONTE DE VERDADE) - SERÁ REDEFINIDO DEPOIS COM OS DADOS CORRETOS
+    
+    realizados_dict = _obter_realizados_por_ano(df_upload, cliente, categoria, produto, mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS)
+    anos_realizados = sorted(realizados_dict.keys())
+    variacoes_rlzd = {ano: _variacao_mensal(realizados_dict[ano]) for ano in anos_realizados}
+
+    # ==================== OBTER MÊS/ANO ATUAL ====================
+    from datetime import datetime
+    agora = datetime.now()
+    mes_atual = agora.month  # 1-12
+    ano_atual = agora.year   # 2026 em fevereiro de 2026
+    
+    # O próximo ano para projeção (2027 se estamos em 2026)
+    ano_projecao_proxima = ano_atual + 1
+    
+    # Se 2027 (ou o próximo ano) ainda não está em realizados_dict, adicionar como lista vazia
+    if ano_projecao_proxima not in realizados_dict:
+        # Será substituído pelos dados de projeção (analítica) para meses futuros
+        # e por dados de realizado quando o mês passar
+        realizados_dict[ano_projecao_proxima] = [0.0] * 12
+        anos_realizados = sorted(realizados_dict.keys())
+        variacoes_rlzd = {ano: _variacao_mensal(realizados_dict[ano]) for ano in anos_realizados}
+
+    style_top = make_stylesheet()
+
+    # ==================== CARREGAR DADOS DOS PRÓXIMOS 12 MESES ====================
+    # Carrega curvas para ambos os anos (ano_atual e ano_projecao_proxima)
+    # Isso garante que se estivermos em mar/26, mostramos até mar/27 com dados corretos
+    from services.aggregations import _carregar_curvas_por_ano
+    ana_ano_atual, mer_ano_atual, ajs_ano_atual = _carregar_curvas_por_ano(df_upload, cliente, categoria, produto, ano_atual)
+    
+    # Carrega dados de 2027
+    ana_ano_proximo_temp, mer_ano_proximo_temp, ajs_ano_proximo_temp = _carregar_curvas_por_ano(df_upload, cliente, categoria, produto, ano_projecao_proxima)
+    
+    # Sempre usar dados de ano_proximo, mesmo que sejam zeros
+    # O usuário pode ajustar depois no painel
+    ana_ano_proximo = ana_ano_proximo_temp
+    mer_ano_proximo = mer_ano_proximo_temp
+    ajs_ano_proximo = ajs_ano_proximo_temp
+
+    # ==================== CÁLCULO DOS PRÓXIMOS 12 MESES (PARA GRÁFICO) ====================
+    # SEMPRE mostra 12 meses (Mar/26 até Fev/27)
+    # Dados de 2027 podem ser zeros, mas são sempre inclusos
+    
+    meses_rotulos = []
+    analitica_grafico = []
+    mercado_grafico = []
+    ajustada_grafico = []
+    
+    # SEMPRE 12 meses completos
+    num_meses = 12
+    
+    for i in range(num_meses):
+        # Mês absoluto considerando o ano atual
+        mes_abs = (mes_atual - 1 + i)  # 0-23 (pode ultrapassar 11)
+        
+        # Determina em qual ano este mês está
+        if mes_abs < 12:
+            ano_mes = ano_atual
+            mes_idx = mes_abs  # índice 0-11 no ano atual
+            ana_val = ana_ano_atual[mes_idx]
+            mer_val = mer_ano_atual[mes_idx]
+            ajs_val = ajs_ano_atual[mes_idx]
+        else:
+            # Sempre há ano_proximo agora (pode ter zeros, mas existe)
+            ano_mes = ano_projecao_proxima
+            mes_idx = mes_abs - 12  # índice 0-11 no próximo ano
+            ana_val = ana_ano_proximo[mes_idx]
+            mer_val = mer_ano_proximo[mes_idx]
+            ajs_val = ajs_ano_proximo[mes_idx]
+        
+        # Determinando o número do mês (1-12) para este período
+        mes_num = (mes_abs % 12) + 1
+        
+        # Construindo rótulo com ano (ex: Mar/26, Jan/27)
+        rotulo = f"{MESES_ABR_LIST[mes_num - 1]}/{str(ano_mes)[-2:]}"
+        
+        meses_rotulos.append(rotulo)
+        analitica_grafico.append(ana_val)
+        mercado_grafico.append(mer_val)
+        ajustada_grafico.append(ajs_val)
+    
+    # Completa com zeros para manter sempre 12 elementos (para compatibilidade com o painel de ajuste)
+    while len(meses_rotulos) < 12:
+        meses_rotulos.append("")
+        analitica_grafico.append(0.0)
+        mercado_grafico.append(0.0)
+        ajustada_grafico.append(0.0)
+    
+    # IMPORTANTE: meses_numeros SEMPRE sequencial [1,2,3,...,12] para o gráfico
+    # Os rótulos já estão em ordem correspondente aos índices dos dados (0-11)
+    meses_numeros = list(range(1, 13))
+    
+    # ==================== DADOS PARA A TABELA ====================
+    # SEMPRE expandir para 24 meses (Jan-Dez 2026 + Jan-Dez 2027)
+    # Mesmo que 2027 tenha dados zerados, o usuário pode ajustar depois
+    
+    # DEBUG: Verificar tamanhos dos arrays de entrada
+    # st.write(f"[DEBUG] ana_ano_atual: {len(ana_ano_atual)} elementos, ana_ano_proximo: {len(ana_ano_proximo)} elementos")
+    # st.write(f"[DEBUG] mes_atual: {mes_atual}, ano_atual: {ano_atual}, ano_projecao_proxima: {ano_projecao_proxima}")
+    
+    analitica = ana_ano_atual[:] + ana_ano_proximo[:]  # 12 + 12 = 24
+    mercado = mer_ano_atual[:] + mer_ano_proximo[:]
+    ajustada_base = ajs_ano_atual[:] + ajs_ano_proximo[:]
+    
+    # st.write(f"[DEBUG] analitica tamanho: {len(analitica)}, num_meses_total será: 24")
+    
+    num_meses_total = 24
+    
+    # Session state para ajustada (pode ter sido modificada pelo painel)
+    if "ajustada" not in st.session_state:
+        st.session_state["ajustada"] = ajustada_base[:]
+    else:
+        # IMPORTANTE: Se a session_state tem tamanho diferente, resetar
+        # Isso evita erro de índice quando mudar combo ou dados
+        if len(st.session_state["ajustada"]) != len(ajustada_base):
+            # st.write(f"[DEBUG] Resetando ajustada: session_state tem {len(st.session_state['ajustada'])}, base tem {len(ajustada_base)}")
+            st.session_state["ajustada"] = ajustada_base[:]
+    
+    ajustada = st.session_state.get("ajustada", ajustada_base[:])
+    
     # Carrega os valores dos estados (FONTE DE VERDADE)
     curva_analitica_state = st.session_state.get("curva_analitica", analitica[:])
     curva_mercado_state = st.session_state.get("curva_mercado", mercado[:])
-    ajustada = st.session_state.get("ajustada", analitica[:])
     
-    # Calcula o incremento líquido por mês (diferença entre ajustada e analítica)
-    incremento_liquido = [ajustada[i] - analitica[i] for i in range(12)]
+    # ==================== MAPEAMENTO: Próximos 12 meses <-> Índices ====================
+    # O painel mostra próximos 12 meses com nomenclatura dinâmica
+    # Os índices podem ir de 0-23 se houver dados de 2027, ou 0-11 se só houver 2026
     
-    # Função callback para ajustar mês
-    def _ajustar_mes(mes_idx: int, delta: float):
-        cur = st.session_state.get("ajustada", analitica[:])
+    indices_proximo_12m = []
+    for i in range(12):
+        mes_abs = (mes_atual - 1 + i)  # 0-based: mês absoluto
+        # Se temos 24 meses, não precisa wrap (vai até 23)
+        # Se temos 12 meses, faz wrap com modulo
+        if num_meses_total == 24:
+            # Para 24 meses, validar que não ultrapassa (máximo é 23)
+            mes_idx = mes_abs if mes_abs < 24 else (mes_abs % 12)
+        else:
+            mes_idx = mes_abs % 12  # Wrap para 0-11
+        indices_proximo_12m.append(mes_idx)
+    
+    # st.write(f"[DEBUG] indices_proximo_12m: {indices_proximo_12m}")
+    # st.write(f"[DEBUG] len(ajustada): {len(ajustada)}, max(indices_proximo_12m): {max(indices_proximo_12m)}")
+    
+    # Extrai dados dos próximos 12 meses a partir dos arrays (Jan-Dez ou Jan-Dez + Jan-Dez 2027)
+    analitica_proximos12 = [analitica[idx] for idx in indices_proximo_12m]
+    mercado_proximos12 = [mercado[idx] for idx in indices_proximo_12m]
+    ajustada_proximos12 = [ajustada[idx] for idx in indices_proximo_12m]
+    
+    # Calcula o incremento líquido para o painel
+    incremento_liquido = [ajustada[indices_proximo_12m[i]] - analitica[indices_proximo_12m[i]] for i in range(12)]
+    
+    # Função callback para ajustar mês (atualiza ajustada nos índices corretos)
+    def _ajustar_mes(painel_idx: int, delta: float):
+        mes_idx = indices_proximo_12m[painel_idx]
+        cur = st.session_state.get("ajustada", ajustada[:])
         cur[mes_idx] = max(0, cur[mes_idx] + delta)
         st.session_state["ajustada"] = cur
     
     # Função callback para replicar ajuste para meses seguintes
-    def _replicar_ajuste(mes_idx: int):
+    def _replicar_ajuste(painel_idx: int):
         """Replica o incremento do mês atual para todos os meses seguintes."""
-        cur = st.session_state.get("ajustada", analitica[:])
-        inc_atual = cur[mes_idx] - analitica[mes_idx]  # incremento atual do mês
+        mes_idx = indices_proximo_12m[painel_idx]
+        cur = st.session_state.get("ajustada", ajustada[:])
+        inc_atual = cur[mes_idx] - analitica[mes_idx]
         
-        # Aplica o mesmo incremento para os meses seguintes (mes_idx+1 até 11)
-        for i in range(mes_idx + 1, 12):
-            cur[i] = max(0, analitica[i] + inc_atual)
+        # Aplica para os meses seguintes
+        for i in range(painel_idx + 1, 12):
+            mes_idx_seguinte = indices_proximo_12m[i]
+            cur[mes_idx_seguinte] = max(0, analitica[mes_idx_seguinte] + inc_atual)
         
         st.session_state["ajustada"] = cur
-    
+
     # ==================== PAINEL DE AJUSTE MANUAL POR MÊS ====================
     incremento_perc = st.session_state.get("sim_incremento_perc", 0.05)
     
@@ -501,17 +648,18 @@ def renderizar():
         """, unsafe_allow_html=True)
         
         # Grid por COLUNAS (vertical): 3 colunas x 4 linhas por coluna
-        # Coluna 1: Jan, Fev, Mar, Abr | Coluna 2: Mai, Jun, Jul, Ago | Coluna 3: Set, Out, Nov, Dez
+        # Mostra os próximos 12 meses com nomenclatura dinâmica (Mar/26, Abr/26, etc.)
         cols = st.columns(3, gap="medium")
         
         for col_idx in range(3):
             with cols[col_idx]:
                 for row_idx in range(4):
-                    mes_idx = col_idx * 4 + row_idx
-                    mes_nome = MESES_ABR_LIST[mes_idx]
-                    valor_atual = ajustada[mes_idx]
-                    inc = incremento_liquido[mes_idx]
-                    inc_step = analitica[mes_idx] * incremento_perc
+                    painel_idx = col_idx * 4 + row_idx
+                    mes_nome = meses_rotulos[painel_idx]  # Rótulo: "Mar/26", "Abr/26", etc.
+                    mes_idx_ano = indices_proximo_12m[painel_idx]  # Índice no array Jan-Dez
+                    valor_atual = ajustada[mes_idx_ano]  # Valor do mês no ano
+                    inc = incremento_liquido[painel_idx]
+                    inc_step = analitica[mes_idx_ano] * incremento_perc  # Step baseado em analítica do ano
                     
                     # Delta display
                     delta_html = ""
@@ -524,8 +672,8 @@ def renderizar():
                     c1, c2, c3, c4 = st.columns([1, 5, 1, 1])
                     
                     with c1:
-                        st.button("➖", key=f"dec_{mes_idx}", 
-                                on_click=lambda i=mes_idx, s=inc_step: _ajustar_mes(i, -s),
+                        st.button("➖", key=f"dec_{painel_idx}", 
+                                on_click=lambda i=painel_idx, s=inc_step: _ajustar_mes(i, -s),
                                 use_container_width=True)
                     
                     with c2:
@@ -537,15 +685,15 @@ def renderizar():
                         """, unsafe_allow_html=True)
                     
                     with c3:
-                        st.button("➕", key=f"inc_{mes_idx}",
-                                on_click=lambda i=mes_idx, s=inc_step: _ajustar_mes(i, s),
+                        st.button("➕", key=f"inc_{painel_idx}",
+                                on_click=lambda i=painel_idx, s=inc_step: _ajustar_mes(i, s),
                                 use_container_width=True)
                     
                     with c4:
                         # Botão de replicar (só aparece se não for o último mês)
-                        if mes_idx < 11:
-                            st.button("⬇️", key=f"rep_{mes_idx}",
-                                    on_click=lambda i=mes_idx: _replicar_ajuste(i),
+                        if painel_idx < 11:
+                            st.button("⬇️", key=f"rep_{painel_idx}",
+                                    on_click=lambda i=painel_idx: _replicar_ajuste(i),
                                     use_container_width=True,
                                     help=f"Replicar ajuste de {mes_nome} para meses seguintes")
                     
@@ -565,49 +713,20 @@ def renderizar():
                 📊 Ajuste Total: <span style="color: {cor}; font-weight: 700;">{sinal}R$ {total_inc/1e9:.2f}B</span>
             </span>
             <span style="color: #64748b; font-size: 12px;">
-                Step: ~R$ {analitica[0] * incremento_perc/1e9:.3f}B
+                Step: ~R$ {analitica_proximos12[0] * incremento_perc/1e9:.3f}B
             </span>
         </div>
         """, unsafe_allow_html=True)
-        
-    realizados_dict = _obter_realizados_por_ano(df_upload, cliente, categoria, produto, mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS)
-    anos_realizados = sorted(realizados_dict.keys())
-    variacoes_rlzd = {ano: _variacao_mensal(realizados_dict[ano]) for ano in anos_realizados}
-
-    # ==================== OBTER MÊS/ANO ATUAL ====================
-    from datetime import datetime
-    agora = datetime.now()
-    mes_atual = agora.month  # 1-12
-    ano_atual = agora.year   # 2026 em fevereiro de 2026
-    
-    # O próximo ano para projeção (2027 se estamos em 2026)
-    ano_projecao_proxima = ano_atual + 1
-    
-    # Se 2027 (ou o próximo ano) ainda não está em realizados_dict, adicionar como lista vazia
-    if ano_projecao_proxima not in realizados_dict:
-        # Será substituído pelos dados de projeção (analítica) para meses futuros
-        # e por dados de realizado quando o mês passar
-        realizados_dict[ano_projecao_proxima] = [0.0] * 12
-        anos_realizados = sorted(realizados_dict.keys())
-        variacoes_rlzd = {ano: _variacao_mensal(realizados_dict[ano]) for ano in anos_realizados}
-
-    style_top = make_stylesheet()
-
-    # ==================== CÁLCULO DOS PRÓXIMOS 12 MESES ====================
-    # Determina quais meses (Jan-Dez) serão exibidos: sempre os próximos 12 meses após realizado
-    # Exemplo: se estamos em março/2026 com realizado de jan/26, mostra mar/26 até fev/27
-    meses_indices = [(mes_atual - 1 + i) % 12 for i in range(12)]  # Índices 0-11
-    meses_rotulos = [MESES_ABR_LIST[idx] for idx in meses_indices]  # Rótulos (Mar, Abr, ..., Fev)
-    meses_numeros = [idx + 1 for idx in meses_indices]  # Números 1-12 para x_range
 
     # -------------------- GRÁFICO PRINCIPAL ----------------------------------
-    src_ana = ColumnDataSource(dict(x=meses_numeros, y=analitica))
-    src_mer = ColumnDataSource(dict(x=meses_numeros, y=mercado))
+    # O gráfico usa dados dos PRÓXIMOS 12 MESES, extraídos de analitica/mercado/ajustada (Jan-Dez)
+    src_ana = ColumnDataSource(dict(x=meses_numeros, y=analitica_proximos12))
+    src_mer = ColumnDataSource(dict(x=meses_numeros, y=mercado_proximos12))
     src_ajs = ColumnDataSource(dict(
         x=meses_numeros,
         xm=meses_rotulos,  # Usa rótulos dos próximos 12 meses
-        y=ajustada,
-        y_br=[fmt_br(v, 0) for v in ajustada]
+        y=ajustada_proximos12,  # Extrai dados dos próximos 12 meses
+        y_br=[fmt_br(v, 0) for v in ajustada_proximos12]
     ))
 
     p = figure(
@@ -651,8 +770,9 @@ def renderizar():
 
     # -------------------- DIV DE VALORES EM TEMPO REAL -----------------------
     # Exibe os valores da curva ajustada, atualizando em tempo real via JS
+    # Usa os rótulos e valores dos PRÓXIMOS 12 MESES (não Jan-Dez)
     valores_html_inicial = " | ".join([
-        f"<span style='color:#64748b'>{MESES_ABR_LIST[i]}:</span> <b style='color:#0f172a'>R$ {fmt_br(ajustada[i], 0)}</b>" 
+        f"<span style='color:#64748b'>{meses_rotulos[i]}:</span> <b style='color:#0f172a'>R$ {fmt_br(ajustada_proximos12[i], 0)}</b>" 
         for i in range(12)
     ])
     
@@ -667,8 +787,9 @@ def renderizar():
     )
     
     # Div para o Incremento em tempo real (atualizado via JS)
-    soma_ana_inicial = sum(analitica) if analitica else 1
-    soma_ajs_inicial = sum(ajustada) if ajustada else 0
+    # Usa dados dos próximos 12 meses para calcular incremento
+    soma_ana_inicial = sum(analitica_proximos12) if analitica_proximos12 else 1
+    soma_ajs_inicial = sum(ajustada_proximos12) if ajustada_proximos12 else 0
     incr_inicial_pct = ((soma_ajs_inicial / soma_ana_inicial) - 1) * 100 if soma_ana_inicial > 0 else 0
     incr_color = "#10b981" if incr_inicial_pct >= 0 else "#ef4444"
     incr_icon = "📈" if incr_inicial_pct >= 0 else "📉"
@@ -769,45 +890,56 @@ def renderizar():
     """)
     src_ajs.js_on_change("data", cb_atualiza_div)
 
-    # -------------------- TABELA : VOLTANDO AO LAYOUT ANTERIOR --------------------
-    var_ana = _variacao_mensal(analitica)
-    var_mer = _variacao_mensal(mercado)
-    var_ajs = _variacao_mensal(ajustada)
+    # -------------------- TABELA : PRÓXIMOS 12 MESES ====================
+    # A tabela mostra os próximos 12 meses (com rótulos dinâmicos: Mar/26, ..., Fev/27)
+    var_ana = _variacao_mensal(analitica_proximos12)
+    var_mer = _variacao_mensal(mercado_proximos12)
+    var_ajs = _variacao_mensal(ajustada_proximos12)
 
-    mes_display = MESES_ABR_LIST[:]
-    mes_ord    = list(range(1,13))
+    mes_display = meses_rotulos[:]  # ["Mar/26", "Abr/26", ..., "Jan/27", "Fev/27"]
+    mes_ord    = list(range(1, 13))
     
-    # ============ TABELA 1: RESUMO (sem dados históricos) ============
+    # ============ TABELA 1: RESUMO (próximos 12 meses) ============
     tbl_data = dict(Mes=mes_display, Mes_Ord=mes_ord)
 
+    # Dados históricos (se houver)
     for ano in anos_realizados:
         tbl_data[f"Rlzd_{ano}"] = realizados_dict[ano]
         tbl_data[f"Var_{ano}"]  = variacoes_rlzd[ano]
 
-    # Valores realizados para o ano atual (2026)
+    # Valores realizados para o ano atual (2026) - apenas para os meses dentro de 2026
     rlzd_ano_atual = realizados_dict.get(ano_atual, [0.0] * 12)
     
-    # Aplicar regra: meses passados = realizado (se houver), meses futuros = projeção
+    # Construir dados para próximos 12 meses considerando realizado vs projeção
     ana_com_realizado = []
     mer_com_realizado = []
     ajs_com_realizado = []
     
-    for mes_idx in range(12):
-        mes_numero = mes_idx + 1  # 1-12
+    # Iterar sobre os próximos 12 meses
+    for painel_idx in range(12):
+        mes_idx = indices_proximo_12m[painel_idx]  # Índice no array maior (0-23 se houver 2027, ou 0-11)
         
-        # Se o mês já passou E TEM realizado (não é 0 ou NaN), usar realizado
-        # Senão, usar projeção
-        rlzd_val = rlzd_ano_atual[mes_idx]
-        tem_realizado = rlzd_val is not None and not np.isnan(rlzd_val) if isinstance(rlzd_val, (float, int)) else rlzd_val
-        tem_realizado = tem_realizado and rlzd_val != 0.0
-        
-        if mes_numero <= mes_atual and tem_realizado:
-            # Usar valor realizado do ano atual (2026)
-            ana_com_realizado.append(rlzd_val)
-            mer_com_realizado.append(rlzd_val)
-            ajs_com_realizado.append(rlzd_val)
-        else:
-            # Usar projeção
+        # Verificar se este mês é do ano atual (2026) e já passou
+        # Para isso, precisamos saber se o índice está em 2026 ou 2027
+        if mes_idx < 12:  # Está em 2026
+            mes_numero_2026 = mes_idx + 1  # 1-12
+            
+            # Se o mês já passou em 2026 E tem realizado, usar realizado
+            rlzd_val = rlzd_ano_atual[mes_idx]
+            tem_realizado = rlzd_val is not None and not np.isnan(rlzd_val) if isinstance(rlzd_val, (float, int)) else rlzd_val
+            tem_realizado = tem_realizado and rlzd_val != 0.0
+            
+            if mes_numero_2026 <= mes_atual and tem_realizado:
+                # Usar valor realizado do ano atual (2026)
+                ana_com_realizado.append(rlzd_val)
+                mer_com_realizado.append(rlzd_val)
+                ajs_com_realizado.append(rlzd_val)
+            else:
+                # Usar projeção
+                ana_com_realizado.append(analitica[mes_idx])
+                mer_com_realizado.append(mercado[mes_idx])
+                ajs_com_realizado.append(ajustada[mes_idx])
+        else:  # Está em 2027 ou além - sempre usar projeção (não tem realizado)
             ana_com_realizado.append(analitica[mes_idx])
             mer_com_realizado.append(mercado[mes_idx])
             ajs_com_realizado.append(ajustada[mes_idx])
@@ -825,19 +957,20 @@ def renderizar():
     
     # ==================== INTEGRAR MESES PASSADOS = REALIZADO ====================
     # Marca quais meses já passaram (para formatação de cor)
-    # NÃO substitui os valores de Analítica/Mercado/Ajustada
-    # Apenas marca quais foram realizados para poder colorir depois
     tbl_data["_eh_realizado"] = []
     
-    # Para cada mês, verificar se já passou
-    for mes_idx in range(12):
-        mes_numero = mes_idx + 1  # 1-12
+    # Para cada mês no painel, verificar se é do passado
+    for painel_idx in range(12):
+        mes_idx = indices_proximo_12m[painel_idx]
         
-        # Se o mês(número) <= mês atual, então já passou ou é o mês atual
-        if mes_numero <= mes_atual:
-            # Este mês já passou, marcar como realizado
-            tbl_data["_eh_realizado"].append(True)
-        else:
+        # Apenas marcar como realizado se está em 2026 E o mês já passou
+        if mes_idx < 12:  # Está em 2026
+            mes_numero_2026 = mes_idx + 1  # 1-12
+            if mes_numero_2026 <= mes_atual:
+                tbl_data["_eh_realizado"].append(True)
+            else:
+                tbl_data["_eh_realizado"].append(False)
+        else:  # Está em 2027 ou além - sempre futuro
             tbl_data["_eh_realizado"].append(False)
 
     def _mean_safe(v):

@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import streamlit as st
 import pandas as pd
 from styles import CORES, CSS_CUSTOM, aplicar_tema
-from pages import autenticacao, dashboard, simulador, perfil, upload
+from pages import autenticacao, dashboard, simulador, perfil, upload, dre
 from data_manager import init_data_state, get_dados_upload, adicionar_simulacao
 from services.aggregations import _carregar_curvas_base
 
@@ -148,7 +148,8 @@ else:
         opcoes_menu = [
             ("📊", "Dashboard", "Dashboard"),
             ("🎯", "Simulador", "Simulador"),
-            ("👤", "Perfil", "Perfil"),
+            ("�", "DRE", "DRE Gerencial"),
+            ("�👤", "Perfil", "Perfil"),
             ("📤", "Upload", "Upload de Dados")
         ]
         opcoes_display = {f"{i} {l}": v for (i,l,v) in opcoes_menu}
@@ -455,6 +456,8 @@ else:
         dashboard.renderizar()
     elif pagina == "Simulador":
         simulador.renderizar()
+    elif pagina == "DRE Gerencial":
+        dre.renderizar()
     elif pagina == "Perfil":
         perfil.renderizar()
     elif pagina == "Upload de Dados":
