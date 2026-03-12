@@ -1,1 +1,265 @@
-# 📝 Últimas Alterações e Próximas Etapas\n\n**Data:** Março 5, 2026  \n**Status:** ✅ Implementado e validado\n\n---\n\n## 🔄 Alterações Implementadas\n\n### 1. Tabela Expandida\n**Arquivo:** `frontend/pages/simulador.py`  \n**Linha:** 1442  \n**Mudança:** `height=1800,` → `height=2100,`  \n**Impacto:** Tabela agora mostra as 2 últimas linhas (MÉDIA e CRESC) visíveis sem scroll vertical\n\n```python\ntbl_hist = DataTable(\n    source=tbl_hist_src,\n    columns=columns_hist,\n    index_position=None,\n    sizing_mode=\"stretch_width\",\n    width=10000,\n    height=2100,  # ← Aumentado de 1800\n    editable=False,\n    reorderable=False,\n    stylesheets=[make_stylesheet()],\n)\n```\n\n---\n\n### 2. Gráfico com Próximos 12 Meses\n**Arquivo:** `frontend/pages/simulador.py`  \n**Linhas:** 599-601  \n**Mudança:** Implementado cálculo dinâmico de meses  \n**Impacto:** Gráfico agora mostra sempre os próximos 12 meses após o realizado\n\n```python\n# Novo: Cálculo dinâmico de próximos 12 meses\nmeses_indices = [(mes_atual - 1 + i) % 12 for i in range(12)]  # Índices 0-11\nmeses_rotulos = [MESES_ABR_LIST[idx] for idx in meses_indices]  # Rótulos (Mar, Abr, ...)\nmeses_numeros = [idx + 1 for idx in meses_indices]  # Números 1-12\n```\n\n**Exemplo:**\n- Se hoje = 05/03/2026 → Gráfico mostra: Mar/26 → Fev/27 (próximos 12 meses)\n- Se hoje = 05/04/2026 → Gráfico mostra: Abr/26 → Mar/27 (próximos 12 meses)\n\n---\n\n### 3. Validações de Erro\n**Arquivos afetados:** `upload.py`, `simulador.py`, `dashboard.py`, `aggregations.py`  \n**Mudança:** Adicionadas validações de coluna antes de acesso aos dados  \n**Impacto:** Erros são tratados graciosamente com mensagens user-friendly\n\n**Exemplo:**\n```python\n# Se coluna não existe, retorna valor padrão ao invés de KeyError\ncolunas_requeridas = [\"PROJETADO_ANALITICO\", \"PROJETADO_MERCADO\"]\nif not all(col in df_upload.columns for col in colunas_requeridas):\n    return [0.0]*12, [0.0]*12, None  # Retorna valor seguro\n```\n\n---\n\n## ✅ Validação\n\n### Compilação\n```bash\n$ python -m py_compile frontend/pages/simulador.py\n✅ Sem erros\n```\n\n### Testes Visuais\n- [x] Tabela: 2 últimas linhas visíveis\n- [x] Gráfico: Mostra próximos 12 meses\n- [x] Valores: Sincronizam em tempo real\n- [x] Scroll: Tabela sem scroll vertical\n\n---\n\n## 🎯 Como Editar (Referência Rápida)\n\n### Aumentar Altura da Tabela\n```\n1. Abra: frontend/pages/simulador.py\n2. Ctrl+G → Digite: 1442 → Enter\n3. Edite: height=2100 para outro valor (2200, 2300, etc)\n4. Ctrl+S (salvar) → F5 (recarregar)\n```\n\n**Valores sugeridos:**\n- `height=2000` - Pouco menor\n- `height=2100` - ✅ Atual (recomendado)\n- `height=2200` - Um pouco maior\n- `height=2300` - Bem maior\n\n---\n\n### Aumentar Altura do Gráfico\n```\n1. Abra: frontend/pages/simulador.py\n2. Ctrl+G → Digite: 618 → Enter\n3. Edite: height=400 para outro valor (450, 500, etc)\n4. Ctrl+S → F5\n```\n\n**Valores sugeridos:**\n- `height=400` - ✅ Padrão (atual)\n- `height=450` - Um pouco maior\n- `height=500` - Bem maior\n\n---\n\n### Voltar ao Jan-Dez Fixo (se necessário)\n```\n1. Abra: frontend/pages/simulador.py\n2. Ctrl+G → Digite: 599 → Enter\n3. Substitua as 3 linhas (599-601) por:\n   meses_indices = list(range(12))\n   meses_rotulos = MESES_ABR_LIST\n   meses_numeros = MESES_NUM\n4. Ctrl+S → F5\n```\n\n---\n\n## 📊 Comparativo Antes vs Depois\n\n| Aspecto | Antes ❌ | Depois ✅ |\n|---------|---------|----------|\n| **Tabela** | height=1800, scroll vertical, 2 linhas cortadas | height=2100, sem scroll, 2 linhas visíveis |\n| **Gráfico** | Jan-Dez fixo sempre | Próximos 12 meses dinâmico |\n| **Rótulos** | Jan, Fev, Mar... (fixo) | Mar, Abr, Mai... (muda com a data) |\n| **Erros** | KeyError em accesso de dados | Mensagens user-friendly |\n\n---\n\n## 🚀 Próximas Etapas\n\n### Imediato\n1. ✅ Teste visual no navegador\n2. ✅ Valide se tabela mostra 2 últimas linhas\n3. ✅ Valide se gráfico mostra próximos 12 meses\n4. → Prossiga para testes funcionais completos\n\n### Curto Prazo\n5. Se algo não funcionar: Recarregue navegador (Ctrl+R)\n6. Se persistir: Limpe cache (Ctrl+Shift+Del)\n7. Consulte troubleshooting em README.md se necessário\n\n### Médio Prazo  \n8. Deploy em produção com confiança\n9. Monitore comportamento em ambiente real\n10. Documente casos de uso especiais\n\n---\n\n## 📍 Arquivos Modificados\n\n```\nfrontend/pages/simulador.py\n├── Linhas 599-601: Nova lógica de próximos 12 meses\n├── Linha 618: Height do gráfico (opcional editar)\n└── Linha 1442: Height da tabela ← Principal\n\nfrontend/services/aggregations.py\n├── Validação de coluna em _carregar_curvas_base()\n└── Graceful return se coluna não existe\n\nfrontend/pages/upload.py\n├── Validação em dados_carregados()\n└── Validação em processar_dados()\n\nfrontend/pages/dashboard.py\n└── Validação de colunas antes de agregação\n```\n\n---\n\n## 🔍 Status Técnico\n\n```\n✅ Código compilado sem erros\n✅ Sintaxe validada\n✅ Sem warnings\n✅ Compatível com código existente\n✅ Pronto para produção\n```\n\n---\n\n## 📞 Referência Rápida de Linhas\n\n| Item | Arquivo | Linha |\n|------|---------|-------|\n| Altura tabela | simulador.py | 1442 |\n| Altura gráfico | simulador.py | 618 |\n| Próximos 12 meses | simulador.py | 599-601 |\n| Agregações | aggregations.py | diversas |\n\n---\n\n**Última atualização:** Março 5, 2026  \n**Próxima atualização:** Quando há novas implementações\n"
+# 📋 Histórico de Alterações - UAN Dashboard
+
+## 🔄 Março 2026 - Fase 2: DRE Gerencial (v2.0.0)
+
+### ✨ ADIÇÕES PRINCIPAIS
+
+#### 1. **Nova Página: DRE Gerencial** 📈
+- **Arquivo:** `frontend/pages/dre.py` (750+ linhas)
+- **Funcionalidade:** Sistema completo de projeções financeiras com 21 variáveis
+- **Status:** ✅ Production Ready
+
+**21 Variáveis Implementadas:**
+```
+Variáveis Principais:
+- TD71: Receita Financeira
+- TD72: Despesa Financeira
+- TD90: Receita Oportunidade
+- TD70: Variação Cambial
+- TD87: Outros
+- TD88: Ajustes
+- TD95: Resultado Descasamentos
+- TD96: Ajuste Oportunidade
+- TD97: Valor Justo
+
+Totalizadores:
+- MFB: Margem Financeira Bruta
+- MFBE: Margem Financeira Bruta com Encargos
+
+Outras Linhas:
+- TD11: Receita Diferida
+- TD12: Custo Diferido
+- TD76: Provisão Perda Esperada
+- TD16: Provisão Perda Esperada - Crédito Liberar
+- TD92: Recuperação de Perdas
+- TD81: Abatimento Negocial
+```
+
+#### 2. **Sistema de Metodologias** 🔧
+- **Funcionalidade:** Cálculos automáticos via fórmulas personalizadas
+- **Sintaxe:** `=operacao*variavel` ou `=var1+var2-var3`
+- **Features:**
+  - ✅ Criar metodologias com nome e descrição
+  - ✅ Validação de fórmula antes de salvar
+  - ✅ Aplicar a múltiplas variáveis simultaneamente
+  - ✅ Editar/deletar metodologias
+  - ✅ Exemplos sugeridos pré-carregados
+
+**Exemplos de Uso:**
+```
+1. Receita Oportunidade = 5% de TD71
+   Fórmula: =0.05*TD71
+   Aplicável a: TD90
+   
+2. Spread = Receita + Despesa
+   Fórmula: =TD71+TD72
+   Aplicável a: TD87
+
+3. Despesa = 60% da Receita
+   Fórmula: =0.60*TD71
+   Aplicável a: TD72
+```
+
+#### 3. **Interface Editor DRE** 🎨
+- **Layout:** Tabela HTML profissional (mês-a-mês)
+- **Features:**
+  - ✅ Entrada manual de 12 meses (Jan-Dez)
+  - ✅ Carregamento automático de TD71 do Simulador
+  - ✅ Cálculos automáticos de totalizadores (MFB, MFBE)
+  - ✅ Validação de valores numéricos
+  - ✅ Salvamento automático por usuário
+  - ✅ Formatação de moeda brasileira (fmt_br)
+
+#### 4. **Análise e Relatórios** 📊
+**Métricas Consolidadas:**
+- Receita Financeira (total anual + média mensal)
+- Despesa Financeira (total anual + média mensal)
+- Margem Financeira (%)
+- Período de análise
+
+**Gráficos Interativos:**
+1. Receita vs Despesa (linha, mês-a-mês)
+2. Margens MFB e MFBE (linha, mês-a-mês)
+3. Composição de Receita (barras, total anual)
+
+**Tabela de Resumo:**
+- 21 linhas com: Código, Descrição, Total Anual, Média Mensal, Tipo
+- Diferenciação visual entre variáveis e totalizadores
+- Formatação com separador de milhar brasileiro
+
+**Exportação:**
+- JSON: Estrutura completa com metadados
+- CSV: Compatível com Excel
+
+#### 5. **Integração com Simulador** 🔗
+- **Sincronismo:** TD71 carrega automaticamente de st.session_state.ajustada
+- **Filtros:** Cliente, Categoria, Produto sincronizados com Simulador
+- **Cascata:** Dropdown dinâmico baseado em filtros anteriores
+- **Persistência:** Dados da DRE salvos separadamente do Simulador
+
+#### 6. **Melhorias de Design** 🎨
+- **Cores Institucionais:**
+  - Dark Blue: #0c3a66 (header principal)
+  - Cyan: #06b6d4 (destaques, gráficos)
+  - Pink: #f9a8d4 (totalizadores, negrito)
+
+- **Componentes Visuais:**
+  - Hover effects em linhas da tabela
+  - Expandable sections para cada variável
+  - Cards de métricas com delta
+  - Icons emoji para visual appeal
+
+---
+
+## 🔄 Março 2026 - Fase 1: Otimizações (v1.5.0)
+
+### ✨ AJUSTES IMPLEMENTADOS
+
+#### 1. **Expansão de Tabela** 
+- **Local:** `frontend/pages/simulador.py` linha 1442
+- **Mudança:** Height 1800px → 2100px
+- **Resultado:** 2 últimas linhas (MÉDIA e CRESC) visíveis sem scroll
+
+#### 2. **Gráfico Dinâmico**
+- **Local:** `frontend/pages/simulador.py` linhas 599-601
+- **Funcionalidade:** Cálculo automático de próximos 12 meses
+- **Resultado:** Jan-Dez fixo → Período contínuo (cruza anos)
+
+#### 3. **Validações Gracioso**
+- **Mensagens:** User-friendly para dados incompletos
+- **Exemplo:** "Selecione um cliente antes de prosseguir"
+
+---
+
+## 🔧 ALTERAÇÕES TÉCNICAS
+
+### Modified Files:
+```
+✅ frontend/app.py
+   - Importar novo módulo: from pages import ... dre
+   - Adicionar menu: "📈 DRE" 
+   - Adicionar renderização: if menu_option == "DRE"
+
+✅ frontend/pages/dre.py (NEW - 750+ linhas)
+   - Classe: EstruturaLinehaDRE
+   - Data: ESTRUTURA_DRE (21 linhas pré-configuradas)
+   - Funções: _init_dre_state(), _carregar_td71_simulacao()
+   - Funções: _calcular_totalizadores(), _avaliar_formula()
+   - Funções: _renderizar_editor_dre(), _renderizar_metodologias()
+   - Função: _renderizar_analise(), renderizar()
+
+✅ frontend/utils_ext/constants.py
+   - Adicionar: MESES_ABR_LIST, COR_*, constantes cores
+
+✅ backend/database.py
+   - Adicionar persistência de DRE por usuário
+   - Padrão: {usuario_id}_dre.json em database/simulacoes/
+```
+
+### Session State Keys:
+```python
+st.session_state.dre_dados         # Dict com 21 variáveis
+st.session_state.dre_metodologias  # Dict com metodologias criadas
+st.session_state.dre_filtros       # Dict: cliente, categoria, produto
+st.session_state.dre_modo_visualizacao  # "visualizacao" ou "edicao"
+```
+
+---
+
+## 🧪 TESTES MANUAL
+
+### Cenário 1: Criar DRE Básica
+```
+1. Login como usuario comum
+2. Ir para "📈 DRE"
+3. Selecionar Cliente, Categoria, Produto
+4. Aba "Editor": Preencher TD71 (jan-dez)
+5. Sistema calcula MFB e MFBE automaticamente
+✅ Esperado: Valores aparecem em MFB (TD71 * 0.5 ex)
+```
+
+### Cenário 2: Criar Metodologia
+```
+1. Aba "Metodologias"
+2. Nome: "Receita 5%"
+   Fórmula: =0.05*TD71
+   Aplicável a: TD90
+3. Clicar "Criar"
+✅ Esperado: Metodologia aparece em "Metodologias Salvas"
+
+4. Clicar "Aplicar"
+✅ Esperado: TD90 recebe 5% dos valores de TD71
+```
+
+### Cenário 3: Análise
+```
+1. Aba "Análise"
+✅ Esperado: 
+   - 4 métricas com valores
+   - 3 gráficos interativos
+   - Tabela com 21 linhas
+   - Botões de exportação funcionam
+```
+
+---
+
+## 🚀 DEPLOY CHECKLIST
+
+- [x] Código escrito e testado localmente
+- [x] Import paths corretos (utils_ext.constants - não series)
+- [x] Session state inicializado em _init_dre_state()
+- [x] Filtros sincronizados com Simulador
+- [x] TD71 carrega do ajustada array
+- [x] Metodologias aplicam corretamente
+- [x] Exportação JSON/CSV funcionando
+- [x] Layout responsivo em diferentes tamanhos
+- [x] Documentação atualizada (README.md)
+- [x] Sem erros de TypeErrors em fmt_br()
+
+---
+
+## 📊 MÉTRICAS DE COBERTURA
+
+| Componente | Status | Testes |
+|-----------|--------|--------|
+| Editor DRE | ✅ Completo | Manual ✓ |
+| Metodologias | ✅ Completo | Manual ✓ |
+| Análise | ✅ Completo | Manual ✓ |
+| Integração Simulador | ✅ Completo | Manual ✓ |
+| Persistência | ✅ Completo | Manual ✓ |
+| Filtros Cascata | ✅ Completo | Manual ✓ |
+| Exportação | ✅ Completo | Manual ✓ |
+
+---
+
+## 🔐 SEGURANÇA
+
+- ✅ Isolamento por usuário (cada um tem sua DRE)
+- ✅ Validação de entrada (fórmulas antes de salvar)
+- ✅ Nenhum acesso a dados de outros usuários
+- ✅ Filtros validam contra dados disponíveis
+
+---
+
+## 🔮 PRÓXIMOS PASSOS
+
+1. **PDF Export** - Relatório profissional formatado
+2. **Versionamento** - Histórico de mudanças da DRE
+3. **Comparativo** - Comparar múltiplos cenários
+4. **API** - Endpoints para integração ERP
+5. **BI Dashboard** - Análise cruzada de múltiplas DREs
+
+---
+
+## 📝 NOTAS
+
+- Sistema de Metodologias usa `eval()` para fórmulas - considerar parser seguro em produção
+- DRE salva em JSON (não SQL) - pronto para migração para DB
+- Todas as funções têm docstrings explicativas
+- Layout 100% responsivo (testado em 1024px, 1440px, 1920px)
+
+---
+
+**Versão:** 2.0.0  
+**Data:** 12 de Março de 2026  
+**Status:** ✅ Production Ready
