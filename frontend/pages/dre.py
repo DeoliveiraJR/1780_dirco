@@ -126,6 +126,10 @@ def _init_dre_state():
             "categoria": "",
             "produto": ""
         }
+    
+    # Inicializar dicionário de DREs salvas se não existir
+    if "dre_salvas" not in st.session_state:
+        st.session_state.dre_salvas = {}
 
 
 def _carregar_td71_simulacao():
@@ -135,8 +139,12 @@ def _carregar_td71_simulacao():
         ajustada = st.session_state.get("ajustada", None)
         if ajustada and len(ajustada) == 12:
             st.session_state.dre_dados["TD71"]["valores"] = list(ajustada)
+            print("[DRE] TD71 sincronizado com simulador (ajustada)")
+        else:
+            # Se não tiver ajustada no simulador, mantém valores atuais
+            print("[DRE] Ajustada não disponível no simulador")
     except Exception as e:
-        pass  # Se não conseguir, usa valores padrão
+        print(f"[DRE] Erro ao sincronizar TD71: {e}")
 
 
 # ============================================================================
@@ -199,6 +207,73 @@ def _avaliar_formula(formula: str, dre_dados: dict) -> list:
 
 
 # ============================================================================
+# PERSISTÊNCIA
+# ============================================================================
+
+def salvar_dre_usuario():
+    """
+    Salva dados da DRE para o usuário atual no session_state.
+    Isso permite que os dados persistam entre navegações de página.
+    """
+    usuario = st.session_state.get("usuario", "anonimo")
+    filtros = st.session_state.get("dre_filtros", {})
+    dre_dados = st.session_state.get("dre_dados", {})
+    dre_metodologias = st.session_state.get("dre_metodologias", {})
+    
+    # Cria chave única para esta combinação cliente/categoria/produto
+    combo_key = f"{filtros.get('cliente', 'Todos')}::{filtros.get('categoria', '')}::{filtros.get('produto', '')}"
+    
+    # Inicializa dicionário de DREs salvas se não existir
+    if "dre_salvas" not in st.session_state:
+        st.session_state.dre_salvas = {}
+    
+    if usuario not in st.session_state.dre_salvas:
+        st.session_state.dre_salvas[usuario] = {}
+    
+    # Salva dados da DRE
+    st.session_state.dre_salvas[usuario][combo_key] = {
+        "cliente": filtros.get("cliente", "Todos"),
+        "categoria": filtros.get("categoria", ""),
+        "produto": filtros.get("produto", ""),
+        "dre_dados": dre_dados,
+        "dre_metodologias": dre_metodologias,
+        "data_salvo": datetime.now().isoformat(),
+    }
+    
+    print(f"[DRE] Salva para usuário {usuario}: {combo_key}")
+    st.success(f"✅ DRE salva com sucesso para {filtros.get('produto', 'Sem produto')}!")
+
+
+def carregar_dre_usuario(cliente: str, categoria: str, produto: str):
+    """
+    Carrega dados da DRE do usuário se existirem para esta combinação.
+    
+    Args:
+        cliente, categoria, produto: Filtros para localizar a DRE
+        
+    Returns:
+        Dicionário com dre_dados e dre_metodologias, ou None
+    """
+    usuario = st.session_state.get("usuario", "anonimo")
+    combo_key = f"{cliente}::{categoria}::{produto}"
+    
+    try:
+        dre_salvas = st.session_state.get("dre_salvas", {}).get(usuario, {})
+        dre_salva = dre_salvas.get(combo_key, None)
+        
+        if dre_salva:
+            print(f"[DRE] Carregada para usuário {usuario}: {combo_key}")
+            return dre_salva
+        else:
+            print(f"[DRE] Nenhuma DRE salva para: {combo_key}")
+            return None
+    except Exception as e:
+        print(f"[DRE] Erro ao carregar: {e}")
+        return None
+
+
+
+# ============================================================================
 # RENDERIZAÇÃO
 # ============================================================================
 
@@ -206,6 +281,10 @@ def renderizar():
     """Renderiza a página de DRE Gerencial"""
     
     _init_dre_state()
+    
+    # ===== SINCRONIZAR TD71 SEMPRE (a cada render) =====
+    # Isso garante que mudanças no simulador sejam refletidas aqui
+    _carregar_td71_simulacao()
     
     # ===== HEADER =====
     st.markdown("""
@@ -299,7 +378,7 @@ def renderizar():
     # Botão Salvar
     with col_btn:
         if st.button("💾 Salvar", use_container_width=True, type="primary"):
-            st.success("✅ Projeção salva!", icon="💾")
+            salvar_dre_usuario()
     
     st.divider()
     
@@ -615,12 +694,19 @@ def _renderizar_metodologias():
                                         # Calcular valores usando a fórmula
                                         valores_novo = _avaliar_formula(dados['formula'], dre_dados)
                                         dre_dados[var_codigo]["valores"] = valores_novo
+                                        print(f"[DRE] Metodologia '{nome}' aplicada a {var_codigo}")
                                 
                                 st.session_state.dre_dados = dre_dados
+                                
+                                # ===== RECALCULAR TOTALIZADORES IMEDIATAMENTE =====
+                                # Isso garante que MFB e MFBE sejam recalculados com os novos valores
+                                _calcular_totalizadores()
+                                
                                 st.success(f"✅ Aplicado a {len(dados['aplicavel_a'])} variável(is)!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"❌ Erro ao aplicar: {str(e)}")
+                                print(f"[DRE] Erro ao aplicar metodologia: {e}")
                     
                     with col_del:
                         if st.button(f"🗑️ Deletar", key=f"del_met_{nome}", use_container_width=True):
