@@ -23,7 +23,7 @@ from utils_ext.constants import (
 )
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data_manager import get_dados_upload
+from data_manager import get_dados_upload, carregar_curva_ajustada
 
 
 # ============================================================================
@@ -132,19 +132,35 @@ def _init_dre_state():
         st.session_state.dre_salvas = {}
 
 
-def _carregar_td71_simulacao():
-    """Carrega valores de TD71 a partir da curva ajustada da simulação"""
+def _carregar_td71_simulacao(cliente: str = "Todos", categoria: str = "", produto: str = ""):
+    """
+    Carrega valores de TD71 a partir da curva ajustada salva no simulador.
+    Tenta em ordem:
+    1. Carregar curva persistida para cliente/categoria/produto
+    2. Carregar de st.session_state.ajustada (se usuário passou pelo simulador)
+    3. Deixar em zero
+    """
     try:
-        # Tenta carregar dados de ajustada do simulador
+        # 1. Tentar carregar curva persistida para essa combinação específica
+        if cliente or categoria or produto:
+            curva_persistida = carregar_curva_ajustada(cliente, categoria, produto)
+            if curva_persistida and len(curva_persistida) == 12:
+                st.session_state.dre_dados["TD71"]["valores"] = list(curva_persistida)
+                print(f"[DRE] TD71 carregado de curva persistida: {cliente}::{categoria}::{produto}")
+                return
+        
+        # 2. Tentar carregar do session_state do simulador (usuário veio direto do simulador)
         ajustada = st.session_state.get("ajustada", None)
         if ajustada and len(ajustada) == 12:
             st.session_state.dre_dados["TD71"]["valores"] = list(ajustada)
-            print("[DRE] TD71 sincronizado com simulador (ajustada)")
-        else:
-            # Se não tiver ajustada no simulador, mantém valores atuais
-            print("[DRE] Ajustada não disponível no simulador")
+            print("[DRE] TD71 sincronizado com simulador (session_state.ajustada)")
+            return
+        
+        # 3. Se nada funcionar, deixa em zero (será preenchido manualmente)
+        print("[DRE] Nenhuma curva ajustada encontrada para TD71 - valores em zero")
+        
     except Exception as e:
-        print(f"[DRE] Erro ao sincronizar TD71: {e}")
+        print(f"[DRE] Erro ao carregar TD71: {e}")
 
 
 # ============================================================================
@@ -181,26 +197,35 @@ def _avaliar_formula(formula: str, dre_dados: dict) -> list:
     
     formula_limpa = formula[1:]  # Remove '='
     
-    # Substituir placeholders de código por seus valores
-    # Isso é um avaliador simples - em produção, considere usar eval() com sandbox
-    
-    # Primeiro, replace dos códigos pelas listas de valores
+    # Preparar contexto: {codigo: [12 valores]}
     contexto = {}
     for codigo, dados in dre_dados.items():
-        contexto[codigo] = dados["valores"]
+        valores = dados.get("valores", [0.0] * 12)
+        contexto[codigo] = valores
     
     # Avaliar a fórmula para cada mês
     valores_resultado = []
+    
     for mes_idx in range(12):
-        # Substituir códigos pelos valores do mês específico
+        # Construir expressão para este mês específico
+        # Substituir códigos de variáveis pelos valores do mês
         expr = formula_limpa
-        for codigo, valores in contexto.items():
-            expr = expr.replace(codigo, f"({valores[mes_idx]})")
+        
+        # Ordenar por comprimento decrescente para evitar conflitos
+        # Ex: TD70 não seja substituído quando fazemos replace em TD701
+        codigos_ordenados = sorted(contexto.keys(), key=len, reverse=True)
+        
+        for codigo in codigos_ordenados:
+            valor_mes = contexto[codigo][mes_idx]
+            # Envolver em float() para garantir operações matemáticas
+            expr = expr.replace(codigo, f"float({valor_mes})")
         
         try:
             resultado = eval(expr)
             valores_resultado.append(float(resultado))
-        except:
+            print(f"[DRE] Fórmula '{formula}' mês {mes_idx}: {resultado}")
+        except Exception as e:
+            print(f"[DRE] Erro ao avaliar fórmula '{formula}' mês {mes_idx}: {e}")
             valores_resultado.append(0.0)
     
     return valores_resultado
@@ -281,10 +306,6 @@ def renderizar():
     """Renderiza a página de DRE Gerencial"""
     
     _init_dre_state()
-    
-    # ===== SINCRONIZAR TD71 SEMPRE (a cada render) =====
-    # Isso garante que mudanças no simulador sejam refletidas aqui
-    _carregar_td71_simulacao()
     
     # ===== HEADER =====
     st.markdown("""
@@ -379,6 +400,10 @@ def renderizar():
     with col_btn:
         if st.button("💾 Salvar", use_container_width=True, type="primary"):
             salvar_dre_usuario()
+    
+    # ===== SINCRONIZAR TD71 COM OS FILTROS SELECIONADOS =====
+    # Carrega a curva ajustada para a combinação cliente/categoria/produto selecionada
+    _carregar_td71_simulacao(cliente_sel, categoria_sel, produto_sel)
     
     st.divider()
     
@@ -686,27 +711,45 @@ def _renderizar_metodologias():
                     with col_apply:
                         if st.button(f"✨ Aplicar", key=f"apply_met_{nome}", use_container_width=True):
                             try:
+                                print(f"\n[DRE] Iniciando aplicação da metodologia '{nome}'...")
+                                
                                 # Aplicar metodologia às variáveis especificadas
-                                dre_dados = st.session_state.dre_dados
+                                dre_dados = st.session_state.dre_dados.copy()
+                                
+                                print(f"[DRE] Variáveis a atualizar: {dados['aplicavel_a']}")
+                                print(f"[DRE] Fórmula: {dados['formula']}")
                                 
                                 for var_codigo in dados['aplicavel_a']:
                                     if var_codigo in dre_dados:
                                         # Calcular valores usando a fórmula
                                         valores_novo = _avaliar_formula(dados['formula'], dre_dados)
+                                        
+                                        # Antes de aplicar, mostrar valores antigos
+                                        valores_antigos = dre_dados[var_codigo]["valores"][:3]
+                                        print(f"[DRE] {var_codigo} ANTES: {valores_antigos}...")
+                                        
+                                        # Aplicar novos valores
                                         dre_dados[var_codigo]["valores"] = valores_novo
+                                        valores_novos = valores_novo[:3]
+                                        print(f"[DRE] {var_codigo} DEPOIS: {valores_novos}...")
                                         print(f"[DRE] Metodologia '{nome}' aplicada a {var_codigo}")
                                 
+                                # Salvar dados no session state
                                 st.session_state.dre_dados = dre_dados
                                 
                                 # ===== RECALCULAR TOTALIZADORES IMEDIATAMENTE =====
                                 # Isso garante que MFB e MFBE sejam recalculados com os novos valores
+                                print(f"[DRE] Recalculando totalizadores...")
                                 _calcular_totalizadores()
                                 
+                                print(f"[DRE] Aplicação concluída!\n")
                                 st.success(f"✅ Aplicado a {len(dados['aplicavel_a'])} variável(is)!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"❌ Erro ao aplicar: {str(e)}")
                                 print(f"[DRE] Erro ao aplicar metodologia: {e}")
+                                import traceback
+                                traceback.print_exc()
                     
                     with col_del:
                         if st.button(f"🗑️ Deletar", key=f"del_met_{nome}", use_container_width=True):
