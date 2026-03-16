@@ -24,6 +24,7 @@ from utils_ext.constants import (
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_manager import get_dados_upload, carregar_curva_ajustada
+from services.aggregations import _carregar_curvas_por_ano
 
 
 # ============================================================================
@@ -132,13 +133,14 @@ def _init_dre_state():
         st.session_state.dre_salvas = {}
 
 
-def _carregar_td71_simulacao(cliente: str = "Todos", categoria: str = "", produto: str = ""):
+def _carregar_td71_simulacao(cliente: str = "Todos", categoria: str = "", produto: str = "", ano: int = 2026):
     """
     Carrega valores de TD71 a partir da curva ajustada salva no simulador.
     Tenta em ordem:
     1. Carregar curva persistida para cliente/categoria/produto
     2. Carregar de st.session_state.ajustada (se usuário passou pelo simulador)
-    3. Deixar em zero
+    3. Carregar curva analítica do DataFrame de upload
+    4. Deixar em zero
     """
     try:
         # 1. Tentar carregar curva persistida para essa combinação específica
@@ -156,8 +158,22 @@ def _carregar_td71_simulacao(cliente: str = "Todos", categoria: str = "", produt
             print("[DRE] TD71 sincronizado com simulador (session_state.ajustada)")
             return
         
-        # 3. Se nada funcionar, deixa em zero (será preenchido manualmente)
-        print("[DRE] Nenhuma curva ajustada encontrada para TD71 - valores em zero")
+        # 3. Tentar carregar curva analítica do DataFrame de upload
+        if cliente and cliente != "Todos" and categoria and produto:
+            try:
+                df_upload = get_dados_upload()
+                if df_upload is not None and not df_upload.empty:
+                    ana_curva, mer_curva, ajs_curva = _carregar_curvas_por_ano(df_upload, cliente, categoria, produto, ano)
+                    # Usar a curva analítica como fallback
+                    if ana_curva and len(ana_curva) == 12 and any(v != 0.0 for v in ana_curva):
+                        st.session_state.dre_dados["TD71"]["valores"] = list(ana_curva)
+                        print(f"[DRE] TD71 carregado de curva analítica (upload): {cliente}::{categoria}::{produto}::{ano}")
+                        return
+            except Exception as e:
+                print(f"[DRE] Erro ao carregar curva analítica: {e}")
+        
+        # 4. Se nada funcionar, deixa em zero (será preenchido manualmente)
+        print("[DRE] Nenhuma curva ajustada/analítica encontrada para TD71 - valores em zero")
         
     except Exception as e:
         print(f"[DRE] Erro ao carregar TD71: {e}")
@@ -403,7 +419,7 @@ def renderizar():
     
     # ===== SINCRONIZAR TD71 COM OS FILTROS SELECIONADOS =====
     # Carrega a curva ajustada para a combinação cliente/categoria/produto selecionada
-    _carregar_td71_simulacao(cliente_sel, categoria_sel, produto_sel)
+    _carregar_td71_simulacao(cliente_sel, categoria_sel, produto_sel, ano_sel)
     
     st.divider()
     
