@@ -386,8 +386,14 @@ def processar_dados(df_raw: pd.DataFrame):
                     arquivo_bytes = buffer.getvalue()
                     nome_arquivo = "base_dados_compartilhada.xlsx"
                     
-                    # Salva no database
-                    sucesso, mensagem = salvar_upload_admin(arquivo_bytes, nome_arquivo)
+                    # Salva no database - PRECISA DO usuario_id
+                    usuario_id = st.session_state.get("usuario_id", "")
+                    if not usuario_id:
+                        st.error("❌ Erro: usuario_id não definido no session_state")
+                        st.info("Por favor, faça logout e login novamente")
+                        return
+                    
+                    sucesso, mensagem = salvar_upload_admin(arquivo_bytes, nome_arquivo, usuario_id)
                     
                     if sucesso:
                         st.success(f"✅ {mensagem}")

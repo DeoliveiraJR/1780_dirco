@@ -1,0 +1,81 @@
+{
+  "metadata": {
+    "usuario_id": "usr_001",
+    "data_ultima_atualizacao": "2026-03-16T18:17:14.969105",
+    "versao_schema": "1.0",
+    "total_linhas_origem": 2
+  },
+  "produtos": {
+    "CLIENTE PF VAREJO::CAPTAÇÕES::DEPOSITO A PRAZO - CDB AUTOMÁTICO": {
+      "dados_base": {
+        "cliente": "CLIENTE PF VAREJO",
+        "categoria": "CAPTAÇÕES",
+        "produto": "DEPOSITO A PRAZO - CDB AUTOMÁTICO",
+        "cod_bloco": "123456",
+        "cod_produto": "001",
+        "cod_categoria": "CAT001"
+      },
+      "projecoes": {
+        "2026": {
+          "meses": [
+            1,
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "analitica": [
+            100.0,
+            110.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "mercado": [
+            95.0,
+            105.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "ajustada": [
+            98.0,
+            108.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "simulacoes": []
+    }
+  }
+}

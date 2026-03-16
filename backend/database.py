@@ -151,17 +151,36 @@ def salvar_upload_admin(arquivo_excel: bytes, nome_arquivo: str, usuario_id: str
             json.dump(metadata, f, indent=2, ensure_ascii=False)
         
         # 4. Parse para JSON estruturado (NOVO)
+        print(f"[DB] Iniciando parse XLSX → JSON...")
         usuarios_sistema = carregar_usuarios()
+        print(f"[DB] {len(usuarios_sistema)} usuários encontrados para sincronizar")
+        
         for usr in usuarios_sistema:
             usr_id = usr.get("id")
             if usr_id:
-                schema = parse_excel_to_json(df, usr_id)
-                salvar_dados_usuario(usr_id, schema)
+                print(f"[DB] Parseando para usuário: {usr_id}")
+                try:
+                    schema = parse_excel_to_json(df, usr_id)
+                    num_produtos = len(schema.get("produtos", {}))
+                    print(f"[DB]   ✅ Schema criado: {num_produtos} produtos")
+                    
+                    sucesso, msg = salvar_dados_usuario(usr_id, schema)
+                    if sucesso:
+                        print(f"[DB]   ✅ Dados salvos com sucesso")
+                    else:
+                        print(f"[DB]   ❌ Erro ao salvar: {msg}")
+                except Exception as parse_err:
+                    print(f"[DB]   ❌ ERRO ao parsear para {usr_id}: {parse_err}")
+                    import traceback
+                    traceback.print_exc()
         
         print(f"[DB] Upload salvo e parseado: {caminho_arquivo}")
         return True, f"Arquivo '{nome_arquivo}' importado com sucesso!\n✅ Estrutura de dados atualizada para {len(usuarios_sistema)} usuários"
         
     except Exception as e:
+        print(f"[DB] ❌ ERRO GERAL: {e}")
+        import traceback
+        traceback.print_exc()
         return False, f"Erro ao salvar upload: {str(e)}"
 
 
