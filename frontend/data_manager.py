@@ -1,6 +1,7 @@
 """
 Data Manager - Gerencia dados compartilhados entre páginas
 Armazena dados do upload, simulações e curvas ajustadas persistentes
+Sincroniza automaticamente com o banco de dados backend
 """
 
 import pandas as pd
@@ -9,6 +10,20 @@ import json
 import os
 from datetime import datetime
 from typing import Optional, List, Dict, Tuple
+import sys
+
+# Importar schema do backend
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+try:
+    from database_schema import (
+        carregar_dados_usuario, 
+        get_curva_ajustada, 
+        atualizar_curva_ajustada,
+        listar_produtos,
+        get_produto_projection
+    )
+except ImportError:
+    print("[DATA_MANAGER] ⚠️  database_schema não disponível ainda")
 
 
 # ============================================================================
@@ -49,6 +64,12 @@ def init_data_state():
         # Dicionário {cod_produto: mape_value} para o card SCORE
         st.session_state.scores_mape = {}
         _carregar_scores_mape()
+    if "schema_backend" not in st.session_state:
+        # Cache do schema carregado do backend
+        st.session_state.schema_backend = None
+    if "usuario_id" not in st.session_state:
+        # ID do usuário logado (usado para sincronizar com backend)
+        st.session_state.usuario_id = "usr_anonimo"
 
 
 def _carregar_scores_mape():
@@ -909,6 +930,128 @@ def restaurar_curvas_de_arquivo() -> int:
     except Exception as e:
         print(f"[DATA_MANAGER] Erro ao restaurar curvas: {e}")
         return 0
+
+
+# ============================================================================
+# SINCRONIZAÇÃO COM BACKEND SCHEMA
+# ============================================================================
+def carregar_dados_do_backend(usuario_id: str) -> Optional[Dict]:
+    """
+    Carrega a estrutura de dados completa do usuário do backend.
+    
+    Returns:
+        Dicionário com schema de dados ou None
+    """
+    try:
+        schema = carregar_dados_usuario(usuario_id)
+        if schema:
+            print(f"[SYNC] Schema carregado do backend: {len(schema.get('produtos', {}))} produtos")
+        return schema
+    except Exception as e:
+        print(f"[SYNC] Erro ao carregar schema do backend: {e}")
+        return None
+
+
+def sincronizar_curva_para_backend(usuario_id: str, cliente: str, categoria: str, 
+                                   produto: str, ano: int, curva_ajustada: List[float]) -> bool:
+    """
+    Sincroniza uma curva ajustada para o backend.
+    Atualiza o JSON no backend/database/dados/
+    
+    Args:
+        usuario_id: ID do usuário
+        cliente: Cliente
+        categoria: Categoria
+        produto: Produto
+        ano: Ano da projeção
+        curva_ajustada: Lista com 12 valores
+        
+    Returns:
+        True se sincronizado com sucesso
+    """
+    try:
+        sucesso, msg = atualizar_curva_ajustada(usuario_id, cliente, categoria, 
+                                                 produto, ano, curva_ajustada)
+        if sucesso:
+            print(f"[SYNC] Curva sincronizada para backend: {cliente}::{categoria}::{produto}::{ano}")
+        return sucesso
+    except Exception as e:
+        print(f"[SYNC] Erro ao sincronizar curva: {e}")
+        return False
+
+
+def obter_curva_do_backend(usuario_id: str, cliente: str, categoria: str, 
+                           produto: str, ano: int) -> Optional[List[float]]:
+    """
+    Obtém uma curva ajustada do backend.
+    
+    Returns:
+        Lista [v1, v2, ..., v12] ou None
+    """
+    try:
+        curva = get_curva_ajustada(usuario_id, cliente, categoria, produto, ano)
+        return curva
+    except Exception as e:
+        print(f"[SYNC] Erro ao obter curva do backend: {e}")
+        return None
+
+
+def listar_produtos_do_backend(usuario_id: str) -> List[Dict]:
+    """
+    Lista todos os produtos disponíveis para um usuário.
+    
+    Returns:
+        Lista de produtos com metadados
+    """
+    try:
+        produtos = listar_produtos(usuario_id)
+        return produtos
+    except Exception as e:
+        print(f"[SYNC] Erro ao listar produtos: {e}")
+        return []
+
+
+def sincronizar_session_com_backend(usuario_id: str) -> bool:
+    """
+    Sincroniza o session_state completo com o schema do backend.
+    Carrega os dados persistidos do usuário.
+    
+    Returns:
+        True se sincronização bem sucedida
+    """
+    try:
+        schema = carregar_dados_do_backend(usuario_id)
+        if not schema:
+            print(f"[SYNC] Nenhum dado encontrado no backend para {usuario_id}")
+            return False
+        
+        # Armazenar schema no session_state para acesso rápido
+        st.session_state.schema_backend = schema
+        
+        # Carregar curvas persistidas do backend
+        for combo_key, produto_data in schema.get("produtos", {}).items():
+            # Extrair dados da chave
+            partes = combo_key.split("::")
+            if len(partes) >= 3:
+                cliente, categoria, produto = partes[0], partes[1], partes[2]
+                
+                # Buscar a projeção mais recente (ano maior)
+                projecoes = produto_data.get("projecoes", {})
+                if projecoes:
+                    ano_maior = max(int(a) for a in projecoes.keys())
+                    curva_ajustada = projecoes[str(ano_maior)].get("ajustada")
+                    
+                    if curva_ajustada and len(curva_ajustada) == 12:
+                        # Restaurar no session_state
+                        salvar_curva_ajustada(cliente, categoria, produto, 
+                                            curva_ajustada, f"Backend {ano_maior}")
+        
+        print(f"[SYNC] Session sincronizado com backend para {usuario_id}")
+        return True
+        
+    except Exception as e:
+        print(f"[SYNC] Erro ao sincronizar session com backend: {e}")
+        return False
 
 
 # Inicializar ao importar

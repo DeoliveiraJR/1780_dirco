@@ -284,6 +284,22 @@ def renderizar():
             },
             dados_grafico={"Ajustada": ajustada_para_salvar},
         )
+        
+        # ===== SINCRONIZAÇÃO COM BACKEND (NOVO) =====
+        try:
+            usuario_id = st.session_state.get("usuario_id", "")
+            cliente_sim = st.session_state["filtros"].get("cliente", "Todos")
+            categoria_sim = st.session_state["filtros"].get("categoria", "")
+            produto_sim = st.session_state["filtros"].get("produto", "")
+            ano_sim = int(st.session_state.get("ano_simulacao", 2026))
+            
+            if usuario_id and cliente_sim and categoria_sim and produto_sim:
+                from data_manager import sincronizar_curva_para_backend
+                sincronizar_curva_para_backend(usuario_id, cliente_sim, categoria_sim, 
+                                              produto_sim, ano_sim, ajustada_para_salvar)
+        except Exception as e:
+            print(f"[SIMULADOR] Aviso: Não foi possível sincronizar com backend: {e}")
+        
         st.toast(f"✅ Simulação '{sim_salva.get('nome', '')}' salva com sucesso!", icon="💾")
         st.success(f"✅ Simulação salva! ID: {sim_salva.get('id', '')[:20]}...")
         st.rerun()  # Força rerun para atualizar a lista de simulações

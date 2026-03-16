@@ -13,6 +13,9 @@ from datetime import datetime
 from typing import Optional, Dict, List, Tuple
 from pathlib import Path
 
+# Importar schema manager
+from database_schema import parse_excel_to_json, salvar_dados_usuario, _criar_schema_vazio
+
 # Caminhos das tabelas mockadas
 BASE_DIR = Path(__file__).parent / "database"
 USERS_FILE = BASE_DIR / "users.json"
@@ -105,7 +108,7 @@ def eh_admin(usuario: Dict) -> bool:
 def salvar_upload_admin(arquivo_excel: bytes, nome_arquivo: str, usuario_id: str) -> Tuple[bool, str]:
     """
     Salva um arquivo de upload do admin na pasta de uploads.
-    Sobrescreve o arquivo anterior (simula update da base de dados).
+    Também faz parse para JSON estruturado e sincroniza para todos os usuários.
     
     Args:
         arquivo_excel: Bytes do arquivo Excel
@@ -121,28 +124,42 @@ def salvar_upload_admin(arquivo_excel: bytes, nome_arquivo: str, usuario_id: str
         return False, "Apenas administradores podem fazer upload"
     
     try:
-        # Salva o arquivo com nome padronizado para manter como base compartilhada
+        # 1. Salva o arquivo XLSX original
         caminho_arquivo = UPLOADS_DIR / "base_dados_compartilhada.xlsx"
         
         with open(caminho_arquivo, 'wb') as f:
             f.write(arquivo_excel)
         
-        # Salva metadados do upload
+        # 2. Parse para DataFrame
+        from io import BytesIO
+        df = pd.read_excel(BytesIO(arquivo_excel))
+        
+        # 3. Salva metadados do upload
         metadata = {
             "arquivo_original": nome_arquivo,
             "arquivo_salvo": str(caminho_arquivo.relative_to(BASE_DIR.parent)),
             "usuario_id": usuario_id,
             "usuario_email": usuario.get("email"),
             "data_upload": datetime.now().isoformat(),
-            "tamanho_bytes": len(arquivo_excel)
+            "tamanho_bytes": len(arquivo_excel),
+            "linhas": len(df),
+            "colunas": list(df.columns)
         }
         
         metadata_file = METADATA_DIR / "ultimo_upload.json"
         with open(metadata_file, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
         
-        print(f"[DB] Upload salvo: {caminho_arquivo}")
-        return True, f"Arquivo '{nome_arquivo}' importado com sucesso como base de dados compartilhada"
+        # 4. Parse para JSON estruturado (NOVO)
+        usuarios_sistema = carregar_usuarios()
+        for usr in usuarios_sistema:
+            usr_id = usr.get("id")
+            if usr_id:
+                schema = parse_excel_to_json(df, usr_id)
+                salvar_dados_usuario(usr_id, schema)
+        
+        print(f"[DB] Upload salvo e parseado: {caminho_arquivo}")
+        return True, f"Arquivo '{nome_arquivo}' importado com sucesso!\n✅ Estrutura de dados atualizada para {len(usuarios_sistema)} usuários"
         
     except Exception as e:
         return False, f"Erro ao salvar upload: {str(e)}"

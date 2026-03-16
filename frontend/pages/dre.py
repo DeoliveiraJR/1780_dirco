@@ -135,14 +135,29 @@ def _init_dre_state():
 
 def _carregar_td71_simulacao(cliente: str = "Todos", categoria: str = "", produto: str = "", ano: int = 2026):
     """
-    Carrega valores de TD71 a partir da curva ajustada salva no simulador.
+    Carrega valores de TD71 a partir da curva ajustada.
     Tenta em ordem:
-    1. Carregar curva persistida para cliente/categoria/produto
-    2. Carregar de st.session_state.ajustada (se usuário passou pelo simulador)
-    3. Carregar curva analítica do DataFrame de upload
-    4. Deixar em zero
+    1. Carregar do BACKEND SCHEMA (novo - sincronizado com Simulador)
+    2. Carregar curva persistida no session_state
+    3. Carregar de st.session_state.ajustada (simulador)
+    4. Carregar curva analítica do DataFrame de upload
+    5. Deixar em zero
     """
     try:
+        # 0. NOVO: Tentar carregar do BACKEND SCHEMA primeiro
+        if cliente and cliente != "Todos" and categoria and produto:
+            try:
+                usuario_id = st.session_state.get("usuario_id", "")
+                if usuario_id:
+                    from data_manager import obter_curva_do_backend
+                    curva_backend = obter_curva_do_backend(usuario_id, cliente, categoria, produto, ano)
+                    if curva_backend and len(curva_backend) == 12 and any(v != 0.0 for v in curva_backend):
+                        st.session_state.dre_dados["TD71"]["valores"] = list(curva_backend)
+                        print(f"[DRE] ✅ TD71 carregado do BACKEND: {cliente}::{categoria}::{produto}::{ano}")
+                        return
+            except Exception as e:
+                print(f"[DRE] Aviso ao carregar do backend: {e}")
+        
         # 1. Tentar carregar curva persistida para essa combinação específica
         if cliente or categoria or produto:
             curva_persistida = carregar_curva_ajustada(cliente, categoria, produto)
@@ -173,7 +188,7 @@ def _carregar_td71_simulacao(cliente: str = "Todos", categoria: str = "", produt
                 print(f"[DRE] Erro ao carregar curva analítica: {e}")
         
         # 4. Se nada funcionar, deixa em zero (será preenchido manualmente)
-        print("[DRE] Nenhuma curva ajustada/analítica encontrada para TD71 - valores em zero")
+        print("[DRE] Nenhuma curva encontrada para TD71 - valores em zero")
         
     except Exception as e:
         print(f"[DRE] Erro ao carregar TD71: {e}")

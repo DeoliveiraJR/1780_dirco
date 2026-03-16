@@ -148,8 +148,9 @@ else:
         opcoes_menu = [
             ("📊", "Dashboard", "Dashboard"),
             ("🎯", "Simulador", "Simulador"),
-            ("�", "DRE", "DRE Gerencial"),
-            ("�👤", "Perfil", "Perfil"),
+            ("📃", "DRE", "DRE Gerencial"),
+            ("👤", "Perfil", "Perfil"),
+            
             ("📤", "Upload", "Upload de Dados")
         ]
         opcoes_display = {f"{i} {l}": v for (i,l,v) in opcoes_menu}
