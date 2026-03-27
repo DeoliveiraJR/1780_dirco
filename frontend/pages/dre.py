@@ -9,7 +9,10 @@ import pandas as pd
 import numpy as np
 import sys
 import os
+import json
+import re
 from datetime import datetime
+from copy import deepcopy
 
 # Importar utilitários
 from utils_ext.css import make_stylesheet
@@ -20,6 +23,10 @@ from utils_ext.series import (
 from utils_ext.constants import (
     MESES_FULL, MESES_NUM, MESES_ABR, MESES_ABR_LIST, COR_ANALITICA, COR_MERCADO, 
     COR_AJUSTADA, COR_RLZD_BASE, CAT_COLORS
+)
+from utils_ext.calc_functions import (
+    FUNCOES_NATIVAS, DESCRICOES_FUNCOES, EXEMPLOS_FUNCOES, 
+    evaluar_funcao_em_formula, obter_documentacao_funcoes
 )
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -128,6 +135,15 @@ def _init_dre_state():
             "produto": ""
         }
     
+    # Inicializar rastreamento de mudança de filtro
+    if "dre_combo_filtro_anterior" not in st.session_state:
+        st.session_state.dre_combo_filtro_anterior = ""
+    
+    # Inicializar dicionário de persistência de dados por escopo de filtro
+    # Estrutura: {combo_chave: {codigo: {descricao, tipo, formula, valores, eh_negrito}}}
+    if "dre_dados_persistidos" not in st.session_state:
+        st.session_state.dre_dados_persistidos = {}
+    
     # Inicializar dicionário de DREs salvas se não existir
     if "dre_salvas" not in st.session_state:
         st.session_state.dre_salvas = {}
@@ -213,8 +229,12 @@ def _calcular_totalizadores():
 
 def _avaliar_formula(formula: str, dre_dados: dict) -> list:
     """
-    Avalia uma fórmula como '=TD71+TD72' ou '=0.05*TD71'
+    Avalia uma fórmula como '=TD71+TD72' ou '=0.05*TD71' ou '=SOMA(TD71)'
     Retorna lista com 12 valores mensais
+    
+    Suporta:
+    - Operações matemáticas: =0.05*TD71, =TD71+TD72
+    - Funções nativas: =SOMA(TD71), =MEDIA(TD71;TD72), =MINIMO(TD71:TD90)
     
     Args:
         formula: String com fórmula (ex: '=TD71+TD72')
@@ -228,37 +248,70 @@ def _avaliar_formula(formula: str, dre_dados: dict) -> list:
     
     formula_limpa = formula[1:]  # Remove '='
     
-    # Preparar contexto: {codigo: [12 valores]}
-    contexto = {}
+    # Preparar contexto simplificado para substituição de variáveis: {codigo: [12 valores]}
+    contexto_simples = {}
     for codigo, dados in dre_dados.items():
         valores = dados.get("valores", [0.0] * 12)
-        contexto[codigo] = valores
+        contexto_simples[codigo] = valores
     
-    # Avaliar a fórmula para cada mês
+    print(f"[DRE] Processando fórmula: {formula}")
+    print(f"[DRE] Variáveis disponíveis: {list(dre_dados.keys())}")
+    
+    # ===== PROCESSAR FUNÇÕES NATIVAS =====
+    # Padrão regex para encontrar funções: SOMA(ARGS), MEDIA(ARGS), etc
+    padrao_funcoes = r'(SOMA|MEDIA|MINIMO|MAXIMO)\((.*?)\)'
+    
+    # Substituir cada função encontrada pelo seu valor agregado
+    formula_processada = formula_limpa
+    
+    matches = re.finditer(padrao_funcoes, formula_limpa, re.IGNORECASE)
+    for match in matches:
+        nome_funcao = match.group(1).upper()
+        argumentos = match.group(2)
+        
+        print(f"[DRE] Encontrada função nativa: {nome_funcao}({argumentos})")
+        
+        # ✅ CORRIGIDO: Passar dre_dados COMPLETO (não contexto simplificado)
+        valor_agregado = evaluar_funcao_em_formula(nome_funcao, argumentos, dre_dados)
+        
+        print(f"[DRE] → Resultado: {valor_agregado}")
+        
+        # Substituir a função pelo seu valor
+        funcao_str = f"{nome_funcao}({argumentos})"
+        formula_processada = formula_processada.replace(funcao_str, str(valor_agregado))
+        
+        print(f"[DRE] Fórmula agora: {formula_processada}")
+    
+    print(f"[DRE] Fórmula final (antes do mês-a-mês): {formula_processada}")
+    
+    # ===== AVALIAR FÓRMULA PARA CADA MÊS =====
     valores_resultado = []
     
     for mes_idx in range(12):
         # Construir expressão para este mês específico
-        # Substituir códigos de variáveis pelos valores do mês
-        expr = formula_limpa
+        expr = formula_processada
         
         # Ordenar por comprimento decrescente para evitar conflitos
         # Ex: TD70 não seja substituído quando fazemos replace em TD701
-        codigos_ordenados = sorted(contexto.keys(), key=len, reverse=True)
+        codigos_ordenados = sorted(contexto_simples.keys(), key=len, reverse=True)
         
         for codigo in codigos_ordenados:
-            valor_mes = contexto[codigo][mes_idx]
-            # Envolver em float() para garantir operações matemáticas
-            expr = expr.replace(codigo, f"float({valor_mes})")
+            if codigo in contexto_simples:
+                valor_mes = contexto_simples[codigo][mes_idx]
+                # Envolver em float() para garantir operações matemáticas
+                expr = expr.replace(codigo, f"float({valor_mes})")
         
         try:
             resultado = eval(expr)
             valores_resultado.append(float(resultado))
-            print(f"[DRE] Fórmula '{formula}' mês {mes_idx}: {resultado}")
+            if mes_idx == 0:  # Log apenas do primeiro mês para não poluir
+                print(f"[DRE] Mês 0 resultado: {resultado}")
         except Exception as e:
-            print(f"[DRE] Erro ao avaliar fórmula '{formula}' mês {mes_idx}: {e}")
+            print(f"[DRE] ❌ Erro ao avaliar fórmula '{formula}' mês {mes_idx}: {e}")
+            print(f"[DRE] Expressão era: {expr}")
             valores_resultado.append(0.0)
     
+    print(f"[DRE] Resultado final (12 meses): {valores_resultado[:3]}... (primeiros 3)")
     return valores_resultado
 
 
@@ -431,6 +484,37 @@ def renderizar():
     with col_btn:
         if st.button("💾 Salvar", use_container_width=True, type="primary"):
             salvar_dre_usuario()
+    
+    # ===== DETECTAR MUDANÇA DE FILTRO E PERSISTIR DADOS =====
+    # Criar chave única para a combinação atual de filtros
+    combo_filtro_atual = f"{cliente_sel}::{categoria_sel}::{produto_sel}::{ano_sel}"
+    combo_filtro_anterior = st.session_state.get("dre_combo_filtro_anterior", "")
+    
+    if combo_filtro_atual != combo_filtro_anterior:
+        print(f"\n[DRE] 🔄 MUDANÇA DE FILTRO DETECTADA!")
+        print(f"[DRE] Anterior: {combo_filtro_anterior}")
+        print(f"[DRE] Atual: {combo_filtro_atual}\n")
+        
+        # ===== ETAPA 1: SALVAR DADOS DO FILTRO ANTERIOR =====
+        if combo_filtro_anterior:  # Se não é a primeira inicialização
+            st.session_state.dre_dados_persistidos[combo_filtro_anterior] = deepcopy(st.session_state.dre_dados)
+            print(f"[DRE] ✅ Dados do filtro anterior '{combo_filtro_anterior[:50]}...' SALVOS")
+        
+        # ===== ETAPA 2: CARREGAR OU INICIALIZAR DADOS DO NOVO FILTRO =====
+        if combo_filtro_atual in st.session_state.dre_dados_persistidos:
+            # Já existe dados salvos para este filtro - RESTAURAR
+            st.session_state.dre_dados = deepcopy(st.session_state.dre_dados_persistidos[combo_filtro_atual])
+            print(f"[DRE] ✅ Dados do filtro atual RESTAURADOS de arquivo")
+        else:
+            # Primeiro acesso a este filtro - RESETAR VALORES (EXCETO TD71)
+            for codigo in st.session_state.dre_dados:
+                if codigo != "TD71":
+                    st.session_state.dre_dados[codigo]["valores"] = [0.0] * 12
+            print(f"[DRE] ✅ Novo filtro inicializado (dados em branco)")
+        
+        # ===== ARMAZENAR NOVA CHAVE DE FILTRO =====
+        st.session_state.dre_combo_filtro_anterior = combo_filtro_atual
+        print(f"[DRE] ✅ Chave de filtro atualizada\n")
     
     # ===== SINCRONIZAR TD71 COM OS FILTROS SELECIONADOS =====
     # Carrega a curva ajustada para a combinação cliente/categoria/produto selecionada
@@ -648,20 +732,27 @@ def _renderizar_editor_dre():
 
 
 def _renderizar_metodologias():
-    """Renderiza página de configuração de metodologias"""
+    """Renderiza página de configuração de metodologias com suporte a funções nativas"""
     
-    st.markdown("### 🔧 Configuração de Metodologias")
+    st.markdown("### 🔧 Metodologias de Cálculo")
     st.markdown("""
-    As metodologias permitem calcular automaticamente valores de variáveis baseado em fórmulas.
+    Crie fórmulas automáticas para calcular valores de variáveis na DRE.
     
-    **Exemplos:**
-    - Receita de Oportunidade = 5% da Receita Financeira: `=0.05*TD71`
-    - Margem Financeira Bruta = Soma de Receitas: `=TD71+TD90+TD70`
+    **Recursos:**
+    - Operações matemáticas: `=0.05*TD71`, `=TD71+TD72`
+    - Funções nativas: `=SOMA(TD71)`, `=MEDIA(TD71;TD72)`, `=MINIMO(TD71:TD90)`
+    - Histórico de aplicações com filtros e contexto
     """)
     
-    col_novo, col_listar = st.columns([1.2, 1.8], gap="large")
+    # ===== ABAS INTERNAS =====
+    tab_criar, tab_aplicar, tab_refs = st.tabs([
+        "➕ Criar Metodologia",
+        "🎯 Aplicar e Histórico",
+        "📚 Referência"
+    ])
     
-    with col_novo:
+    # ===== ABA 1: CRIAR NOVA METODOLOGIA =====
+    with tab_criar:
         st.markdown("#### ➕ Criar Nova Metodologia")
         
         with st.form("form_nova_metodologia", clear_on_submit=True):
@@ -680,9 +771,9 @@ def _renderizar_metodologias():
             
             formula_metodologia = st.text_input(
                 "Fórmula de Cálculo",
-                placeholder="ex: =0.60*TD71 ou =TD71+TD72",
+                placeholder="ex: =0.60*TD71 ou =SOMA(TD71) ou =MEDIA(TD71;TD72)",
                 label_visibility="collapsed",
-                help="Use '=' no início e códigos de variáveis (TD71, TD72, etc)"
+                help="Use '=' no início. Pode usar códigos de variáveis e funções nativas (SOMA, MEDIA, MINIMO, MAXIMO)"
             )
             
             aplicavel_a = st.multiselect(
@@ -710,7 +801,8 @@ def _renderizar_metodologias():
                                 "descricao": descricao_met,
                                 "formula": formula_metodologia,
                                 "aplicavel_a": aplicavel_a,
-                                "data_criacao": datetime.now().isoformat()
+                                "data_criacao": datetime.now().isoformat(),
+                                "aplicacoes": []  # Histórico de aplicações com filtros
                             }
                             st.session_state.dre_metodologias[nome_metodologia] = nova_met
                             st.success(f"✅ Metodologia '{nome_metodologia}' criada!")
@@ -719,106 +811,313 @@ def _renderizar_metodologias():
                             st.error(f"❌ Erro na fórmula: {str(e)}")
                 else:
                     st.error("⚠️ Preencha: Nome, Fórmula e selecione variáveis")
+        
+        # ===== EXEMPLOS SUGERIDOS =====
+        st.markdown("---")
+        st.markdown("#### 💡 Exemplos Sugeridos")
+        
+        col_ex1, col_ex2, col_ex3, col_ex4 = st.columns(4)
+        
+        with col_ex1:
+            st.markdown("""
+            **Receita Op. = 5%**
+            ```
+            =0.05*TD71
+            ```
+            """)
+        
+        with col_ex2:
+            st.markdown("""
+            **Despesa = 60% Receita**
+            ```
+            =0.60*TD71
+            ```
+            """)
+        
+        with col_ex3:
+            st.markdown("""
+            **Spread = Receita + Desp**
+            ```
+            =TD71+TD72
+            ```
+            """)
+        
+        with col_ex4:
+            st.markdown("""
+            **Receita Média**
+            ```
+            =MEDIA(TD71)
+            ```
+            """)
     
-    with col_listar:
-        st.markdown("#### 📋 Metodologias Salvas")
+    # ===== ABA 2: APLICAR METODOLOGIAS =====
+    with tab_aplicar:
+        st.markdown("#### 🎯 Aplicar Metodologias e Histórico")
+        st.markdown("""
+        Selecione uma metodologia abaixo e clique em "Aplicar" para usar os filtros já selecionados no topo.
+        Todos os dados serão atualizados e o histórico será registrado automaticamente.
+        """)
+        
         metodologias = st.session_state.dre_metodologias
         
         if not metodologias:
-            st.info("Nenhuma metodologia criada ainda")
+            st.warning("ℹ️ Nenhuma metodologia foi criada ainda. Acesse a aba '➕ Criar Metodologia'", icon="ℹ️")
         else:
-            for nome, dados in list(metodologias.items()):
-                with st.expander(f"📌 {nome}", expanded=False):
-                    st.markdown(f"**Fórmula:** `{dados['formula']}`")
-                    
-                    if dados.get('descricao'):
-                        st.markdown(f"**Descrição:** {dados['descricao']}")
-                    
-                    st.markdown(f"**Aplicável a:** `{', '.join(dados['aplicavel_a'])}`")
-                    st.caption(f"Criada em: {dados['data_criacao'][:10]}")
-                    
-                    col_apply, col_del = st.columns(2)
-                    
-                    with col_apply:
-                        if st.button(f"✨ Aplicar", key=f"apply_met_{nome}", use_container_width=True):
-                            try:
-                                print(f"\n[DRE] Iniciando aplicação da metodologia '{nome}'...")
-                                
-                                # Aplicar metodologia às variáveis especificadas
-                                dre_dados = st.session_state.dre_dados.copy()
-                                
-                                print(f"[DRE] Variáveis a atualizar: {dados['aplicavel_a']}")
-                                print(f"[DRE] Fórmula: {dados['formula']}")
-                                
-                                for var_codigo in dados['aplicavel_a']:
-                                    if var_codigo in dre_dados:
-                                        # Calcular valores usando a fórmula
-                                        valores_novo = _avaliar_formula(dados['formula'], dre_dados)
-                                        
-                                        # Antes de aplicar, mostrar valores antigos
-                                        valores_antigos = dre_dados[var_codigo]["valores"][:3]
-                                        print(f"[DRE] {var_codigo} ANTES: {valores_antigos}...")
-                                        
-                                        # Aplicar novos valores
-                                        dre_dados[var_codigo]["valores"] = valores_novo
-                                        valores_novos = valores_novo[:3]
-                                        print(f"[DRE] {var_codigo} DEPOIS: {valores_novos}...")
-                                        print(f"[DRE] Metodologia '{nome}' aplicada a {var_codigo}")
-                                
-                                # Salvar dados no session state
-                                st.session_state.dre_dados = dre_dados
-                                
-                                # ===== RECALCULAR TOTALIZADORES IMEDIATAMENTE =====
-                                # Isso garante que MFB e MFBE sejam recalculados com os novos valores
-                                print(f"[DRE] Recalculando totalizadores...")
-                                _calcular_totalizadores()
-                                
-                                print(f"[DRE] Aplicação concluída!\n")
-                                st.success(f"✅ Aplicado a {len(dados['aplicavel_a'])} variável(is)!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Erro ao aplicar: {str(e)}")
-                                print(f"[DRE] Erro ao aplicar metodologia: {e}")
-                                import traceback
-                                traceback.print_exc()
-                    
-                    with col_del:
-                        if st.button(f"🗑️ Deletar", key=f"del_met_{nome}", use_container_width=True):
-                            del st.session_state.dre_metodologias[nome]
-                            st.success("Metodologia deletada")
+            # ===== OBTER FILTROS JÁ SELECIONADOS NO TOPO =====
+            filtros_atuais = st.session_state.get("dre_filtros", {})
+            cliente_atual = filtros_atuais.get("cliente", "Todos")
+            categoria_atual = filtros_atuais.get("categoria", "")
+            produto_atual = filtros_atuais.get("produto", "")
+            
+            # Construir descrição do escopo
+            escopo_display = []
+            if cliente_atual and cliente_atual != "Todos":
+                escopo_display.append(f"👤 {cliente_atual}")
+            if categoria_atual:
+                escopo_display.append(f"📁 {categoria_atual}")
+            if produto_atual:
+                escopo_display.append(f"📦 {produto_atual}")
+            
+            escopo_texto = " • ".join(escopo_display) if escopo_display else "Sem filtro específico"
+            
+            st.info(f"""
+            **🎯 Escopo Atual (filtros do topo):**
+            
+            {escopo_texto}
+            """)
+            
+            st.markdown("---")
+            st.markdown("**📋 Metodologias Disponíveis:**")
+            
+            # ===== LISTAR METODOLOGIAS COM BOTÕES DE APLICAR =====
+            for met_nome, met_dados in list(metodologias.items()):
+                col_expand, col_apply, col_del = st.columns([3, 1, 0.8])
+                
+                with col_expand:
+                    with st.expander(f"📌 {met_nome}"):
+                        st.markdown(f"**Fórmula:** `{met_dados['formula']}`", help="Esta é a fórmula que será calculada")
+                        
+                        if met_dados.get('descricao'):
+                            st.markdown(f"**Descrição:** {met_dados['descricao']}")
+                        
+                        st.markdown(f"**Variáveis:** {', '.join([f'`{v}`' for v in met_dados['aplicavel_a']])}")
+                        st.caption(f"Criada em: {met_dados['data_criacao'][:10]}")
+                        
+                        # Histórico
+                        aplicacoes = met_dados.get("aplicacoes", [])
+                        if aplicacoes:
+                            st.markdown("**📋 Últimas Aplicações:**")
+                            for app in aplicacoes[-5:]:
+                                st.caption(f"• {app.get('escopo', 'N/A')} ({app.get('data', '')[:10]})")
+                
+                with col_apply:
+                    if st.button("✅ Aplicar", key=f"btn_app_{met_nome}", use_container_width=True, type="primary"):
+                        try:
+                            print(f"\n{'='*60}")
+                            print(f"[APLICACAO] Iniciando: {met_nome}")
+                            print(f"[APLICACAO] Escopo: {escopo_texto}")
+                            print(f"{'='*60}")
+                            
+                            # ===== APLICAR METODOLOGIA =====
+                            dre_dados = deepcopy(st.session_state.dre_dados)
+                            
+                            aplicadas_a = []
+                            for var_codigo in met_dados['aplicavel_a']:
+                                if var_codigo in dre_dados:
+                                    # Calcular nova série
+                                    valores_calc = _avaliar_formula(met_dados['formula'], dre_dados)
+                                    
+                                    # Log
+                                    v_antes = dre_dados[var_codigo]["valores"][:3]
+                                    dre_dados[var_codigo]["valores"] = valores_calc
+                                    v_depois = valores_calc[:3]
+                                    
+                                    print(f"[APLICACAO] {var_codigo}")
+                                    print(f"  ANTES:  {v_antes}...")
+                                    print(f"  DEPOIS: {v_depois}...")
+                                    
+                                    aplicadas_a.append(var_codigo)
+                            
+                            # ===== SALVAR E RECALCULAR =====
+                            st.session_state.dre_dados = dre_dados
+                            _calcular_totalizadores()
+                            
+                            # ===== REGISTRAR APLICAÇÃO =====
+                            novo_registro = {
+                                "data": datetime.now().isoformat(),
+                                "escopo": escopo_texto,
+                                "variáveis": aplicadas_a,
+                                "filtros": {
+                                    "cliente": cliente_atual,
+                                    "categoria": categoria_atual,
+                                    "produto": produto_atual
+                                }
+                            }
+                            
+                            if "aplicacoes" not in st.session_state.dre_metodologias[met_nome]:
+                                st.session_state.dre_metodologias[met_nome]["aplicacoes"] = []
+                            
+                            st.session_state.dre_metodologias[met_nome]["aplicacoes"].append(novo_registro)
+                            
+                            print(f"[APLICACAO] ✅ SUCESSO")
+                            print(f"{'='*60}\n")
+                            
+                            st.success(f"""
+                            ✅ **Aplicado com Sucesso!**
+                            
+                            • Variáveis: {', '.join(aplicadas_a)}
+                            • Escopo: {escopo_texto}
+                            • Timestamp: {novo_registro['data'][:19].replace('T', ' ')}
+                            """)
                             st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"❌ Erro: {str(e)}")
+                            print(f"[APLICACAO] ❌ ERRO: {e}")
+                            import traceback
+                            traceback.print_exc()
+                
+                with col_del:
+                    if st.button("🗑️", key=f"btn_del_{met_nome}", use_container_width=True):
+                        del st.session_state.dre_metodologias[met_nome]
+                        st.rerun()
     
-    # ===== EXEMPLOS DE METODOLOGIAS =====
-    st.markdown("---")
-    st.markdown("#### 💡 Exemplos Sugeridos")
-    
-    col_ex1, col_ex2, col_ex3 = st.columns(3)
-    
-    with col_ex1:
+    # ===== ABA 3: REFERÊNCIA DE FUNÇÕES =====
+    with tab_refs:
+        st.markdown("#### 📚 Documentação de Funções Nativas")
         st.markdown("""
-        **Receita Op. = 5% Receita Fin.**
-        ```
-        =0.05*TD71
-        ```
-        Aplicável a: **TD90**
+        Guia completo de como usar as funções nativas nas fórmulas de metodologia.
         """)
-    
-    with col_ex2:
+        
+        # ===== CARDS COM CADA FUNÇÃO =====
+        for idx, nome_func in enumerate(["SOMA", "MEDIA", "MINIMO", "MAXIMO"]):
+            col1, col2 = st.columns([1, 1])
+            
+            with col1:
+                with st.container(border=True):
+                    st.markdown(f"### {nome_func}()")
+                    st.markdown(DESCRICOES_FUNCOES.get(nome_func, ""))
+                    
+                    st.markdown("**Sintaxe:**")
+                    st.code(EXEMPLOS_FUNCOES.get(nome_func, ""), language="text")
+            
+            with col2:
+                with st.container(border=True):
+                    st.markdown(f"### Exemplos de {nome_func}()")
+                    
+                    if nome_func == "SOMA":
+                        st.markdown("""
+                        ```
+                        =SOMA(TD71)
+                        =0.1*SOMA(TD71)
+                        =SOMA(TD71:TD90)
+                        =SOMA(TD71;TD72;TD87)
+                        ```
+                        """)
+                    elif nome_func == "MEDIA":
+                        st.markdown("""
+                        ```
+                        =MEDIA(TD71)
+                        =MEDIA(TD71;TD72)
+                        =MEDIA(TD71:TD90)
+                        =0.5*MEDIA(TD71)
+                        ```
+                        """)
+                    elif nome_func == "MINIMO":
+                        st.markdown("""
+                        ```
+                        =MINIMO(TD71)
+                        =MINIMO(TD71;TD72;TD87)
+                        =MINIMO(TD71:TD90)
+                        =100-MINIMO(TD71)
+                        ```
+                        """)
+                    elif nome_func == "MAXIMO":
+                        st.markdown("""
+                        ```
+                        =MAXIMO(TD71)
+                        =MAXIMO(TD71;TD72;TD87)
+                        =MAXIMO(TD71:TD90)
+                        =MAXIMO(TD71)*0.05
+                        ```
+                        """)
+        
+        # ===== SINTAXE DE ARGUMENTOS =====
+        st.divider()
+        st.markdown("#### 📋 Formatos de Argumentos")
+        
+        col_arg1, col_arg2, col_arg3 = st.columns(3)
+        
+        with col_arg1:
+            st.markdown("""
+            **Um Código:**
+            
+            ```
+            SOMA(TD71)
+            ```
+            
+            Processa os 12 meses de TD71
+            """)
+        
+        with col_arg2:
+            st.markdown("""
+            **Múltiplos (;):**
+            
+            ```
+            MEDIA(TD71;TD72;TD87)
+            ```
+            
+            Combina valores de múltiplos códigos
+            """)
+        
+        with col_arg3:
+            st.markdown("""
+            **Intervalo (:):**
+            
+            ```
+            MINIMO(TD71:TD90)
+            ```
+            
+            Intervalo contínuo de códigos
+            """)
+        
+        # ===== PROCESSAMENTO =====
+        st.divider()
+        st.markdown("#### ⚙️ Ordem de Processamento")
+        
         st.markdown("""
-        **Despesa = 60% Receita**
+        As fórmulas são processadas em três etapas:
+        
+        **1️⃣ Funções Nativas**
+        - Todas as funções (SOMA, MEDIA, etc) são avaliadas PRIMEIRO
+        - Cada função retorna um ÚNICO valor agregado
+        - Exemplo: `SOMA(TD71)` = 1860.0 (soma de 12 meses)
+        
+        **2️⃣ Substituição**
+        - O resultado de cada função substitui a chamada função
+        - Exemplo: `0.05*SOMA(TD71)` → `0.05*1860.0`
+        
+        **3️⃣ Cálculo Mês-a-Mês**
+        - A fórmula final é calculada para cada um dos 12 meses
+        - Variáveis (TD71, TD72) usam seus valores mensais
+        - Resultado: 12 valores (um por mês)
+        
+        **Exemplo Completo:**
         ```
-        =0.60*TD71
+        Fórmula: =0.05*SOMA(TD71)+0.03*MEDIA(TD72)
+        
+        Passo 1: SOMA(TD71) = 1860.0, MEDIA(TD72) = 116.25
+        Passo 2: =0.05*1860.0+0.03*116.25
+        Passo 3: Para cada mês:
+          - Mês 1: 0.05*155.0 + 0.03*9.69 = 8.06
+          - Mês 2: 0.05*160.0 + 0.03*10.00 = 8.30
+          - ... (total 12 valores)
         ```
-        Aplicável a: **TD72**
         """)
-    
-    with col_ex3:
-        st.markdown("""
-        **Spread = Receita + Desp**
-        ```
-        =TD71+TD72
-        ```
-        Aplicável a: **TD87**
+        
+        st.info("""
+        💡 **Dica:** Abra o console (terminal) para ver logs de processamento da fórmula.
+        Os logs mostram cada passo e ajudam a depurar fórmulas complexas.
         """)
 
 
