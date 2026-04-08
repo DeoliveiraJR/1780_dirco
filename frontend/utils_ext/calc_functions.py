@@ -1,21 +1,26 @@
 """
 Módulo de Funções de Cálculo Nativas para DRE Gerencial
 
-Implementa funções de cálculo semelhantes ao Excel para uso em fórmulas de metodologias:
+Implementa funções de cálculo semelhante ao Excel para uso em fórmulas de metodologias:
 - SOMA: Soma todos os valores
 - MEDIA: Calcula a média aritmética
 - MINIMO: Encontra o valor mínimo
 - MAXIMO: Encontra o valor máximo
 
-Sintaxe:
+Sintaxe Básica:
     SOMA(TD71)              # Soma os 12 meses de TD71
     MEDIA(TD71;TD72)        # Média dos valores de TD71 e TD72 combinados
     MINIMO(TD71:TD90)       # Valor mínimo entre TD71 e TD90 (intervalo)
     MAXIMO(TD71;TD72;TD87)  # Valor máximo dos códigos especificados
+
+Sintaxe com Sazonalidade (Intervalo Temporal):
+    SOMA(TD71; 7)           # Soma dos PRÓXIMOS 7 meses de TD71 (a partir de agora)
+    MEDIA(TD72; -7)         # Média dos ÚLTIMOS 7 meses de TD72 (meses passados)
+    MINIMO(TD71; -12)       # Valor mínimo dos últimos 12 meses (ano anterior)
 """
 
 import numpy as np
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Tuple
 
 
 # ============================================================================
@@ -112,6 +117,87 @@ def MAXIMO(valores: List[float]) -> float:
 
 
 # ============================================================================
+# PROCESSAMENTO DE SAZONALIDADE (INTERVALO TEMPORAL)
+# ============================================================================
+
+def processar_intervalo_temporal(argumentos_str: str) -> Tuple[str, int]:
+    """
+    Extrai o código e o intervalo temporal de um argumento com sazonalidade.
+    
+    Args:
+        argumentos_str: String como "TD71; 7" ou "TD72; -7"
+        
+    Returns:
+        Tuple[str, int]: (código, intervalo_temporal)
+        - intervalo > 0: próximos N meses (futuro)
+        - intervalo < 0: últimos N meses (passado)
+        - intervalo = 0: todos os 12 meses
+        
+    Exemplos:
+        "TD71; 7" → ("TD71", 7)
+        "TD72; -7" → ("TD72", -7)
+        "TD71" → ("TD71", 0)
+    """
+    # Remover espaços
+    argumentos_str = argumentos_str.strip()
+    
+    # Verificar se tem intervalo temporal (contém ';')
+    if ";" in argumentos_str:
+        partes = [p.strip() for p in argumentos_str.split(";")]
+        
+        if len(partes) == 2:
+            try:
+                codigo = partes[0].strip().upper()
+                intervalo = int(partes[1].strip())
+                return codigo, intervalo
+            except ValueError:
+                print(f"[CALC] ⚠️ Intervalo temporal inválido: {partes[1]}")
+                # Fallback: usar apenas o primeiro argumento
+                return partes[0].strip().upper(), 0
+    
+    # Sem intervalo temporal - retornar com intervalo 0
+    return argumentos_str.upper(), 0
+
+
+def aplicar_intervalo_temporal(valores_12_meses: List[float], intervalo: int) -> List[float]:
+    """
+    Aplica filtro de intervalo temporal aos 12 meses de dados.
+    
+    Args:
+        valores_12_meses: Lista com exatamente 12 valores (jan a dez)
+        intervalo: 
+            - 0: todos os 12 meses
+            - 1 a 12: próximos N meses (a partir de jan)
+            - -1 a -12: últimos N meses (meses precedentes)
+            
+    Returns:
+        List[float]: Valores filtrados pelo intervalo
+        
+    Exemplos:
+        valores_12_meses de 12 meses, intervalo=7 → primeiros 7 meses
+        valores_12_meses de 12 meses, intervalo=-7 → últimos 7 meses
+    """
+    if not valores_12_meses or len(valores_12_meses) == 0:
+        return []
+    
+    # Intervalo 0 ou ausente: retornar todos
+    if intervalo == 0:
+        return valores_12_meses[:12] if len(valores_12_meses) >= 12 else valores_12_meses
+    
+    # Intervalo positivo: próximos N meses
+    if intervalo > 0:
+        n_meses = min(abs(intervalo), 12)
+        return valores_12_meses[:n_meses]
+    
+    # Intervalo negativo: últimos N meses
+    if intervalo < 0:
+        n_meses = min(abs(intervalo), 12)
+        return valores_12_meses[-n_meses:] if n_meses > 0 else []
+    
+    return valores_12_meses[:12]
+
+
+# ============================================================================
 # MAPEAMENTO DE FUNÇÕES DISPONÍVEIS
 # ============================================================================
 
@@ -123,17 +209,17 @@ FUNCOES_NATIVAS = {
 }
 
 DESCRICOES_FUNCOES = {
-    "SOMA": "Soma todos os valores de uma variável ou intervalo",
-    "MEDIA": "Calcula a média aritmética dos valores",
-    "MINIMO": "Encontra o valor mínimo entre os valores",
-    "MAXIMO": "Encontra o valor máximo entre os valores",
+    "SOMA": "Soma todos os valores (com suporte a intervalo temporal)",
+    "MEDIA": "Calcula a média aritmética dos valores (com suporte a intervalo temporal)",
+    "MINIMO": "Encontra o valor mínimo entre os valores (com suporte a intervalo temporal)",
+    "MAXIMO": "Encontra o valor máximo entre os valores (com suporte a intervalo temporal)",
 }
 
 EXEMPLOS_FUNCOES = {
-    "SOMA": "SOMA(TD71)     # Soma os 12 meses de TD71",
-    "MEDIA": "MEDIA(TD71;TD72)    # Média de TD71 e TD72",
-    "MINIMO": "MINIMO(TD71:TD90)   # Mínimo entre TD71 e TD90",
-    "MAXIMO": "MAXIMO(TD71;TD72;TD87)   # Máximo entre essas variáveis",
+    "SOMA": "SOMA(TD71) ou SOMA(TD71; 7)     # Soma dos 12 meses ou próximos 7",
+    "MEDIA": "MEDIA(TD71; -7)     # Média dos últimos 7 meses",
+    "MINIMO": "MINIMO(TD71; -12)   # Mínimo dos últimos 12 meses (ano anterior)",
+    "MAXIMO": "MAXIMO(TD71; 7)     # Máximo dos próximos 7 meses",
 }
 
 
@@ -192,21 +278,22 @@ def parse_range_intervalo(intervalo: str, codigos_disponiveis: List[str]) -> Lis
 def evaluar_funcao_em_formula(nome_funcao: str, argumentos: str, 
                              dre_dados: Dict, mes_idx: int = None) -> float:
     """
-    Avalia uma função nativa dentro de uma fórmula de metodologia.
-    Pode retornar um valor único ou uma lista de 12 valores.
+    Avalia uma função nativa dentro de uma fórmula de metodologia com suporte a sazonalidade.
     
     Args:
         nome_funcao: Nome da função ('SOMA', 'MEDIA', etc)
-        argumentos: String com argumentos ('TD71' ou 'TD71;TD72' ou 'TD71:TD90')
+        argumentos: String com argumentos com ou sem intervalo temporal
+                   Ex: 'TD71' ou 'TD71; 7' ou 'TD71; -7'
         dre_dados: Dicionário com dados da DRE
         mes_idx: Índice do mês (0-11) se aplicável, None para valor agregado
         
     Returns:
         float: Valor calculado
         
-    Exemplo:
-        evaluar_funcao_em_formula('SOMA', 'TD71', dre_dados)
-        → Retorna a soma dos 12 meses de TD71
+    Exemplos:
+        evaluar_funcao_em_formula('SOMA', 'TD71', dre_dados) → soma 12 meses
+        evaluar_funcao_em_formula('SOMA', 'TD71; 7', dre_dados) → soma próximos 7 meses
+        evaluar_funcao_em_formula('MEDIA', 'TD72; -7', dre_dados) → média dos últimos 7 meses
     """
     
     if nome_funcao.upper() not in FUNCOES_NATIVAS:
@@ -214,38 +301,60 @@ def evaluar_funcao_em_formula(nome_funcao: str, argumentos: str,
         return 0.0
     
     try:
-        # Obter lista de códigos a processar
+        # ===== ETAPA 1: Extrair código e intervalo temporal =====
+        codigo_str, intervalo_temporal = processar_intervalo_temporal(argumentos.strip())
+        
+        print(f"[CALC] {nome_funcao}({argumentos})")
+        print(f"[CALC]  → Código: {codigo_str}, Intervalo: {intervalo_temporal}")
+        
+        # ===== ETAPA 2: Obter lista de códigos a processar =====
         codigos_disponiveis = list(dre_dados.keys())
-        codigos_a_usar = parse_range_intervalo(argumentos.strip(), codigos_disponiveis)
+        
+        # Detectar se é intervalo de códigos (TD71:TD90) ou apenas um código
+        if ":" in codigo_str:
+            # Intervalo de códigos
+            codigos_a_usar = parse_range_intervalo(codigo_str, codigos_disponiveis)
+        else:
+            # Código único
+            if codigo_str in codigos_disponiveis:
+                codigos_a_usar = [codigo_str]
+            else:
+                print(f"[CALC] Código '{codigo_str}' não encontrado")
+                return 0.0
         
         if not codigos_a_usar:
-            print(f"[CALC] Nenhum código válido encontrado em: {argumentos}")
+            print(f"[CALC] Nenhum código válido encontrado em: {codigo_str}")
             return 0.0
         
-        # Coletar valores
+        # ===== ETAPA 3: Coletar valores com filtro temporal =====
         valores_para_funcao = []
         
         for codigo in codigos_a_usar:
             if codigo in dre_dados:
                 valores_var = dre_dados[codigo].get("valores", [0.0] * 12)
                 
-                if mes_idx is not None and mes_idx < len(valores_var):
+                # Aplicar filtro temporal
+                valores_filtrados = aplicar_intervalo_temporal(valores_var, intervalo_temporal)
+                
+                if mes_idx is not None and mes_idx < len(valores_filtrados):
                     # Se especificou mês, usar valor daquele mês
-                    valores_para_funcao.append(valores_var[mes_idx])
+                    valores_para_funcao.append(valores_filtrados[mes_idx])
                 else:
-                    # Senão, agregar todos os 12 meses
-                    valores_para_funcao.extend(valores_var)
+                    # Senão, agregar todos os valores filtrados
+                    valores_para_funcao.extend(valores_filtrados)
         
-        # Executar a função
+        # ===== ETAPA 4: Executar a função =====
         funcao = FUNCOES_NATIVAS[nome_funcao.upper()]
         resultado = funcao(valores_para_funcao)
         
-        print(f"[CALC] {nome_funcao}({argumentos}) = {resultado}")
+        print(f"[CALC]  → Resultado: {resultado}")
         
         return resultado
         
     except Exception as e:
-        print(f"[CALC] Erro ao avaliar {nome_funcao}({argumentos}): {e}")
+        print(f"[CALC] ❌ Erro ao avaliar {nome_funcao}({argumentos}): {e}")
+        import traceback
+        traceback.print_exc()
         return 0.0
 
 

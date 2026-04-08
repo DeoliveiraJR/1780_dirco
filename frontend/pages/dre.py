@@ -773,8 +773,36 @@ def _renderizar_metodologias():
                 "Fórmula de Cálculo",
                 placeholder="ex: =0.60*TD71 ou =SOMA(TD71) ou =MEDIA(TD71;TD72)",
                 label_visibility="collapsed",
-                help="Use '=' no início. Pode usar códigos de variáveis e funções nativas (SOMA, MEDIA, MINIMO, MAXIMO)"
+                help="Use '=' no início. Pode usar códigos de variáveis e funções nativas (SOMA, MEDIA, MINIMO, MAXIMO) com sazonalidade: SOMA(TD71; 7) ou MEDIA(TD72; -7)"
             )
+            
+            st.markdown("**⏱️ Sazonalidade (opcional)** - Para usar nas funções:")
+            col_saz1, col_saz2, col_saz3 = st.columns(3)
+            
+            with col_saz1:
+                sazonalidade = st.number_input(
+                    "Intervalo de Meses",
+                    value=0,
+                    min_value=-12,
+                    max_value=12,
+                    help="Positivo: próximos N meses | Negativo: últimos N meses | 0: todos os 12 meses"
+                )
+            
+            with col_saz2:
+                st.info("""
+                **Exemplos:**
+                - 7: próximos 7 meses
+                - -7: últimos 7 meses
+                - 0: todos (padrão)
+                """)
+            
+            with col_saz3:
+                st.info("""
+                **Uso na Fórmula:**
+                - SOMA(TD71; 7)
+                - MEDIA(TD72; -7)
+                - MINIMO(TD71; -12)
+                """)
             
             aplicavel_a = st.multiselect(
                 "Aplicável às variáveis (selecione pelo menos 1):",
@@ -801,7 +829,9 @@ def _renderizar_metodologias():
                                 "descricao": descricao_met,
                                 "formula": formula_metodologia,
                                 "aplicavel_a": aplicavel_a,
+                                "sazonalidade": sazonalidade,  # Novo campo
                                 "data_criacao": datetime.now().isoformat(),
+                                "data_atualizacao": datetime.now().isoformat(),  # Novo campo
                                 "aplicacoes": []  # Histórico de aplicações com filtros
                             }
                             st.session_state.dre_metodologias[nome_metodologia] = nova_met
@@ -891,7 +921,7 @@ def _renderizar_metodologias():
             
             # ===== LISTAR METODOLOGIAS COM BOTÕES DE APLICAR =====
             for met_nome, met_dados in list(metodologias.items()):
-                col_expand, col_apply, col_del = st.columns([3, 1, 0.8])
+                col_expand, col_apply, col_edit, col_del = st.columns([2.5, 0.8, 0.8, 0.7])
                 
                 with col_expand:
                     with st.expander(f"📌 {met_nome}"):
@@ -901,7 +931,13 @@ def _renderizar_metodologias():
                             st.markdown(f"**Descrição:** {met_dados['descricao']}")
                         
                         st.markdown(f"**Variáveis:** {', '.join([f'`{v}`' for v in met_dados['aplicavel_a']])}")
+                        
+                        saz = met_dados.get('sazonalidade', 0)
+                        if saz != 0:
+                            st.markdown(f"**Sazonalidade:** {saz} meses")
+                        
                         st.caption(f"Criada em: {met_dados['data_criacao'][:10]}")
+                        st.caption(f"Atualizada em: {met_dados.get('data_atualizacao', 'N/A')[:10] if met_dados.get('data_atualizacao') else 'N/A'}")
                         
                         # Histórico
                         aplicacoes = met_dados.get("aplicacoes", [])
@@ -977,10 +1013,89 @@ def _renderizar_metodologias():
                             import traceback
                             traceback.print_exc()
                 
+                # ===== BOTÃO EDITAR =====
+                with col_edit:
+                    if st.button("✏️ Editar", key=f"btn_edit_{met_nome}", use_container_width=True):
+                        st.session_state[f"editando_{met_nome}"] = True
+                        st.rerun()
+                
                 with col_del:
                     if st.button("🗑️", key=f"btn_del_{met_nome}", use_container_width=True):
                         del st.session_state.dre_metodologias[met_nome]
                         st.rerun()
+                
+                # ===== MODO EDIÇÃO =====
+                if st.session_state.get(f"editando_{met_nome}", False):
+                    st.divider()
+                    st.markdown(f"### ✏️ Editando: {met_nome}")
+                    
+                    with st.form(f"form_edit_{met_nome}"):
+                        novo_nome = st.text_input(
+                            "Nome",
+                            value=met_dados['nome'],
+                            label_visibility="collapsed"
+                        )
+                        
+                        novo_descricao = st.text_area(
+                            "Descrição",
+                            value=met_dados.get('descricao', ''),
+                            height=60,
+                            label_visibility="collapsed"
+                        )
+                        
+                        nova_formula = st.text_input(
+                            "Fórmula",
+                            value=met_dados['formula'],
+                            label_visibility="collapsed"
+                        )
+                        
+                        st.markdown("**⏱️ Sazonalidade:**")
+                        nova_saz = st.number_input(
+                            "Meses",
+                            value=met_dados.get('sazonalidade', 0),
+                            min_value=-12,
+                            max_value=12,
+                            key=f"saz_edit_{met_nome}"
+                        )
+                        
+                        nova_aplicavel = st.multiselect(
+                            "Variáveis",
+                            [linha.codigo for linha in ESTRUTURA_DRE if linha.tipo == "variavel"],
+                            default=met_dados['aplicavel_a'],
+                            key=f"vars_edit_{met_nome}"
+                        )
+                        
+                        # Botões
+                        col_save, col_cancel = st.columns(2)
+                        with col_save:
+                            if st.form_submit_button("💾 Salvar Alterações", use_container_width=True, type="primary"):
+                                try:
+                                    # Atualizar metodologia
+                                    st.session_state.dre_metodologias[met_nome] = {
+                                        "nome": novo_nome,
+                                        "descricao": novo_descricao,
+                                        "formula": nova_formula,
+                                        "aplicavel_a": nova_aplicavel,
+                                        "sazonalidade": nova_saz,
+                                        "data_criacao": met_dados['data_criacao'],
+                                        "data_atualizacao": datetime.now().isoformat(),
+                                        "aplicacoes": met_dados.get('aplicacoes', [])
+                                    }
+                                    
+                                    # Se o nome mudou, reorganizar dicionário
+                                    if novo_nome != met_nome:
+                                        st.session_state.dre_metodologias[novo_nome] = st.session_state.dre_metodologias.pop(met_nome)
+                                    
+                                    st.session_state[f"editando_{met_nome}"] = False
+                                    st.success("✅ Metodologia atualizada!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Erro ao salvar: {str(e)}")
+                        
+                        with col_cancel:
+                            if st.form_submit_button("❌ Cancelar", use_container_width=True):
+                                st.session_state[f"editando_{met_nome}"] = False
+                                st.rerun()
     
     # ===== ABA 3: REFERÊNCIA DE FUNÇÕES =====
     with tab_refs:
