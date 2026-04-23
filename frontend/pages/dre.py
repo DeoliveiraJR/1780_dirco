@@ -13,6 +13,7 @@ import json
 import re
 from datetime import datetime
 from copy import deepcopy
+from typing import Union, Dict
 
 # Importar utilitários
 from utils_ext.css import make_stylesheet
@@ -32,6 +33,124 @@ from utils_ext.calc_functions import (
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_manager import get_dados_upload, carregar_curva_ajustada
 from services.aggregations import _carregar_curvas_por_ano
+
+
+# ============================================================================
+# FUNÇÃO AUXILIAR: UI DE SAZONALIDADE
+# ============================================================================
+
+def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Dict, int, list, None] = None):
+    """Cria interface de sazonalidade (Fixo vs Variável) retorna dict normalizado."""
+    
+    # Normalizar valor_padrao (pode vir como dict, int, list, ou None)
+    if valor_padrao is None or valor_padrao == {} or valor_padrao == 0:
+        valor_padrao = {"tipo": "NENHUM"}
+    elif isinstance(valor_padrao, (int, list)):
+        # Legado: converter int/list para dict
+        if isinstance(valor_padrao, list) and len(valor_padrao) > 0:
+            valor_padrao = valor_padrao[0]  # Se for lista, pegar primeiro
+        # Agora importar da calc_functions para normalizar
+        from utils_ext.calc_functions import normalizar_sazonalidade
+        valor_padrao = normalizar_sazonalidade(valor_padrao)
+    
+    tipo_saz = valor_padrao.get("tipo", "NENHUM")
+    
+    st.markdown("**⏱️ Sazonalidade (opcional)** - Período fixo ou variável:")
+    
+    col_tipo, col_info = st.columns([2, 1])
+    
+    with col_tipo:
+        tipo_selecionado = st.radio(
+            "Tipo de Período:",
+            ["Nenhum", "Período Fixo", "Período Variável"],
+            index=0 if tipo_saz == "NENHUM" else (1 if tipo_saz == "FIXO" else 2),
+            key=f"{rotulo_prefix}_tipo_saz",
+            horizontal=True
+        )
+    
+    sazonalidade_resultado = {"tipo": "NENHUM"}
+    
+    if tipo_selecionado == "Período Fixo":
+        st.divider()
+        st.markdown("**Período Fixo** - Mesmo período para todos os meses")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            mes_inicio = st.selectbox(
+                "Mês Inicial:",
+                list(range(1, 13)),
+                format_func=lambda m: MESES_FULL.get(m, f"Mês {m}"),
+                index=valor_padrao.get("mes_inicio", 1) - 1,
+                key=f"{rotulo_prefix}_mes_inicio"
+            )
+        
+        with col2:
+            mes_fim = st.selectbox(
+                "Mês Final:",
+                list(range(1, 13)),
+                format_func=lambda m: MESES_FULL.get(m, f"Mês {m}"),
+                index=valor_padrao.get("mes_fim", 12) - 1,
+                key=f"{rotulo_prefix}_mes_fim"
+            )
+        
+        sazonalidade_resultado = {
+            "tipo": "FIXO",
+            "mes_inicio": int(mes_inicio),
+            "mes_fim": int(mes_fim),
+        }
+    
+    elif tipo_selecionado == "Período Variável":
+        st.divider()
+        st.markdown("**Período Variável** - Janela móvel que se adapta a cada mês")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            quantidade = st.number_input(
+                "Quantidade:",
+                value=valor_padrao.get("quantidade", 7),
+                min_value=1,
+                max_value=12,
+                help="Número de meses (1-12)",
+                key=f"{rotulo_prefix}_quantidade"
+            )
+        
+        with col2:
+            tipo_periodo = st.selectbox(
+                "Tipo:",
+                ["MES", "ANO"],
+                index=0 if valor_padrao.get("tipo_periodo") == "MES" else 1,
+                key=f"{rotulo_prefix}_tipo_periodo"
+            )
+        
+        with col3:
+            periodoLinha = st.selectbox(
+                "Período:",
+                ["ULTIMO", "PRIMEIRO"],
+                index=0 if valor_padrao.get("periodoLinha") == "ULTIMO" else 1,
+                key=f"{rotulo_prefix}_periodoLinha"
+            )
+        
+        sazonalidade_resultado = {
+            "tipo": "VARIAVEL",
+            "quantidade": int(quantidade),
+            "tipo_periodo": tipo_periodo,
+            "periodoLinha": periodoLinha,
+        }
+    
+    # Info (fora do if/elif)
+    if tipo_selecionado == "Nenhum":
+        st.info("Usa todos os 12 meses")
+    elif tipo_selecionado == "Período Fixo":
+        mes_inicio = sazonalidade_resultado.get("mes_inicio", 1)
+        mes_fim = sazonalidade_resultado.get("mes_fim", 12)
+        st.info(f"🔒 {MESES_FULL.get(mes_inicio)}-{MESES_FULL.get(mes_fim)}")
+    else:
+        qtd = sazonalidade_resultado.get("quantidade", 1)
+        periodo = sazonalidade_resultado.get("periodoLinha", "ULTIMO")
+        st.info(f"📊 {periodo} {qtd} {sazonalidade_resultado.get('tipo_periodo', 'MES')}ES")
+    
+    return sazonalidade_resultado
 
 
 # ============================================================================
@@ -227,7 +346,7 @@ def _calcular_totalizadores():
     st.session_state.dre_dados = dre_dados
 
 
-def _avaliar_formula(formula: str, dre_dados: dict) -> list:
+def _avaliar_formula(formula: str, dre_dados: dict, sazonalidade: Union[Dict, int, None] = None) -> list:
     """
     Avalia uma fórmula como '=TD71+TD72' ou '=0.05*TD71' ou '=SOMA(TD71)'
     Retorna lista com 12 valores mensais
@@ -235,10 +354,12 @@ def _avaliar_formula(formula: str, dre_dados: dict) -> list:
     Suporta:
     - Operações matemáticas: =0.05*TD71, =TD71+TD72
     - Funções nativas: =SOMA(TD71), =MEDIA(TD71;TD72), =MINIMO(TD71:TD90)
+    - Sazonalidade dinâmica: MEDIA(TD71) com período variável/fixo
     
     Args:
         formula: String com fórmula (ex: '=TD71+TD72')
         dre_dados: Dicionário com dados da DRE
+        sazonalidade: Sazonalidade (dict novo, int legacy, ou None)
         
     Returns:
         Lista com 12 valores calculados
@@ -255,32 +376,45 @@ def _avaliar_formula(formula: str, dre_dados: dict) -> list:
         contexto_simples[codigo] = valores
     
     print(f"[DRE] Processando fórmula: {formula}")
+    print(f"[DRE] Sazonalidade: {sazonalidade}")
     print(f"[DRE] Variáveis disponíveis: {list(dre_dados.keys())}")
     
     # ===== PROCESSAR FUNÇÕES NATIVAS =====
     # Padrão regex para encontrar funções: SOMA(ARGS), MEDIA(ARGS), etc
     padrao_funcoes = r'(SOMA|MEDIA|MINIMO|MAXIMO)\((.*?)\)'
     
-    # Substituir cada função encontrada pelo seu valor agregado
+    # Mapeamento de placeholders para resultados das funções
+    # ex: __FUNC_0__ → [valores dos 12 meses]
+    funcoes_dinamicas = {}
     formula_processada = formula_limpa
     
-    matches = re.finditer(padrao_funcoes, formula_limpa, re.IGNORECASE)
-    for match in matches:
+    matches = list(re.finditer(padrao_funcoes, formula_limpa, re.IGNORECASE))
+    
+    for idx, match in enumerate(matches):
         nome_funcao = match.group(1).upper()
         argumentos = match.group(2)
         
         print(f"[DRE] Encontrada função nativa: {nome_funcao}({argumentos})")
         
-        # ✅ CORRIGIDO: Passar dre_dados COMPLETO (não contexto simplificado)
-        valor_agregado = evaluar_funcao_em_formula(nome_funcao, argumentos, dre_dados)
+        # 🔑 NOVO: Chamar função dinâmica por mês
+        from utils_ext.calc_functions import evaluar_funcao_dinamica_por_mes
         
-        print(f"[DRE] → Resultado: {valor_agregado}")
+        valores_dinamicos = evaluar_funcao_dinamica_por_mes(
+            nome_funcao, 
+            argumentos, 
+            dre_dados,
+            saz=sazonalidade
+        )
         
-        # Substituir a função pelo seu valor
+        # Armazenar resultado
+        placeholder = f"__FUNC_{idx}__"
+        funcoes_dinamicas[placeholder] = valores_dinamicos
+        
+        # Substituir na fórmula com placeholder
         funcao_str = f"{nome_funcao}({argumentos})"
-        formula_processada = formula_processada.replace(funcao_str, str(valor_agregado))
+        formula_processada = formula_processada.replace(funcao_str, placeholder)
         
-        print(f"[DRE] Fórmula agora: {formula_processada}")
+        print(f"[DRE] → Resultado (12 meses): {valores_dinamicos[:3]}...")
     
     print(f"[DRE] Fórmula final (antes do mês-a-mês): {formula_processada}")
     
@@ -291,15 +425,20 @@ def _avaliar_formula(formula: str, dre_dados: dict) -> list:
         # Construir expressão para este mês específico
         expr = formula_processada
         
+        # Substituir placeholders de funções com valores do mês
+        for placeholder, valores_12 in funcoes_dinamicas.items():
+            valor_mes = valores_12[mes_idx] if mes_idx < len(valores_12) else 0.0
+            expr = expr.replace(placeholder, f"float({valor_mes})")
+        
         # Ordenar por comprimento decrescente para evitar conflitos
         # Ex: TD70 não seja substituído quando fazemos replace em TD701
         codigos_ordenados = sorted(contexto_simples.keys(), key=len, reverse=True)
         
         for codigo in codigos_ordenados:
             if codigo in contexto_simples:
-                valor_mes = contexto_simples[codigo][mes_idx]
+                valor_mes_var = contexto_simples[codigo][mes_idx]
                 # Envolver em float() para garantir operações matemáticas
-                expr = expr.replace(codigo, f"float({valor_mes})")
+                expr = expr.replace(codigo, f"float({valor_mes_var})")
         
         try:
             resultado = eval(expr)
@@ -773,35 +912,33 @@ def _renderizar_metodologias():
                 "Fórmula de Cálculo",
                 placeholder="ex: =0.60*TD71 ou =SOMA(TD71) ou =MEDIA(TD71;TD72)",
                 label_visibility="collapsed",
-                help="Use '=' no início. Pode usar códigos de variáveis e funções nativas (SOMA, MEDIA, MINIMO, MAXIMO) com sazonalidade: SOMA(TD71; 7) ou MEDIA(TD72; -7)"
+                help="Use '=' no início. Pode usar códigos de variáveis e funções nativas (SOMA, MEDIA, MINIMO, MAXIMO)"
             )
             
-            st.markdown("**⏱️ Sazonalidade (opcional)** - Para usar nas funções:")
-            col_saz1, col_saz2, col_saz3 = st.columns(3)
+            # 🔑 PARÂMETROS DE SAZONALIDADE (dentro do form, colapsável)
+            with st.expander("⚙️ Parâmetros de Sazonalidade (opcional)", expanded=False):
+                sazonalidade = criar_interface_sazonalidade(rotulo_prefix="criar")
             
-            with col_saz1:
-                sazonalidade = st.number_input(
-                    "Intervalo de Meses",
-                    value=0,
-                    min_value=-12,
-                    max_value=12,
-                    help="Positivo: próximos N meses | Negativo: últimos N meses | 0: todos os 12 meses"
-                )
-            
-            with col_saz2:
+            # Info
+            col_info1, col_info2 = st.columns(2)
+            with col_info1:
                 st.info("""
-                **Exemplos:**
-                - 7: próximos 7 meses
-                - -7: últimos 7 meses
-                - 0: todos (padrão)
+                **Exemplos de Fórmula:**
+                - `=0.60*TD71`
+                - `=SOMA(TD71)`
+                - `=MEDIA(TD71;TD72)`
+                - `=MINIMO(TD71:TD90)`
                 """)
             
-            with col_saz3:
+            with col_info2:
                 st.info("""
-                **Uso na Fórmula:**
-                - SOMA(TD71; 7)
-                - MEDIA(TD72; -7)
-                - MINIMO(TD71; -12)
+                **Sobre Sazonalidade:**
+                
+                - **Nenhum:** Usa todos os 12 meses
+                - **Fixo:** Mesmo período sempre (ex: jan-jul)
+                - **Variável:** Período móvel por mês (ex: últimos 7 meses)
+                
+                Funciona com todas as funções nativas.
                 """)
             
             aplicavel_a = st.multiselect(
@@ -821,7 +958,7 @@ def _renderizar_metodologias():
                     else:
                         # Validar fórmula
                         try:
-                            _avaliar_formula(formula_metodologia, st.session_state.dre_dados)
+                            _avaliar_formula(formula_metodologia, st.session_state.dre_dados, sazonalidade)
                             
                             # Salvar metodologia
                             nova_met = {
@@ -961,7 +1098,11 @@ def _renderizar_metodologias():
                             for var_codigo in met_dados['aplicavel_a']:
                                 if var_codigo in dre_dados:
                                     # Calcular nova série
-                                    valores_calc = _avaliar_formula(met_dados['formula'], dre_dados)
+                                    valores_calc = _avaliar_formula(
+                                        met_dados['formula'], 
+                                        dre_dados,
+                                        sazonalidade=met_dados.get('sazonalidade', None)  # ✅ Passar sazonalidade
+                                    )
                                     
                                     # Log
                                     v_antes = dre_dados[var_codigo]["valores"][:3]
@@ -1049,14 +1190,12 @@ def _renderizar_metodologias():
                             label_visibility="collapsed"
                         )
                         
-                        st.markdown("**⏱️ Sazonalidade:**")
-                        nova_saz = st.number_input(
-                            "Meses",
-                            value=met_dados.get('sazonalidade', 0),
-                            min_value=-12,
-                            max_value=12,
-                            key=f"saz_edit_{met_nome}"
-                        )
+                        # 🔑 PARÂMETROS DE SAZONALIDADE (dentro do form, colapsável)
+                        with st.expander("⚙️ Parâmetros de Sazonalidade", expanded=False):
+                            nova_saz = criar_interface_sazonalidade(
+                                rotulo_prefix=f"edit_{met_nome}",
+                                valor_padrao=met_dados.get('sazonalidade', {"tipo": "NENHUM"})
+                            )
                         
                         nova_aplicavel = st.multiselect(
                             "Variáveis",

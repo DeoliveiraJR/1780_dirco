@@ -17,10 +17,17 @@ Sintaxe com Sazonalidade (Intervalo Temporal):
     SOMA(TD71; 7)           # Soma dos PRÓXIMOS 7 meses de TD71 (a partir de agora)
     MEDIA(TD72; -7)         # Média dos ÚLTIMOS 7 meses de TD72 (meses passados)
     MINIMO(TD71; -12)       # Valor mínimo dos últimos 12 meses (ano anterior)
+
+Novo Sistema de Sazonalidade (Fixo vs Variável):
+    FIXO: Mesmo período para todos os meses
+        {tipo: FIXO, mes_inicio: 1, mes_fim: 7}  → Always Jan-Jul
+    VARIÁVEL: Período móvel por mês
+        {tipo: VARIAVEL, quantidade: 7, tipo_periodo: MES, periodoLinha: ULTIMO}
+        → Cada mês calcula seus últimos 7 meses
 """
 
 import numpy as np
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Union, Tuple, Optional
 
 
 # ============================================================================
@@ -198,6 +205,156 @@ def aplicar_intervalo_temporal(valores_12_meses: List[float], intervalo: int) ->
 
 
 # ============================================================================
+# NOVO SISTEMA: SAZONALIDADE FIXA vs VARIÁVEL
+# ============================================================================
+
+def normalizar_sazonalidade(saz: Union[Dict, int, None]) -> Dict:
+    """
+    Normaliza sazonalidade em cualquier formato a estructura estándar.
+    
+    Args:
+        saz: Dict (nuevo formato), int (legacy), o None
+        
+    Returns:
+        Dict com estructura padrao:
+        {
+            "tipo": "VARIAVEL" | "FIXO",
+            "quantidade": int (VARIAVEL),
+            "tipo_periodo": "MES" | "ANO" (VARIAVEL),
+            "periodoLinha": "PRIMEIRO" | "ULTIMO" (VARIAVEL),
+            "mes_inicio": int (FIXO),
+            "mes_fim": int (FIXO),
+        }
+    """
+    # Se for None ou 0, sem sazonalidade
+    if saz is None or saz == 0:
+        return {"tipo": "NENHUM"}
+    
+    # Se for int (legacy: -7 significa últimos 7 meses)
+    if isinstance(saz, int):
+        if saz == 0:
+            return {"tipo": "NENHUM"}
+        elif saz < 0:
+            # Negativo: últimos N meses
+            return {
+                "tipo": "VARIAVEL",
+                "quantidade": abs(saz),
+                "tipo_periodo": "MES",
+                "periodoLinha": "ULTIMO",
+            }
+        else:
+            # Positivo: próximos N meses
+            return {
+                "tipo": "VARIAVEL",
+                "quantidade": saz,
+                "tipo_periodo": "MES",
+                "periodoLinha": "PRIMEIRO",
+            }
+    
+    # Se for dict, retornar como está (já normalizado)
+    if isinstance(saz, dict):
+        return saz
+    
+    return {"tipo": "NENHUM"}
+
+
+def calcular_indices_por_mes(saz_normalizada: Dict, mes_idx: int) -> List[int]:
+    """
+    Calcula quais índices de meses usar para um mês específico.
+    
+    ⭐ NOVO: Suporta wrap-around para janeiro (simula dados do ano anterior)
+    
+    Args:
+        saz_normalizada: Dictionário normalizado de sazonalidade
+        mes_idx: Índice do mês (0-11, onde 0=Janeiro, 11=Dezembro)
+        
+    Returns:
+        List[int]: Índices dos meses a usar com wrap-around (ex: [5,6,7,8,9,10,11] para jan+últimos7)
+        
+    Exemplos:
+        FIXO jan-jul, mês 5 → [0,1,2,3,4,5,6]
+        VARIÁVEL últimos 7, mês 10 (Nov) → [4,5,6,7,8,9,10]
+        VARIÁVEL últimos 7, mês 0 (Jan) → [5,6,7,8,9,10,11] ⭐ WRAP-AROUND!
+        VARIÁVEL primeiros 3, mês 11 (Dez) → [11,0,1] ⭐ WRAP-AROUND!
+    """
+    saz_tipo = saz_normalizada.get("tipo", "NENHUM")
+    
+    # Sem sazonalidade: usar todos os 12 meses
+    if saz_tipo == "NENHUM":
+        return list(range(12))
+    
+    # FIXO: sempre usar os mesmos meses
+    if saz_tipo == "FIXO":
+        mes_inicio = saz_normalizada.get("mes_inicio", 1)
+        mes_fim = saz_normalizada.get("mes_fim", 12)
+        # Converter para índices (1-based para 0-based)
+        inicio_idx = mes_inicio - 1
+        fim_idx = mes_fim
+        return list(range(inicio_idx, min(fim_idx, 12)))
+    
+    # VARIÁVEL: adaptar conforme o mês
+    if saz_tipo == "VARIAVEL":
+        quantidade = saz_normalizada.get("quantidade", 1)
+        tipo_periodo = saz_normalizada.get("tipo_periodo", "MES")
+        periodoLinha = saz_normalizada.get("periodoLinha", "ULTIMO")
+        
+        # MES: usar últimos/primeiros N meses
+        if tipo_periodo == "MES":
+            if periodoLinha == "ULTIMO":
+                # Últimos N meses até MÊS_IDX com wrap-around (suporta janeiro!)
+                # Para janeiro (mes_idx=0) com quantidade=7: retorna índices [5,6,7,8,9,10,11]
+                # Usa modulo 12 para simular "ano anterior" quando necessário
+                indices = [(mes_idx - quantidade + 1 + i) % 12 for i in range(quantidade)]
+                return indices
+            else:  # PRIMEIRO
+                # Primeiros N meses a partir de MÊS_IDX com wrap-around
+                # Se ultrapassar dezembro, volta para janeiro (ano próximo)
+                indices = [(mes_idx + i) % 12 for i in range(quantidade)]
+                return indices
+        
+        # ANO: usar últimos/primeiros N anos (12 meses cada)
+        # Para um ano único não faz sentido, então usar últimos 12 meses sempre
+        else:  # ANO
+            if periodoLinha == "ULTIMO":
+                # Últimos 12 meses (o que temos disponível)
+                return list(range(12))
+            else:  # PRIMEIRO
+                return list(range(12))
+    
+    return list(range(12))
+
+
+def aplicar_sazonalidade_por_mes(
+    valores_12_meses: List[float], 
+    saz: Union[Dict, int, None],
+    mes_idx: int
+) -> List[float]:
+    """
+    Extrai valores para um mês específico de acordo com sazonalidade.
+    
+    FIXO: sempre pega os mesmos meses
+    VARIÁVEL: adapta conforme o mês atual
+    
+    Args:
+        valores_12_meses: Lista com 12 valores [jan...dez]
+        saz: Sazonalidade (dict novo ou int legacy)
+        mes_idx: Índice do mês (0-11)
+        
+    Returns:
+        List[float]: Valores filtrados pela sazonalidade para este mês
+        
+    Exemplos:
+        FIXO jan-jul, qualquer mês → [jan_valor, fev_valor, ..., jul_valor]
+        VARIÁVEL últimos 7, mês 10 → valores dos índices [4,5,6,7,8,9,10]
+    """
+    saz_normalizada = normalizar_sazonalidade(saz)
+    indices = calcular_indices_por_mes(saz_normalizada, mes_idx)
+    
+    # Extrair valores pelos índices
+    return [valores_12_meses[i] if i < len(valores_12_meses) else 0.0 for i in indices]
+
+
+# ============================================================================
 # MAPEAMENTO DE FUNÇÕES DISPONÍVEIS
 # ============================================================================
 
@@ -356,6 +513,104 @@ def evaluar_funcao_em_formula(nome_funcao: str, argumentos: str,
         import traceback
         traceback.print_exc()
         return 0.0
+
+
+def evaluar_funcao_dinamica_por_mes(
+    nome_funcao: str, 
+    argumentos: str, 
+    dre_dados: Dict,
+    saz: Union[Dict, int, None] = None
+) -> List[float]:
+    """
+    Avalia uma função de forma DINÂMICA para cada mês (com sazonalidade).
+    
+    Este é o novo fluxo que calcula diferentes valores para cada mês,
+    em vez de calcular uma única vez e reutilizar.
+    
+    Args:
+        nome_funcao: Nome da função ('SOMA', 'MEDIA', etc)
+        argumentos: String com argumentos (ex: 'TD71' ou 'TD71:TD90')
+                    NOTA: argumentos NÃO incluem o intervalo temporal aqui
+        dre_dados: Dicionário com dados da DRE
+        saz: Sazonalidade (dict novo, int legacy, ou None)
+        
+    Returns:
+        List[float]: 12 valores, um para cada mês, calculados dinamicamente
+        
+    Exemplos:
+        # Para cada mês, calcula a média dos últimos 7 meses daquele mês
+        evaluar_funcao_dinamica_por_mes('MEDIA', 'TD71', dre_dados, 
+                                        {tipo: VARIAVEL, quantidade: 7, ...})
+        
+        # Para cada mês, sempre usa os meses jan-jul (sazonalidade fixa)
+        evaluar_funcao_dinamica_por_mes('SOMA', 'TD71', dre_dados,
+                                        {tipo: FIXO, mes_inicio: 1, mes_fim: 7})
+    """
+    if nome_funcao.upper() not in FUNCOES_NATIVAS:
+        print(f"[CALC] Função desconhecida: {nome_funcao}")
+        return [0.0] * 12
+    
+    # Normalizar sazonalidade
+    saz_normalizada = normalizar_sazonalidade(saz)
+    
+    print(f"[CALC] {nome_funcao}({argumentos}) - Sazonalidade: {saz_normalizada}")
+    
+    valores_resultado_12_meses = []
+    
+    # Para cada um dos 12 meses
+    for mes_idx in range(12):
+        try:
+            # ===== ETAPA 1: Extrair código =====
+            codigo_str = argumentos.strip()
+            
+            # ===== ETAPA 2: Obter lista de códigos =====
+            codigos_disponiveis = list(dre_dados.keys())
+            
+            if ":" in codigo_str:
+                codigos_a_usar = parse_range_intervalo(codigo_str, codigos_disponiveis)
+            else:
+                if codigo_str in codigos_disponiveis:
+                    codigos_a_usar = [codigo_str]
+                else:
+                    print(f"[CALC] Código '{codigo_str}' não encontrado (mês {mes_idx})")
+                    valores_resultado_12_meses.append(0.0)
+                    continue
+            
+            if not codigos_a_usar:
+                print(f"[CALC] Nenhum código válido em {codigo_str} (mês {mes_idx})")
+                valores_resultado_12_meses.append(0.0)
+                continue
+            
+            # ===== ETAPA 3: Aplicar sazonalidade e coletar valores =====
+            valores_para_funcao = []
+            
+            for codigo in codigos_a_usar:
+                if codigo in dre_dados:
+                    valores_var = dre_dados[codigo].get("valores", [0.0] * 12)
+                    
+                    # 🔑 NOVO: Aplicar sazonalidade dinamicamente por mês
+                    valores_filtrados = aplicar_sazonalidade_por_mes(
+                        valores_var, 
+                        saz, 
+                        mes_idx
+                    )
+                    
+                    valores_para_funcao.extend(valores_filtrados)
+            
+            # ===== ETAPA 4: Executar função =====
+            funcao = FUNCOES_NATIVAS[nome_funcao.upper()]
+            valor_mes = funcao(valores_para_funcao)
+            valores_resultado_12_meses.append(float(valor_mes))
+            
+            if mes_idx == 0 or mes_idx == 6 or mes_idx == 11:
+                print(f"[CALC]  → Mês {mes_idx+1}: {valor_mes:.2f}")
+                
+        except Exception as e:
+            print(f"[CALC] ❌ Erro em {nome_funcao}({argumentos}) mês {mes_idx}: {e}")
+            valores_resultado_12_meses.append(0.0)
+    
+    print(f"[CALC]  → Resultado final (12 meses): {valores_resultado_12_meses[:3]}...")
+    return valores_resultado_12_meses
 
 
 # ============================================================================
