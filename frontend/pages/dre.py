@@ -56,27 +56,16 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
     # Criar mapping de mês 1-12 para nome (MESES_FULL é lista, então usar índice)
     meses_dict = {i: MESES_FULL[i-1] for i in range(1, 13)}
     
-    # ===== SESSION STATE PARA FORÇAR RERENDER =====
-    tipo_saz_key = f"{rotulo_prefix}_tipo_saz_radio"
-    if tipo_saz_key not in st.session_state:
-        st.session_state[tipo_saz_key] = "Nenhum" if tipo_saz == "NENHUM" else ("Período Fixo" if tipo_saz == "FIXO" else "Período Variável")
-    
-    def callback_tipo_saz_mudou():
-        """Força rerun quando tipo de sazonalidade muda"""
-        st.session_state[f"{rotulo_prefix}_saz_mudou"] = True
-    
     col_tipo, col_info = st.columns([2, 1])
     
     with col_tipo:
         tipo_selecionado = st.radio(
             "Tipo de Período:",
             ["Nenhum", "Período Fixo", "Período Variável"],
-            index=["Nenhum", "Período Fixo", "Período Variável"].index(st.session_state[tipo_saz_key]),
-            key=tipo_saz_key,
-            horizontal=True,
-            on_change=callback_tipo_saz_mudou
+            index=0 if tipo_saz == "NENHUM" else (1 if tipo_saz == "FIXO" else 2),
+            key=f"{rotulo_prefix}_tipo_saz_radio",
+            horizontal=True
         )
-        st.session_state[tipo_saz_key] = tipo_selecionado
     
     # Inicializar resultado
     sazonalidade_resultado = {"tipo": "NENHUM"}
@@ -911,6 +900,10 @@ def _renderizar_metodologias():
     with tab_criar:
         st.markdown("#### ➕ Criar Nova Metodologia")
         
+        # 🔑 PARÂMETROS DE SAZONALIDADE (FORA do form para ser dinâmico)
+        with st.expander("⚙️ Parâmetros de Sazonalidade (opcional)", expanded=False):
+            sazonalidade = criar_interface_sazonalidade(rotulo_prefix="criar")
+        
         with st.form("form_nova_metodologia", clear_on_submit=True):
             nome_metodologia = st.text_input(
                 "Nome da Metodologia",
@@ -931,10 +924,6 @@ def _renderizar_metodologias():
                 label_visibility="collapsed",
                 help="Use '=' no início. Pode usar códigos de variáveis e funções nativas (SOMA, MEDIA, MINIMO, MAXIMO)"
             )
-            
-            # 🔑 PARÂMETROS DE SAZONALIDADE (dentro do form, colapsável)
-            with st.expander("⚙️ Parâmetros de Sazonalidade (opcional)", expanded=False):
-                sazonalidade = criar_interface_sazonalidade(rotulo_prefix="criar")
             
             # Info
             col_info1, col_info2 = st.columns(2)
@@ -1187,6 +1176,13 @@ def _renderizar_metodologias():
                     st.divider()
                     st.markdown(f"### ✏️ Editando: {met_nome}")
                     
+                    # 🔑 PARÂMETROS DE SAZONALIDADE (FORA do form para ser dinâmico)
+                    with st.expander("⚙️ Parâmetros de Sazonalidade", expanded=False):
+                        nova_saz = criar_interface_sazonalidade(
+                            rotulo_prefix=f"edit_{met_nome}",
+                            valor_padrao=met_dados.get('sazonalidade', {"tipo": "NENHUM"})
+                        )
+                    
                     with st.form(f"form_edit_{met_nome}"):
                         novo_nome = st.text_input(
                             "Nome",
@@ -1206,13 +1202,6 @@ def _renderizar_metodologias():
                             value=met_dados['formula'],
                             label_visibility="collapsed"
                         )
-                        
-                        # 🔑 PARÂMETROS DE SAZONALIDADE (dentro do form, colapsável)
-                        with st.expander("⚙️ Parâmetros de Sazonalidade", expanded=False):
-                            nova_saz = criar_interface_sazonalidade(
-                                rotulo_prefix=f"edit_{met_nome}",
-                                valor_padrao=met_dados.get('sazonalidade', {"tipo": "NENHUM"})
-                            )
                         
                         nova_aplicavel = st.multiselect(
                             "Variáveis",
