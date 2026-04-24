@@ -44,7 +44,6 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
     
     # Importar normalizar_sazonalidade
     from utils_ext.calc_functions import normalizar_sazonalidade
-    from datetime import date, datetime
     
     # Normalizar valor_padrao (pode vir como dict, int, list, ou None)
     valor_padrao = normalizar_sazonalidade(valor_padrao)
@@ -74,35 +73,47 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
     
     if tipo_selecionado == "Período Fixo":
         st.divider()
-        st.markdown("**Período Fixo** - Mesmo período para todos os meses (selecione via calendário)")
+        st.markdown("**Período Fixo** - Mesmo período para todos os meses")
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Data inicial via calendário
-            data_inicio = st.date_input(
-                "📅 Data Inicial:",
-                value=date(2024, valor_padrao.get("mes_inicio", 1), 1),
-                format="dd/mm/yyyy",
-                key=f"{rotulo_prefix}_data_inicio_fixo"
+        # Linha 1: Mês Inicial
+        col_mes_i, col_ano_i = st.columns(2)
+        with col_mes_i:
+            mes_inicio = st.selectbox(
+                "Mês Inicial:",
+                list(range(1, 13)),
+                format_func=lambda m: meses_dict.get(m, f"Mês {m}"),
+                index=valor_padrao.get("mes_inicio", 1) - 1,
+                key=f"{rotulo_prefix}_mes_inicio_fixo"
             )
-            mes_inicio = data_inicio.month
-            ano_inicio = data_inicio.year
-        
-        with col2:
-            # Data final via calendário
-            data_fim = st.date_input(
-                "📅 Data Final:",
-                value=date(2024, valor_padrao.get("mes_fim", 12), 1),
-                format="dd/mm/yyyy",
-                key=f"{rotulo_prefix}_data_fim_fixo"
+        with col_ano_i:
+            ano_inicio = st.number_input(
+                "Ano Inicial:",
+                value=int(valor_padrao.get("ano_inicio", 2024)),
+                min_value=2000,
+                max_value=2099,
+                step=1,
+                key=f"{rotulo_prefix}_ano_inicio_fixo"
             )
-            mes_fim = data_fim.month
-            ano_fim = data_fim.year
         
-        # Preparar display (somente mês e ano)
-        mes_inicio_nome = meses_dict.get(mes_inicio, f"Mês {mes_inicio}")
-        mes_fim_nome = meses_dict.get(mes_fim, f"Mês {mes_fim}")
+        # Linha 2: Mês Final
+        col_mes_f, col_ano_f = st.columns(2)
+        with col_mes_f:
+            mes_fim = st.selectbox(
+                "Mês Final:",
+                list(range(1, 13)),
+                format_func=lambda m: meses_dict.get(m, f"Mês {m}"),
+                index=valor_padrao.get("mes_fim", 12) - 1,
+                key=f"{rotulo_prefix}_mes_fim_fixo"
+            )
+        with col_ano_f:
+            ano_fim = st.number_input(
+                "Ano Final:",
+                value=int(valor_padrao.get("ano_fim", 2024)),
+                min_value=2000,
+                max_value=2099,
+                step=1,
+                key=f"{rotulo_prefix}_ano_fim_fixo"
+            )
         
         sazonalidade_resultado = {
             "tipo": "FIXO",
@@ -160,10 +171,10 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
             mes_fim = sazonalidade_resultado.get("mes_fim", 12)
             ano_inicio = sazonalidade_resultado.get("ano_inicio", 2024)
             ano_fim = sazonalidade_resultado.get("ano_fim", 2024)
-            mes_inicio_nome = meses_dict.get(mes_inicio, "Jan")
-            mes_fim_nome = meses_dict.get(mes_fim, "Dez")
+            mes_inicio_nome = meses_dict.get(mes_inicio, "Jan").split()[1]  # Pega só o nome "Janeiro"
+            mes_fim_nome = meses_dict.get(mes_fim, "Dez").split()[1]  # Pega só o nome "Dezembro"
             
-            # Display: "Jan 2024 - Dez 2024" ou "Jan 2024 - Fev 2025" se anos diferentes
+            # Display: "Jan 2024 - Dez 2024" ou "Jan 2024 - Fev 2025"
             if ano_inicio == ano_fim:
                 info_text = f"🔒 {mes_inicio_nome}\n{ano_inicio}"
             else:
