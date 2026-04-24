@@ -55,6 +55,9 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
     # Criar mapping de mês 1-12 para nome (MESES_FULL é lista, então usar índice)
     meses_dict = {i: MESES_FULL[i-1] for i in range(1, 13)}
     
+    # Criar key única e garantir que seja consistente
+    tipo_saz_key = f"{rotulo_prefix}_tipo_saz_radio"
+    
     col_tipo, col_info = st.columns([2, 1])
     
     with col_tipo:
@@ -62,11 +65,15 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
             "Tipo de Período:",
             ["Nenhum", "Período Fixo", "Período Variável"],
             index=0 if tipo_saz == "NENHUM" else (1 if tipo_saz == "FIXO" else 2),
-            key=f"{rotulo_prefix}_tipo_saz",
+            key=tipo_saz_key,
             horizontal=True
         )
     
+    # Inicializar resultado
     sazonalidade_resultado = {"tipo": "NENHUM"}
+    
+    # ===== RENDERIZAR CAMPOS BASEADO NA SELEÇÃO =====
+    # Usar st.write para debug (remover depois)
     
     if tipo_selecionado == "Período Fixo":
         st.divider()
@@ -79,7 +86,7 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
                 list(range(1, 13)),
                 format_func=lambda m: meses_dict.get(m, f"Mês {m}"),
                 index=valor_padrao.get("mes_inicio", 1) - 1,
-                key=f"{rotulo_prefix}_mes_inicio"
+                key=f"{rotulo_prefix}_mes_inicio_fixo"
             )
         
         with col2:
@@ -88,7 +95,7 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
                 list(range(1, 13)),
                 format_func=lambda m: meses_dict.get(m, f"Mês {m}"),
                 index=valor_padrao.get("mes_fim", 12) - 1,
-                key=f"{rotulo_prefix}_mes_fim"
+                key=f"{rotulo_prefix}_mes_fim_fixo"
             )
         
         sazonalidade_resultado = {
@@ -110,7 +117,7 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
                 min_value=1,
                 max_value=12,
                 help="Número de meses (1-12)",
-                key=f"{rotulo_prefix}_quantidade"
+                key=f"{rotulo_prefix}_quantidade_var"
             )
         
         with col2:
@@ -118,7 +125,7 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
                 "Tipo:",
                 ["MES", "ANO"],
                 index=0 if valor_padrao.get("tipo_periodo") == "MES" else 1,
-                key=f"{rotulo_prefix}_tipo_periodo"
+                key=f"{rotulo_prefix}_tipo_periodo_var"
             )
         
         with col3:
@@ -126,7 +133,7 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
                 "Período:",
                 ["ULTIMO", "PRIMEIRO"],
                 index=0 if valor_padrao.get("periodoLinha") == "ULTIMO" else 1,
-                key=f"{rotulo_prefix}_periodoLinha"
+                key=f"{rotulo_prefix}_periodoLinha_var"
             )
         
         sazonalidade_resultado = {
@@ -136,17 +143,18 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
             "periodoLinha": periodoLinha,
         }
     
-    # Info (fora do if/elif)
-    if tipo_selecionado == "Nenhum":
-        st.info("Usa todos os 12 meses")
-    elif tipo_selecionado == "Período Fixo":
-        mes_inicio = sazonalidade_resultado.get("mes_inicio", 1)
-        mes_fim = sazonalidade_resultado.get("mes_fim", 12)
-        st.info(f"🔒 {meses_dict.get(mes_inicio)}-{meses_dict.get(mes_fim)}")
-    else:
-        qtd = sazonalidade_resultado.get("quantidade", 1)
-        periodo = sazonalidade_resultado.get("periodoLinha", "ULTIMO")
-        st.info(f"📊 {periodo} {qtd} {sazonalidade_resultado.get('tipo_periodo', 'MES')}ES")
+    # ===== INFO SECTION =====
+    with col_info:
+        if tipo_selecionado == "Nenhum":
+            st.info("ℹ️ Usa todos os\n12 meses")
+        elif tipo_selecionado == "Período Fixo":
+            mes_inicio = sazonalidade_resultado.get("mes_inicio", 1)
+            mes_fim = sazonalidade_resultado.get("mes_fim", 12)
+            st.info(f"🔒 {meses_dict.get(mes_inicio, 'Jan')}\n–\n{meses_dict.get(mes_fim, 'Dez')}")
+        else:  # Período Variável
+            qtd = sazonalidade_resultado.get("quantidade", 1)
+            periodo = sazonalidade_resultado.get("periodoLinha", "ULTIMO")
+            st.info(f"📊 {periodo}\n{qtd}\nMES" + ("ES" if qtd > 1 else ""))
     
     return sazonalidade_resultado
 
