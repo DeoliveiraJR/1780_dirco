@@ -44,7 +44,6 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
     
     # Importar normalizar_sazonalidade
     from utils_ext.calc_functions import normalizar_sazonalidade
-    from datetime import date
     
     # Normalizar valor_padrao (pode vir como dict, int, list, ou None)
     valor_padrao = normalizar_sazonalidade(valor_padrao)
@@ -74,29 +73,27 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
     
     if tipo_selecionado == "Período Fixo":
         st.divider()
-        st.markdown("**Período Fixo** - Mesmo período para todos os meses (via calendário)")
+        st.markdown("**Período Fixo** - Mesmo período para todos os meses")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            # Data inicial (considerar apenas mês/ano)
-            data_inicio = st.date_input(
-                "📅 Data Inicial (mês/ano):",
-                value=date(2024, valor_padrao.get("mes_inicio", 1), 1),
-                format="MM/YYYY",
-                key=f"{rotulo_prefix}_data_inicio_fixo"
+            mes_inicio = st.selectbox(
+                "Mês Inicial:",
+                list(range(1, 13)),
+                format_func=lambda m: meses_dict.get(m, f"Mês {m}"),
+                index=valor_padrao.get("mes_inicio", 1) - 1,
+                key=f"{rotulo_prefix}_mes_inicio_fixo"
             )
-            mes_inicio = data_inicio.month
         
         with col2:
-            # Data final (considerar apenas mês/ano)
-            data_fim = st.date_input(
-                "📅 Data Final (mês/ano):",
-                value=date(2024, valor_padrao.get("mes_fim", 12), 1),
-                format="MM/YYYY",
-                key=f"{rotulo_prefix}_data_fim_fixo"
+            mes_fim = st.selectbox(
+                "Mês Final:",
+                list(range(1, 13)),
+                format_func=lambda m: meses_dict.get(m, f"Mês {m}"),
+                index=valor_padrao.get("mes_fim", 12) - 1,
+                key=f"{rotulo_prefix}_mes_fim_fixo"
             )
-            mes_fim = data_fim.month
         
         sazonalidade_resultado = {
             "tipo": "FIXO",
