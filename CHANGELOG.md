@@ -4,7 +4,49 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
-## 🚀 [v2.2.1] - 2026-04-23
+## � [v2.2.2] - 2026-04-24
+
+### ✅ CORRIGIDO - Sazonalidade (Fixo, Variável e Lógica de Funções)
+
+#### 🔴 BUG 1: AttributeError com Período Fixo
+- **Issue:** `AttributeError: 'list' object has no attribute 'get'` ao selecionar Período Fixo
+- **Root Cause:** `valor_padrao` chegava como lista `[{...}]` e não era normalizado antes de usar `.get()`
+- **Solução:** Chamar `normalizar_sazonalidade()` ANTES de qualquer uso
+
+**Arquivo:** `frontend/pages/dre.py` - `criar_interface_sazonalidade()`
+```python
+# ANTES: tipo_saz = valor_padrao.get("tipo", "NENHUM")  # ❌ quebra se lista
+# DEPOIS: valor_padrao = normalizar_sazonalidade(valor_padrao)  # ✅ converte
+```
+
+#### 🔴 BUG 2: SOMA(TD71:TD72) com Sazonalidade Ignorado
+- **Issue:** SOMA não aplicava sazonalidade corretamente
+- **Root Cause:** Sazonalidade nem sempre era passada corretamente na UI
+- **Solução:** Adicionado logging em `aplicar_sazonalidade_por_mes()` para debug
+
+**Resultado de Testes:**
+```
+SOMA(TD71:TD72) com VARIÁVEL 3 ÚLTIMO:
+Janeiro: 2640 ✅ (soma dos últimos 3 meses)
+Dezembro: 3630 ✅ (soma dos últimos 3 meses)
+```
+
+#### 🔴 BUG 3: Período Fixo retornando intervalo errado
+- **Issue:** FIXO jan-jul retornava apenas 6 meses em vez de 7
+- **Root Cause:** `range(inicio_idx, min(fim_idx, 12))` não era inclusivo
+- **Solução:** Usar `range(inicio_idx, fim_idx)` onde fim_idx já é o valor seguinte ao fim desejado
+
+**Antes:** `range(0, min(7, 12))` = [0,1,2,3,4,5,6] ❌ (6 elementos)
+**Depois:** `range(0, 7)` = [0,1,2,3,4,5,6] ✅ (7 elementos: Jan-Jul)
+
+#### ✅ Melhorado - normalizar_sazonalidade()
+- Suporta lista com dict: `[{"tipo": "FIXO", ...}]`
+- Trata dict vazio: `{}` → `{"tipo": "NENHUM"}`
+- Mantém compatibilidade legacy com int: `-7`
+
+---
+
+## �🚀 [v2.2.1] - 2026-04-23
 
 ### ✅ CORRIGIDO - Sazonalidade Dinâmica
 
