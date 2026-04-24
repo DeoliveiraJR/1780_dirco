@@ -52,6 +52,9 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
     
     st.markdown("**⏱️ Sazonalidade (opcional)** - Período fixo ou variável:")
     
+    # Criar mapping de mês 1-12 para nome (MESES_FULL é lista, então usar índice)
+    meses_dict = {i: MESES_FULL[i-1] for i in range(1, 13)}
+    
     col_tipo, col_info = st.columns([2, 1])
     
     with col_tipo:
@@ -74,7 +77,7 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
             mes_inicio = st.selectbox(
                 "Mês Inicial:",
                 list(range(1, 13)),
-                format_func=lambda m: MESES_FULL.get(m, f"Mês {m}"),
+                format_func=lambda m: meses_dict.get(m, f"Mês {m}"),
                 index=valor_padrao.get("mes_inicio", 1) - 1,
                 key=f"{rotulo_prefix}_mes_inicio"
             )
@@ -83,7 +86,7 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
             mes_fim = st.selectbox(
                 "Mês Final:",
                 list(range(1, 13)),
-                format_func=lambda m: MESES_FULL.get(m, f"Mês {m}"),
+                format_func=lambda m: meses_dict.get(m, f"Mês {m}"),
                 index=valor_padrao.get("mes_fim", 12) - 1,
                 key=f"{rotulo_prefix}_mes_fim"
             )
@@ -139,7 +142,7 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
     elif tipo_selecionado == "Período Fixo":
         mes_inicio = sazonalidade_resultado.get("mes_inicio", 1)
         mes_fim = sazonalidade_resultado.get("mes_fim", 12)
-        st.info(f"🔒 {MESES_FULL.get(mes_inicio)}-{MESES_FULL.get(mes_fim)}")
+        st.info(f"🔒 {meses_dict.get(mes_inicio)}-{meses_dict.get(mes_fim)}")
     else:
         qtd = sazonalidade_resultado.get("quantidade", 1)
         periodo = sazonalidade_resultado.get("periodoLinha", "ULTIMO")
