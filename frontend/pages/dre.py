@@ -44,6 +44,7 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
     
     # Importar normalizar_sazonalidade
     from utils_ext.calc_functions import normalizar_sazonalidade
+    from datetime import date
     
     # Normalizar valor_padrao (pode vir como dict, int, list, ou None)
     valor_padrao = normalizar_sazonalidade(valor_padrao)
@@ -55,8 +56,14 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
     # Criar mapping de mês 1-12 para nome (MESES_FULL é lista, então usar índice)
     meses_dict = {i: MESES_FULL[i-1] for i in range(1, 13)}
     
-    # Criar key única e garantir que seja consistente
+    # ===== SESSION STATE PARA FORÇAR RERENDER =====
     tipo_saz_key = f"{rotulo_prefix}_tipo_saz_radio"
+    if tipo_saz_key not in st.session_state:
+        st.session_state[tipo_saz_key] = "Nenhum" if tipo_saz == "NENHUM" else ("Período Fixo" if tipo_saz == "FIXO" else "Período Variável")
+    
+    def callback_tipo_saz_mudou():
+        """Força rerun quando tipo de sazonalidade muda"""
+        st.session_state[f"{rotulo_prefix}_saz_mudou"] = True
     
     col_tipo, col_info = st.columns([2, 1])
     
@@ -64,39 +71,43 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
         tipo_selecionado = st.radio(
             "Tipo de Período:",
             ["Nenhum", "Período Fixo", "Período Variável"],
-            index=0 if tipo_saz == "NENHUM" else (1 if tipo_saz == "FIXO" else 2),
+            index=["Nenhum", "Período Fixo", "Período Variável"].index(st.session_state[tipo_saz_key]),
             key=tipo_saz_key,
-            horizontal=True
+            horizontal=True,
+            on_change=callback_tipo_saz_mudou
         )
+        st.session_state[tipo_saz_key] = tipo_selecionado
     
     # Inicializar resultado
     sazonalidade_resultado = {"tipo": "NENHUM"}
     
     # ===== RENDERIZAR CAMPOS BASEADO NA SELEÇÃO =====
-    # Usar st.write para debug (remover depois)
     
     if tipo_selecionado == "Período Fixo":
         st.divider()
-        st.markdown("**Período Fixo** - Mesmo período para todos os meses")
+        st.markdown("**Período Fixo** - Mesmo período para todos os meses (via calendário)")
         
         col1, col2 = st.columns(2)
+        
         with col1:
-            mes_inicio = st.selectbox(
-                "Mês Inicial:",
-                list(range(1, 13)),
-                format_func=lambda m: meses_dict.get(m, f"Mês {m}"),
-                index=valor_padrao.get("mes_inicio", 1) - 1,
-                key=f"{rotulo_prefix}_mes_inicio_fixo"
+            # Data inicial (considerar apenas mês/ano)
+            data_inicio = st.date_input(
+                "📅 Data Inicial (mês/ano):",
+                value=date(2024, valor_padrao.get("mes_inicio", 1), 1),
+                format="MM/YYYY",
+                key=f"{rotulo_prefix}_data_inicio_fixo"
             )
+            mes_inicio = data_inicio.month
         
         with col2:
-            mes_fim = st.selectbox(
-                "Mês Final:",
-                list(range(1, 13)),
-                format_func=lambda m: meses_dict.get(m, f"Mês {m}"),
-                index=valor_padrao.get("mes_fim", 12) - 1,
-                key=f"{rotulo_prefix}_mes_fim_fixo"
+            # Data final (considerar apenas mês/ano)
+            data_fim = st.date_input(
+                "📅 Data Final (mês/ano):",
+                value=date(2024, valor_padrao.get("mes_fim", 12), 1),
+                format="MM/YYYY",
+                key=f"{rotulo_prefix}_data_fim_fixo"
             )
+            mes_fim = data_fim.month
         
         sazonalidade_resultado = {
             "tipo": "FIXO",
