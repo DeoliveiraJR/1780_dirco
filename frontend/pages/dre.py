@@ -44,6 +44,7 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
     
     # Importar normalizar_sazonalidade
     from utils_ext.calc_functions import normalizar_sazonalidade
+    from datetime import date, datetime
     
     # Normalizar valor_padrao (pode vir como dict, int, list, ou None)
     valor_padrao = normalizar_sazonalidade(valor_padrao)
@@ -73,32 +74,42 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
     
     if tipo_selecionado == "Período Fixo":
         st.divider()
-        st.markdown("**Período Fixo** - Mesmo período para todos os meses")
+        st.markdown("**Período Fixo** - Mesmo período para todos os meses (selecione via calendário)")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            mes_inicio = st.selectbox(
-                "Mês Inicial:",
-                list(range(1, 13)),
-                format_func=lambda m: meses_dict.get(m, f"Mês {m}"),
-                index=valor_padrao.get("mes_inicio", 1) - 1,
-                key=f"{rotulo_prefix}_mes_inicio_fixo"
+            # Data inicial via calendário
+            data_inicio = st.date_input(
+                "📅 Data Inicial:",
+                value=date(2024, valor_padrao.get("mes_inicio", 1), 1),
+                format="dd/mm/yyyy",
+                key=f"{rotulo_prefix}_data_inicio_fixo"
             )
+            mes_inicio = data_inicio.month
+            ano_inicio = data_inicio.year
         
         with col2:
-            mes_fim = st.selectbox(
-                "Mês Final:",
-                list(range(1, 13)),
-                format_func=lambda m: meses_dict.get(m, f"Mês {m}"),
-                index=valor_padrao.get("mes_fim", 12) - 1,
-                key=f"{rotulo_prefix}_mes_fim_fixo"
+            # Data final via calendário
+            data_fim = st.date_input(
+                "📅 Data Final:",
+                value=date(2024, valor_padrao.get("mes_fim", 12), 1),
+                format="dd/mm/yyyy",
+                key=f"{rotulo_prefix}_data_fim_fixo"
             )
+            mes_fim = data_fim.month
+            ano_fim = data_fim.year
+        
+        # Preparar display (somente mês e ano)
+        mes_inicio_nome = meses_dict.get(mes_inicio, f"Mês {mes_inicio}")
+        mes_fim_nome = meses_dict.get(mes_fim, f"Mês {mes_fim}")
         
         sazonalidade_resultado = {
             "tipo": "FIXO",
             "mes_inicio": int(mes_inicio),
             "mes_fim": int(mes_fim),
+            "ano_inicio": int(ano_inicio),
+            "ano_fim": int(ano_fim),
         }
     
     elif tipo_selecionado == "Período Variável":
@@ -147,7 +158,17 @@ def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Di
         elif tipo_selecionado == "Período Fixo":
             mes_inicio = sazonalidade_resultado.get("mes_inicio", 1)
             mes_fim = sazonalidade_resultado.get("mes_fim", 12)
-            st.info(f"🔒 {meses_dict.get(mes_inicio, 'Jan')}\n–\n{meses_dict.get(mes_fim, 'Dez')}")
+            ano_inicio = sazonalidade_resultado.get("ano_inicio", 2024)
+            ano_fim = sazonalidade_resultado.get("ano_fim", 2024)
+            mes_inicio_nome = meses_dict.get(mes_inicio, "Jan")
+            mes_fim_nome = meses_dict.get(mes_fim, "Dez")
+            
+            # Display: "Jan 2024 - Dez 2024" ou "Jan 2024 - Fev 2025" se anos diferentes
+            if ano_inicio == ano_fim:
+                info_text = f"🔒 {mes_inicio_nome}\n{ano_inicio}"
+            else:
+                info_text = f"🔒 {mes_inicio_nome}\n{ano_inicio}\n–\n{mes_fim_nome}\n{ano_fim}"
+            st.info(info_text)
         else:  # Período Variável
             qtd = sazonalidade_resultado.get("quantidade", 1)
             periodo = sazonalidade_resultado.get("periodoLinha", "ULTIMO")
