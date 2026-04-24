@@ -42,16 +42,11 @@ from services.aggregations import _carregar_curvas_por_ano
 def criar_interface_sazonalidade(rotulo_prefix: str = "", valor_padrao: Union[Dict, int, list, None] = None):
     """Cria interface de sazonalidade (Fixo vs Variável) retorna dict normalizado."""
     
+    # Importar normalizar_sazonalidade
+    from utils_ext.calc_functions import normalizar_sazonalidade
+    
     # Normalizar valor_padrao (pode vir como dict, int, list, ou None)
-    if valor_padrao is None or valor_padrao == {} or valor_padrao == 0:
-        valor_padrao = {"tipo": "NENHUM"}
-    elif isinstance(valor_padrao, (int, list)):
-        # Legado: converter int/list para dict
-        if isinstance(valor_padrao, list) and len(valor_padrao) > 0:
-            valor_padrao = valor_padrao[0]  # Se for lista, pegar primeiro
-        # Agora importar da calc_functions para normalizar
-        from utils_ext.calc_functions import normalizar_sazonalidade
-        valor_padrao = normalizar_sazonalidade(valor_padrao)
+    valor_padrao = normalizar_sazonalidade(valor_padrao)
     
     tipo_saz = valor_padrao.get("tipo", "NENHUM")
     

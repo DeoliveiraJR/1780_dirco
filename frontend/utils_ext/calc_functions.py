@@ -213,12 +213,12 @@ def normalizar_sazonalidade(saz: Union[Dict, int, None]) -> Dict:
     Normaliza sazonalidade em cualquier formato a estructura estándar.
     
     Args:
-        saz: Dict (nuevo formato), int (legacy), o None
+        saz: Dict (nuevo formato), int (legacy), lista com dict, o None
         
     Returns:
         Dict com estructura padrao:
         {
-            "tipo": "VARIAVEL" | "FIXO",
+            "tipo": "VARIAVEL" | "FIXO" | "NENHUM",
             "quantidade": int (VARIAVEL),
             "tipo_periodo": "MES" | "ANO" (VARIAVEL),
             "periodoLinha": "PRIMEIRO" | "ULTIMO" (VARIAVEL),
@@ -227,7 +227,18 @@ def normalizar_sazonalidade(saz: Union[Dict, int, None]) -> Dict:
         }
     """
     # Se for None ou 0, sem sazonalidade
-    if saz is None or saz == 0:
+    if saz is None or saz == 0 or saz == {}:
+        return {"tipo": "NENHUM"}
+    
+    # Se for lista, tentar extrair primeiro elemento
+    if isinstance(saz, list):
+        if len(saz) > 0:
+            saz = saz[0]  # Pegar primeiro elemento
+        else:
+            return {"tipo": "NENHUM"}  # Lista vazia
+    
+    # Após extrair de lista, checar novamente se é vazio
+    if saz == {}:
         return {"tipo": "NENHUM"}
     
     # Se for int (legacy: -7 significa últimos 7 meses)
@@ -288,9 +299,10 @@ def calcular_indices_por_mes(saz_normalizada: Dict, mes_idx: int) -> List[int]:
         mes_inicio = saz_normalizada.get("mes_inicio", 1)
         mes_fim = saz_normalizada.get("mes_fim", 12)
         # Converter para índices (1-based para 0-based)
-        inicio_idx = mes_inicio - 1
-        fim_idx = mes_fim
-        return list(range(inicio_idx, min(fim_idx, 12)))
+        inicio_idx = int(mes_inicio) - 1
+        fim_idx = int(mes_fim)
+        # Range inclusivo: se quer jan-jul, retorna índices 0-6 (7 meses)
+        return list(range(inicio_idx, fim_idx))
     
     # VARIÁVEL: adaptar conforme o mês
     if saz_tipo == "VARIAVEL":
@@ -351,7 +363,12 @@ def aplicar_sazonalidade_por_mes(
     indices = calcular_indices_por_mes(saz_normalizada, mes_idx)
     
     # Extrair valores pelos índices
-    return [valores_12_meses[i] if i < len(valores_12_meses) else 0.0 for i in indices]
+    valores_filtrados = [valores_12_meses[i] if i < len(valores_12_meses) else 0.0 for i in indices]
+    
+    if mes_idx == 0 or mes_idx == 1:
+        print(f"[CALC] Mês {mes_idx}: saz={saz_normalizada}, indices={indices} → retorna {len(valores_filtrados)} valores")
+    
+    return valores_filtrados
 
 
 # ============================================================================
