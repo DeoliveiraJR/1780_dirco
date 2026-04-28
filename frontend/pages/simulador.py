@@ -1336,15 +1336,7 @@ def renderizar():
     </style>
     """, unsafe_allow_html=True)
     
-    bokeh_editable(
-        layout_topo,
-        height=950,  # 100 + 400 + 450 + padding
-        key=f"sim_bokeh_{combo}"
-    )
-    
     # ====================== TABELA SÉRIE HISTÓRICA (COM TODOS OS ANOS) ========================
-    st.markdown("<h3 style='margin:1rem 0 0.5rem 0; padding-top:1rem; border-top:2px solid #e2e8f0;'>📊 SÉRIE HISTÓRICA • Realizado vs Projeções</h3>", unsafe_allow_html=True)
-    
     # Montar dados da série histórica com meses fixos (JAN-DEZ)
     meses_fixos = [m.upper() for m in MESES_ABR_LIST]
     tbl_hist_data = dict(Mes=meses_fixos, Mes_Ord=list(range(1, 13)))
@@ -1804,7 +1796,29 @@ def renderizar():
     </style>
     """, unsafe_allow_html=True)
     
-    streamlit_bokeh(tbl_hist, use_container_width=True, key=f"hist_{combo}")
+    hist_title_div = Div(
+        text="""
+        <div style='margin: 16px 0 8px 0; padding-top: 14px; border-top: 2px solid #e2e8f0;
+                    font-size: 1.1rem; font-weight: 700; color: #0c3a66;'>
+            📊 SÉRIE HISTÓRICA • Realizado vs Projeções
+        </div>
+        """,
+        sizing_mode="stretch_width"
+    )
+
+    layout_principal = column(
+        layout_topo,
+        hist_title_div,
+        tbl_hist,
+        sizing_mode="stretch_width",
+    )
+
+    bokeh_editable(
+        layout_principal,
+        height=3250,
+        key=f"sim_bokeh_{combo}"
+    )
+
     st.markdown("<h2 class='uan-sec' style='margin:8px 0 4px 0;padding:4px 0;font-size:1.2rem;border-top:1px solid #e2e8f0;'>🗂️ Análises por Categoria</h2>", unsafe_allow_html=True)
     
     # Carrega dados agregados por categoria

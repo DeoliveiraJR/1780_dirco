@@ -4,6 +4,27 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
+## 🚀 [v2.2.6] - 2026-04-28
+
+### ✅ HOTFIX - Conflito de Documento Bokeh no Simulador
+
+#### 🔴 Erro corrigido: `Models must be owned by only a single document`
+- **Issue:** A tabela histórica usava callback com referência a `ColumnDataSource` do gráfico principal, mas estava sendo renderizada em outro documento Bokeh via `streamlit_bokeh`.
+- **Root Cause:** O mesmo model Bokeh (`src_ajs`) estava sendo compartilhado entre dois renders/documentos distintos.
+- **Solução:** Unificação do gráfico principal e da tabela histórica em um único layout Bokeh renderizado por `bokeh_editable`.
+
+#### ✅ Impacto
+- Mantida a sincronização entre edição da tabela e curva ajustada.
+- Eliminado erro de ownership de modelos Bokeh.
+
+#### 🛠️ Arquivo alterado
+- `frontend/pages/simulador.py`
+
+#### 🧪 Validação
+- Compilação sintática: `python -m py_compile frontend/pages/simulador.py` ✅
+
+---
+
 ## 🚀 [v2.2.5] - 2026-04-28
 
 ### ✅ HOTFIX - Renderização da Tabela Histórica do Simulador
