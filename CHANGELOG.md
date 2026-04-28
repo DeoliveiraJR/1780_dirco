@@ -4,6 +4,23 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
+## 🚀 [v2.2.5] - 2026-04-28
+
+### ✅ HOTFIX - Renderização da Tabela Histórica do Simulador
+
+#### 🔴 Erro corrigido: validação de `TableColumn.editor`
+- **Issue:** `ValueError: failed to validate TableColumn(...).editor: expected an instance of type CellEditor, got None`
+- **Root Cause:** Foram criadas colunas com `editor=None`, mas o Bokeh exige uma instância válida de `CellEditor` quando a propriedade `editor` é informada.
+- **Solução:** Removido `editor=None` das colunas não editáveis, mantendo `NumberEditor` apenas nas colunas de `AJUSTE (+/-)`.
+
+#### 🛠️ Arquivo alterado
+- `frontend/pages/simulador.py`
+
+#### 🧪 Validação
+- Compilação sintática: `python -m py_compile frontend/pages/simulador.py` ✅
+
+---
+
 ## 🚀 [v2.2.4] - 2026-04-28
 
 ### ✅ MELHORADO - Tabela Histórica do Simulador

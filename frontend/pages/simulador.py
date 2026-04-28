@@ -1597,54 +1597,52 @@ def renderizar():
 
     # Construir colunas para série histórica
     columns_hist = [
-        TableColumn(field="Mes", title="Mês", formatter=StringFormatter(text_color="#0b1320"), sortable=False, editor=None)
+        TableColumn(field="Mes", title="Mês", formatter=StringFormatter(text_color="#0b1320"), sortable=False)
     ]
     
     # ============ APENAS ÚLTIMO ANO REALIZADO (2025) ============
     if ano_realizado_ultimo is not None:
         columns_hist.append(TableColumn(
             field=f"Rlzd_{ano_realizado_ultimo}_Disp", title=f"RLZD {ano_realizado_ultimo}",
-            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL),
-            editor=None
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)
         ))
         columns_hist.append(TableColumn(
             field=f"Var_{ano_realizado_ultimo}_Disp", title=f"VAR. % {ano_realizado_ultimo}",
-            formatter=HTMLTemplateFormatter(template="<%= value %>"),
-            editor=None
+            formatter=HTMLTemplateFormatter(template="<%= value %>")
         ))
     
     # ============ REALIZADO DO ANO ATUAL (2026) ============
     columns_hist.extend([
         TableColumn(field=f"Rlzd_{ano_atual}_Disp", title=f"RLZD {ano_atual}",
-            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
         TableColumn(field=f"Var_{ano_atual}_Disp", title=f"VAR. % {ano_atual}",
-            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None)
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL))
     ])
     
     # ============ PROJEÇÕES 2026 ============
     # Separador visual
     columns_hist.extend([
-        TableColumn(field=f"Analitica_{ano_atual_str}_Disp", title=f"🟧 {ano_atual} ANALÍT", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
-        TableColumn(field=f"Var_Ana_{ano_atual_str}_Disp", title="VAR % ANAL", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
-        TableColumn(field=f"Mercado_{ano_atual_str}_Disp", title="MERCADO", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
-        TableColumn(field=f"Var_Mer_{ano_atual_str}_Disp", title="VAR % MERC", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
-        TableColumn(field=f"Ajustada_{ano_atual_str}_Disp", title="AJUSTADA", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
-        TableColumn(field=f"Var_Ajs_{ano_atual_str}_Disp", title="VAR % AJS", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Analitica_{ano_atual_str}_Disp", title=f"🟧 {ano_atual} ANALÍT", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Var_Ana_{ano_atual_str}_Disp", title="VAR % ANAL", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Mercado_{ano_atual_str}_Disp", title="MERCADO", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Var_Mer_{ano_atual_str}_Disp", title="VAR % MERC", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Ajustada_{ano_atual_str}_Disp", title="AJUSTADA", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Var_Ajs_{ano_atual_str}_Disp", title="VAR % AJS", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
         TableColumn(field=f"Ajuste_{ano_atual_str}", title="AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:700;"><%= (value == null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + value.toLocaleString("pt-BR", {maximumFractionDigits:0})) %></span>'), editor=NumberEditor(step=1))
     ])
     
     # ============ PROJEÇÕES 2027 ============
     columns_hist.extend([
         TableColumn(field=f"Rlzd_{ano_projecao_proxima}_Disp", title=f"RLZD {ano_projecao_proxima}",
-            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
         TableColumn(field=f"Var_{ano_projecao_proxima}_Disp", title=f"VAR. % {ano_projecao_proxima}",
-            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
-        TableColumn(field=f"Analitica_{ano_prox_str}_Disp", title=f"🟦 {ano_projecao_proxima} ANALÍT", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
-        TableColumn(field=f"Var_Ana_{ano_prox_str}_Disp", title="VAR % ANAL", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
-        TableColumn(field=f"Mercado_{ano_prox_str}_Disp", title="MERCADO", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
-        TableColumn(field=f"Var_Mer_{ano_prox_str}_Disp", title="VAR % MERC", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
-        TableColumn(field=f"Ajustada_{ano_prox_str}_Disp", title="AJUSTADA", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
-        TableColumn(field=f"Var_Ajs_{ano_prox_str}_Disp", title="VAR % AJS", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Analitica_{ano_prox_str}_Disp", title=f"🟦 {ano_projecao_proxima} ANALÍT", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Var_Ana_{ano_prox_str}_Disp", title="VAR % ANAL", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Mercado_{ano_prox_str}_Disp", title="MERCADO", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Var_Mer_{ano_prox_str}_Disp", title="VAR % MERC", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Ajustada_{ano_prox_str}_Disp", title="AJUSTADA", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Var_Ajs_{ano_prox_str}_Disp", title="VAR % AJS", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
         TableColumn(field=f"Ajuste_{ano_prox_str}", title="AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:700;"><%= (value == null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + value.toLocaleString("pt-BR", {maximumFractionDigits:0})) %></span>'), editor=NumberEditor(step=1))
     ])
 

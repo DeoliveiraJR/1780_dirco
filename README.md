@@ -2,11 +2,15 @@
 
 Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário**, **controle de permissões** e **DRE Gerencial profissional**.
 
-**Versão Atual:** v2.2.4 | **Status:** ✅ Production Ready | **Última Atualização:** 28/04/2026
+**Versão Atual:** v2.2.5 | **Status:** ✅ Production Ready | **Última Atualização:** 28/04/2026
 
 ---
 
 ## 📌 O que foi implementado
+
+### ✅ [v2.2.5] - Hotfix Bokeh na Tabela do Simulador
+- **🩹 Correção de Renderização:** Removido uso inválido de `editor=None` em `TableColumn`, que causava erro de validação no Bokeh
+- **✅ Estabilidade:** Mantida a edição de Ajuste sem quebrar a renderização da tabela histórica
 
 ### ✅ [v2.2.4] - Simulador (Ajuste Editável na Tabela)
 - **✏️ Ajuste Editável:** Colunas de Ajuste (+/-) em 2026 e 2027 agora aceitam input manual na tabela histórica
@@ -280,6 +284,6 @@ Para questões ou problemas:
 
 ---
 
-**Última atualização:** 28/04/2026 | **Versão:** v2.2.4 | **Status:** ✅ Production Ready
+**Última atualização:** 28/04/2026 | **Versão:** v2.2.5 | **Status:** ✅ Production Ready
 
 Mantém este README como documentação única e oficial. Para histórico detalhado, consulte [CHANGELOG.md](CHANGELOG.md).
