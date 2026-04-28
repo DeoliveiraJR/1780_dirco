@@ -1345,58 +1345,96 @@ def renderizar():
     # ====================== TABELA SÉRIE HISTÓRICA (COM TODOS OS ANOS) ========================
     st.markdown("<h3 style='margin:1rem 0 0.5rem 0; padding-top:1rem; border-top:2px solid #e2e8f0;'>📊 SÉRIE HISTÓRICA • Realizado vs Projeções</h3>", unsafe_allow_html=True)
     
-    # Montar dados da série histórica
-    tbl_hist_data = dict(Mes=mes_display, Mes_Ord=mes_ord)
+    # Montar dados da série histórica com meses fixos (JAN-DEZ)
+    meses_fixos = [m.upper() for m in MESES_ABR_LIST]
+    tbl_hist_data = dict(Mes=meses_fixos, Mes_Ord=list(range(1, 13)))
     
     # ============ FILTRAR: APENAS REALIZADO DE 2025 (ÚLTIMO ANO ANTERIOR AO ATUAL) ============
     # Encontrar o último ano realizado (que seria 2025)
     ano_realizado_ultimo = max([a for a in anos_realizados if a < ano_atual], default=None)
     
+    def _safe_year(arr):
+        arr = [] if arr is None else list(arr)
+        out = []
+        for i in range(12):
+            v = arr[i] if i < len(arr) else 0.0
+            try:
+                vv = float(v)
+                if not np.isfinite(vv):
+                    vv = 0.0
+            except Exception:
+                vv = 0.0
+            out.append(vv)
+        return out
+
+    def _tem_realizado(v):
+        try:
+            vv = float(v)
+            return np.isfinite(vv) and vv != 0.0
+        except Exception:
+            return False
+
+    def _aplicar_realizado_em_projecao(base_proj, rlzd_ano):
+        proj = []
+        flags = []
+        for i in range(12):
+            rv = rlzd_ano[i]
+            if _tem_realizado(rv):
+                proj.append(float(rv))
+                flags.append(True)
+            else:
+                proj.append(base_proj[i])
+                flags.append(False)
+        return proj, flags
+
     if ano_realizado_ultimo is not None:
-        tbl_hist_data[f"Rlzd_{ano_realizado_ultimo}"] = realizados_dict.get(ano_realizado_ultimo, [0.0]*12)
-        tbl_hist_data[f"Var_{ano_realizado_ultimo}"]  = variacoes_rlzd.get(ano_realizado_ultimo, [0.0]*12)
-        anos_realizado_para_tbl = [ano_realizado_ultimo]
-    else:
-        anos_realizado_para_tbl = []
+        tbl_hist_data[f"Rlzd_{ano_realizado_ultimo}"] = _safe_year(realizados_dict.get(ano_realizado_ultimo, [0.0] * 12))
+        tbl_hist_data[f"Var_{ano_realizado_ultimo}"] = _variacao_mensal(tbl_hist_data[f"Rlzd_{ano_realizado_ultimo}"])
     
-    # ============ ADICIONAR REALIZADO DO ANO ATUAL (2026) ============
-    # Traz os dados realizados do ano atual conforme foram até agora
-    rlzd_ano_atual = realizados_dict.get(ano_atual, [0.0] * 12)
+    # ============ REALIZADOS E PROJEÇÕES (ANO ATUAL E PRÓXIMO ANO) ============
+    ano_atual_str = str(ano_atual)
+    ano_prox_str = str(ano_projecao_proxima)
+
+    rlzd_ano_atual = _safe_year(realizados_dict.get(ano_atual, [0.0] * 12))
+    rlzd_ano_prox = _safe_year(realizados_dict.get(ano_projecao_proxima, [0.0] * 12))
     tbl_hist_data[f"Rlzd_{ano_atual}"] = rlzd_ano_atual
-    tbl_hist_data[f"Var_{ano_atual}"]  = variacoes_rlzd.get(ano_atual, [0.0]*12)
-    
-    # Adicionar projeções do ano ATUAL (2026)
-    tbl_hist_data["Analitica_2026"]  = ana_com_realizado
-    tbl_hist_data["Var_Ana_2026"]    = _variacao_mensal(ana_com_realizado)
-    tbl_hist_data["Mercado_2026"]    = mer_com_realizado
-    tbl_hist_data["Var_Mer_2026"]    = _variacao_mensal(mer_com_realizado)
-    tbl_hist_data["Ajustada_2026"]   = ajs_com_realizado
-    tbl_hist_data["Var_Ajs_2026"]    = _variacao_mensal(ajs_com_realizado)
-    
-    # ============ ADICIONAR PROJEÇÕES PARA PRÓXIMO ANO (2027) - SEM DADOS ============
-    # 2027 não tem dados baseados em realizado ainda, preenche com zeros
-    tbl_hist_data["Analitica_2027"]  = [0.0] * 12
-    tbl_hist_data["Var_Ana_2027"]    = [0.0] * 12
-    tbl_hist_data["Mercado_2027"]    = [0.0] * 12
-    tbl_hist_data["Var_Mer_2027"]    = [0.0] * 12
-    tbl_hist_data["Ajustada_2027"]   = [0.0] * 12
-    tbl_hist_data["Var_Ajs_2027"]    = [0.0] * 12
-    
-    # Ajuste (diferença entre Ajustada e Analítica)
-    tbl_hist_data["Ajuste_2026"] = [ajs_com_realizado[i] - ana_com_realizado[i] for i in range(12)]
-    tbl_hist_data["Ajuste_2027"] = [0.0] * 12  # Sem dados para 2027
-    
-    # ============ MARCAR CÉLULAS ONDE REALIZADO SUBSTITUI PROJEÇÃO ============
-    # Flag para identificar células com realizado (para colorir diferente)
-    # Marca como realizado APENAS se: (1) mês já passou, (2) existe valor realizado válido e não-zero
-    tbl_hist_data["_eh_realizado_2026"] = [
-        (mes_idx + 1 <= mes_atual) and 
-        (rlzd_ano_atual[mes_idx] is not None) and 
-        (not (isinstance(rlzd_ano_atual[mes_idx], float) and np.isnan(rlzd_ano_atual[mes_idx]))) and
-        (float(rlzd_ano_atual[mes_idx]) != 0)
-        for mes_idx in range(12)
-    ]
-    tbl_hist_data["_eh_realizado_2027"] = [False] * 12  # Nenhum mês de 2027 é realizado
+    tbl_hist_data[f"Var_{ano_atual}"] = _variacao_mensal(rlzd_ano_atual)
+    tbl_hist_data[f"Rlzd_{ano_projecao_proxima}"] = rlzd_ano_prox
+    tbl_hist_data[f"Var_{ano_projecao_proxima}"] = _variacao_mensal(rlzd_ano_prox)
+
+    ana_atual_base = _safe_year(analitica[:12])
+    mer_atual_base = _safe_year(mercado[:12])
+    ajs_atual_base = _safe_year(ajustada[:12])
+    ana_prox_base = _safe_year(analitica[12:24])
+    mer_prox_base = _safe_year(mercado[12:24])
+    ajs_prox_base = _safe_year(ajustada[12:24])
+
+    ana_atual_eff, flags_rlzd_atual = _aplicar_realizado_em_projecao(ana_atual_base, rlzd_ano_atual)
+    mer_atual_eff, _ = _aplicar_realizado_em_projecao(mer_atual_base, rlzd_ano_atual)
+    ajs_atual_eff, _ = _aplicar_realizado_em_projecao(ajs_atual_base, rlzd_ano_atual)
+
+    ana_prox_eff, flags_rlzd_prox = _aplicar_realizado_em_projecao(ana_prox_base, rlzd_ano_prox)
+    mer_prox_eff, _ = _aplicar_realizado_em_projecao(mer_prox_base, rlzd_ano_prox)
+    ajs_prox_eff, _ = _aplicar_realizado_em_projecao(ajs_prox_base, rlzd_ano_prox)
+
+    tbl_hist_data[f"Analitica_{ano_atual_str}"] = ana_atual_eff
+    tbl_hist_data[f"Var_Ana_{ano_atual_str}"] = _variacao_mensal(ana_atual_eff)
+    tbl_hist_data[f"Mercado_{ano_atual_str}"] = mer_atual_eff
+    tbl_hist_data[f"Var_Mer_{ano_atual_str}"] = _variacao_mensal(mer_atual_eff)
+    tbl_hist_data[f"Ajustada_{ano_atual_str}"] = ajs_atual_eff
+    tbl_hist_data[f"Var_Ajs_{ano_atual_str}"] = _variacao_mensal(ajs_atual_eff)
+    tbl_hist_data[f"Ajuste_{ano_atual_str}"] = [ajs_atual_eff[i] - ana_atual_eff[i] for i in range(12)]
+
+    tbl_hist_data[f"Analitica_{ano_prox_str}"] = ana_prox_eff
+    tbl_hist_data[f"Var_Ana_{ano_prox_str}"] = _variacao_mensal(ana_prox_eff)
+    tbl_hist_data[f"Mercado_{ano_prox_str}"] = mer_prox_eff
+    tbl_hist_data[f"Var_Mer_{ano_prox_str}"] = _variacao_mensal(mer_prox_eff)
+    tbl_hist_data[f"Ajustada_{ano_prox_str}"] = ajs_prox_eff
+    tbl_hist_data[f"Var_Ajs_{ano_prox_str}"] = _variacao_mensal(ajs_prox_eff)
+    tbl_hist_data[f"Ajuste_{ano_prox_str}"] = [ajs_prox_eff[i] - ana_prox_eff[i] for i in range(12)]
+
+    tbl_hist_data[f"_eh_realizado_{ano_atual_str}"] = flags_rlzd_atual
+    tbl_hist_data[f"_eh_realizado_{ano_prox_str}"] = flags_rlzd_prox
     
     # Calcular linhas de MÉDIA e CRESCIMENTO para série histórica
     def _mean_safe(v):
@@ -1419,22 +1457,19 @@ def renderizar():
     media_row_hist[f"Rlzd_{ano_atual}"] = _mean_safe(tbl_hist_data[f"Rlzd_{ano_atual}"])
     media_row_hist[f"Var_{ano_atual}"]  = _mean_safe(tbl_hist_data[f"Var_{ano_atual}"])
     
-    # MÉDIA: projeções 2026 e 2027
-    media_row_hist["Analitica_2026"] = _mean_safe(tbl_hist_data["Analitica_2026"])
-    media_row_hist["Var_Ana_2026"]   = _mean_safe(tbl_hist_data["Var_Ana_2026"])
-    media_row_hist["Mercado_2026"]   = _mean_safe(tbl_hist_data["Mercado_2026"])
-    media_row_hist["Var_Mer_2026"]   = _mean_safe(tbl_hist_data["Var_Mer_2026"])
-    media_row_hist["Ajustada_2026"]  = _mean_safe(tbl_hist_data["Ajustada_2026"])
-    media_row_hist["Var_Ajs_2026"]   = _mean_safe(tbl_hist_data["Var_Ajs_2026"])
-    media_row_hist["Ajuste_2026"]    = _mean_safe(tbl_hist_data["Ajuste_2026"])
-    
-    media_row_hist["Analitica_2027"] = _mean_safe(tbl_hist_data["Analitica_2027"])
-    media_row_hist["Var_Ana_2027"]   = _mean_safe(tbl_hist_data["Var_Ana_2027"])
-    media_row_hist["Mercado_2027"]   = _mean_safe(tbl_hist_data["Mercado_2027"])
-    media_row_hist["Var_Mer_2027"]   = _mean_safe(tbl_hist_data["Var_Mer_2027"])
-    media_row_hist["Ajustada_2027"]  = _mean_safe(tbl_hist_data["Ajustada_2027"])
-    media_row_hist["Var_Ajs_2027"]   = _mean_safe(tbl_hist_data["Var_Ajs_2027"])
-    media_row_hist["Ajuste_2027"]    = _mean_safe(tbl_hist_data["Ajuste_2027"])
+    # MÉDIA: realizado do próximo ano (2027)
+    media_row_hist[f"Rlzd_{ano_projecao_proxima}"] = _mean_safe(tbl_hist_data[f"Rlzd_{ano_projecao_proxima}"])
+    media_row_hist[f"Var_{ano_projecao_proxima}"] = _mean_safe(tbl_hist_data[f"Var_{ano_projecao_proxima}"])
+
+    # MÉDIA: projeções do ano atual e próximo ano
+    for year_suf in [ano_atual_str, ano_prox_str]:
+        media_row_hist[f"Analitica_{year_suf}"] = _mean_safe(tbl_hist_data[f"Analitica_{year_suf}"])
+        media_row_hist[f"Var_Ana_{year_suf}"] = _mean_safe(tbl_hist_data[f"Var_Ana_{year_suf}"])
+        media_row_hist[f"Mercado_{year_suf}"] = _mean_safe(tbl_hist_data[f"Mercado_{year_suf}"])
+        media_row_hist[f"Var_Mer_{year_suf}"] = _mean_safe(tbl_hist_data[f"Var_Mer_{year_suf}"])
+        media_row_hist[f"Ajustada_{year_suf}"] = _mean_safe(tbl_hist_data[f"Ajustada_{year_suf}"])
+        media_row_hist[f"Var_Ajs_{year_suf}"] = _mean_safe(tbl_hist_data[f"Var_Ajs_{year_suf}"])
+        media_row_hist[f"Ajuste_{year_suf}"] = _mean_safe(tbl_hist_data[f"Ajuste_{year_suf}"])
 
     cres_row_hist = {"Mes": "CRESC. VOL", "Mes_Ord": 14}
     
@@ -1449,11 +1484,18 @@ def renderizar():
     cres_row_hist[f"Rlzd_{ano_atual}"] = delta
     cres_row_hist[f"Var_{ano_atual}"]  = 1.0 if delta > 0 else (-1.0 if delta < 0 else 0.0)
     
+    # CRESCIMENTO: realizado do próximo ano
+    delta = _delta_first_last(tbl_hist_data[f"Rlzd_{ano_projecao_proxima}"])
+    cres_row_hist[f"Rlzd_{ano_projecao_proxima}"] = delta
+    cres_row_hist[f"Var_{ano_projecao_proxima}"] = 1.0 if delta > 0 else (-1.0 if delta < 0 else 0.0)
+
     # CRESCIMENTO: projeções
-    for year_suf in ["2026", "2027"]:
-        for field_val, field_var in [(f"Analitica_{year_suf}", f"Var_Ana_{year_suf}"), 
-                                       (f"Mercado_{year_suf}", f"Var_Mer_{year_suf}"),
-                                       (f"Ajustada_{year_suf}", f"Var_Ajs_{year_suf}")]:
+    for year_suf in [ano_atual_str, ano_prox_str]:
+        for field_val, field_var in [
+            (f"Analitica_{year_suf}", f"Var_Ana_{year_suf}"),
+            (f"Mercado_{year_suf}", f"Var_Mer_{year_suf}"),
+            (f"Ajustada_{year_suf}", f"Var_Ajs_{year_suf}")
+        ]:
             delta = _delta_first_last(tbl_hist_data[field_val])
             cres_row_hist[field_val] = delta
             cres_row_hist[field_var] = 1.0 if delta > 0 else (-1.0 if delta < 0 else 0.0)
@@ -1471,63 +1513,84 @@ def renderizar():
         else:
             tbl_hist_data[k] = tbl_hist_data[k] + [media_row_hist.get(k, 0.0), cres_row_hist.get(k, 0.0)]
 
-    # Criar colunas de display para variações formatadas com cores
-    if ano_realizado_ultimo is not None:
-        tbl_hist_data[f"Var_{ano_realizado_ultimo}_Disp"] = _build_var_disp_column(tbl_hist_data[f"Var_{ano_realizado_ultimo}"])
-    
-    # Adicionar Var Disp para RLZD 2026 (ano atual)
-    tbl_hist_data[f"Var_{ano_atual}_Disp"] = _build_var_disp_column(tbl_hist_data[f"Var_{ano_atual}"])
-    
-    tbl_hist_data["Var_Ana_2026_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Ana_2026"])
-    tbl_hist_data["Var_Mer_2026_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Mer_2026"])
-    tbl_hist_data["Var_Ajs_2026_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Ajs_2026"])
-    
-    tbl_hist_data["Var_Ana_2027_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Ana_2027"])
-    tbl_hist_data["Var_Mer_2027_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Mer_2027"])
-    tbl_hist_data["Var_Ajs_2027_Disp"] = _build_var_disp_column(tbl_hist_data["Var_Ajs_2027"])
+    # ============ COLUNAS DE DISPLAY (SEM BADGE CIRCULAR) ============
+    COLOR_2025 = "#475569"
+    COLOR_2026 = "#b45309"
+    COLOR_2027 = "#0369a1"
 
-    # ============ CRIAR DISPLAY COM FORMATAÇÃO DE REALIZADO ============
-    def _format_value_with_realizado(values_list, eh_realizado_list):
-        """Formata valores mostrando com fundo amarelo quando é realizado."""
-        result = []
-        for i, (val, eh_real) in enumerate(zip(values_list, eh_realizado_list)):
-            if val is None or (isinstance(val, float) and np.isnan(val)):
-                result.append("—")
+    def _fmt_short(v):
+        if v is None or (isinstance(v, float) and not np.isfinite(v)):
+            return "—"
+        abs_val = abs(v)
+        if abs_val >= 1e9:
+            return f"{v/1e9:.1f}B"
+        if abs_val >= 1e6:
+            return f"{v/1e6:.1f}M"
+        return f"{int(round(v))}"
+
+    def _build_value_disp(values, color_hex, eh_realizado=None):
+        out = []
+        for i, v in enumerate(values):
+            txt = _fmt_short(v)
+            if txt == "—":
+                out.append("—")
+                continue
+            is_real = bool(eh_realizado[i]) if eh_realizado is not None and i < len(eh_realizado) else False
+            if is_real and i < 12:
+                out.append(
+                    f'<span style="background:#fef08a;padding:1px 5px;border-radius:3px;font-weight:700;color:#92400e;">{txt}</span>'
+                )
             else:
-                # Formata valor (M para milhões, B para bilhões)
-                abs_val = abs(val)
-                if abs_val >= 1e9:
-                    formatted = f"{val/1e9:.1f}B"
-                elif abs_val >= 1e6:
-                    formatted = f"{val/1e6:.1f}M"
-                else:
-                    formatted = f"{int(val)}"
-                
-                # Se é realizado, adiciona estilo de fundo amarelo
-                if eh_real and i < 12:  # Apenas linhas de meses, não média/crescimento
-                    result.append(f'<span style="background-color: #fef08a; padding: 2px 6px; border-radius: 3px; font-weight: 600; color: #92400e;">{formatted}</span>')
-                else:
-                    result.append(formatted)
-        return result
-    
-    # Aplicar formatação para 2026 (onde pode ter realizado)
-    tbl_hist_data["Analitica_2026_Disp"] = _format_value_with_realizado(
-        tbl_hist_data["Analitica_2026"], 
-        tbl_hist_data["_eh_realizado_2026"]
-    )
-    tbl_hist_data["Mercado_2026_Disp"] = _format_value_with_realizado(
-        tbl_hist_data["Mercado_2026"], 
-        tbl_hist_data["_eh_realizado_2026"]
-    )
-    tbl_hist_data["Ajustada_2026_Disp"] = _format_value_with_realizado(
-        tbl_hist_data["Ajustada_2026"], 
-        tbl_hist_data["_eh_realizado_2026"]
-    )
+                out.append(f'<span style="color:{color_hex};font-weight:600;">{txt}</span>')
+        return out
+
+    def _build_var_text_disp(values):
+        out = []
+        for i, v in enumerate(values):
+            try:
+                vv = float(v)
+                if not np.isfinite(vv):
+                    out.append("—")
+                    continue
+            except Exception:
+                out.append("—")
+                continue
+            color = "#059669" if vv > 0 else ("#dc2626" if vv < 0 else "#334155")
+            txt = f"{vv*100:+.2f}%"
+            if i == 13:
+                txt = "▲" if vv > 0 else ("▼" if vv < 0 else "•")
+            out.append(f'<span style="color:{color};font-weight:700;">{txt}</span>')
+        return out
+
+    if ano_realizado_ultimo is not None:
+        tbl_hist_data[f"Rlzd_{ano_realizado_ultimo}_Disp"] = _build_value_disp(tbl_hist_data[f"Rlzd_{ano_realizado_ultimo}"], COLOR_2025)
+        tbl_hist_data[f"Var_{ano_realizado_ultimo}_Disp"] = _build_var_text_disp(tbl_hist_data[f"Var_{ano_realizado_ultimo}"])
+
+    tbl_hist_data[f"Rlzd_{ano_atual}_Disp"] = _build_value_disp(tbl_hist_data[f"Rlzd_{ano_atual}"], COLOR_2026)
+    tbl_hist_data[f"Var_{ano_atual}_Disp"] = _build_var_text_disp(tbl_hist_data[f"Var_{ano_atual}"])
+    tbl_hist_data[f"Rlzd_{ano_projecao_proxima}_Disp"] = _build_value_disp(tbl_hist_data[f"Rlzd_{ano_projecao_proxima}"], COLOR_2027)
+    tbl_hist_data[f"Var_{ano_projecao_proxima}_Disp"] = _build_var_text_disp(tbl_hist_data[f"Var_{ano_projecao_proxima}"])
+
+    for year_suf, color_hex in [(ano_atual_str, COLOR_2026), (ano_prox_str, COLOR_2027)]:
+        flags = tbl_hist_data[f"_eh_realizado_{year_suf}"]
+        tbl_hist_data[f"Analitica_{year_suf}_Disp"] = _build_value_disp(tbl_hist_data[f"Analitica_{year_suf}"], color_hex, flags)
+        tbl_hist_data[f"Mercado_{year_suf}_Disp"] = _build_value_disp(tbl_hist_data[f"Mercado_{year_suf}"], color_hex, flags)
+        tbl_hist_data[f"Ajustada_{year_suf}_Disp"] = _build_value_disp(tbl_hist_data[f"Ajustada_{year_suf}"], color_hex, flags)
+        tbl_hist_data[f"Var_Ana_{year_suf}_Disp"] = _build_var_text_disp(tbl_hist_data[f"Var_Ana_{year_suf}"])
+        tbl_hist_data[f"Var_Mer_{year_suf}_Disp"] = _build_var_text_disp(tbl_hist_data[f"Var_Mer_{year_suf}"])
+        tbl_hist_data[f"Var_Ajs_{year_suf}_Disp"] = _build_var_text_disp(tbl_hist_data[f"Var_Ajs_{year_suf}"])
+        tbl_hist_data[f"Ajuste_{year_suf}_Disp"] = [
+            (
+                f'<span style="color:{"#059669" if float(v) >= 0 else "#dc2626"};font-weight:700;">'
+                f'{("+" if float(v) >= 0 else "") + fmt_br(float(v), 0)}</span>'
+            )
+            for v in tbl_hist_data[f"Ajuste_{year_suf}"]
+        ]
 
     tbl_hist_src = ColumnDataSource(tbl_hist_data)
 
-    # TEMPLATE para célula com realizado - formato simple já que estamos usando _Disp
-    REALIZADO_TMPL = """<%= value %>"""
+    # Template simples para renderizar HTML previamente formatado
+    SIMPLE_HTML_TMPL = """<%= value %>"""
 
     # Construir colunas para série histórica
     columns_hist = [
@@ -1537,8 +1600,8 @@ def renderizar():
     # ============ APENAS ÚLTIMO ANO REALIZADO (2025) ============
     if ano_realizado_ultimo is not None:
         columns_hist.append(TableColumn(
-            field=f"Rlzd_{ano_realizado_ultimo}", title=f"RLZD {ano_realizado_ultimo}",
-            formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)
+            field=f"Rlzd_{ano_realizado_ultimo}_Disp", title=f"RLZD {ano_realizado_ultimo}",
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)
         ))
         columns_hist.append(TableColumn(
             field=f"Var_{ano_realizado_ultimo}_Disp", title=f"VAR. % {ano_realizado_ultimo}",
@@ -1547,33 +1610,39 @@ def renderizar():
     
     # ============ REALIZADO DO ANO ATUAL (2026) ============
     columns_hist.extend([
-        TableColumn(field=f"Rlzd_{ano_atual}", title=f"RLZD {ano_atual}",
-            formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
+        TableColumn(field=f"Rlzd_{ano_atual}_Disp", title=f"RLZD {ano_atual}",
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
         TableColumn(field=f"Var_{ano_atual}_Disp", title=f"VAR. % {ano_atual}",
-            formatter=HTMLTemplateFormatter(template="<%= value %>"))
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL))
+    ])
+    columns_hist.extend([
+        TableColumn(field=f"Rlzd_{ano_projecao_proxima}_Disp", title=f"RLZD {ano_projecao_proxima}",
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Var_{ano_projecao_proxima}_Disp", title=f"VAR. % {ano_projecao_proxima}",
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL))
     ])
     
     # ============ PROJEÇÕES 2026 ============
     # Separador visual
     columns_hist.extend([
-        TableColumn(field="Analitica_2026_Disp", title="📅 2026 | Analítica", formatter=HTMLTemplateFormatter(template=REALIZADO_TMPL)),
-        TableColumn(field="Var_Ana_2026_Disp", title="Var. % Anal", formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field="Mercado_2026_Disp", title="Mercado", formatter=HTMLTemplateFormatter(template=REALIZADO_TMPL)),
-        TableColumn(field="Var_Mer_2026_Disp", title="Var. % Merc", formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field="Ajustada_2026_Disp", title="Ajustada", formatter=HTMLTemplateFormatter(template=REALIZADO_TMPL)),
-        TableColumn(field="Var_Ajs_2026_Disp", title="Var. % Ajs", formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field="Ajuste_2026", title="Ajuste (Δ)", formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:600;"><%= (value==null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(value)) %></span>'))
+        TableColumn(field=f"Analitica_{ano_atual_str}_Disp", title=f"{ano_atual} ANALÍT", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Var_Ana_{ano_atual_str}_Disp", title="VAR % ANAL", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Mercado_{ano_atual_str}_Disp", title="MERCADO", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Var_Mer_{ano_atual_str}_Disp", title="VAR % MERC", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Ajustada_{ano_atual_str}_Disp", title="AJUSTADA", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Var_Ajs_{ano_atual_str}_Disp", title="VAR % AJS", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Ajuste_{ano_atual_str}_Disp", title="AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL))
     ])
     
     # ============ PROJEÇÕES 2027 ============
     columns_hist.extend([
-        TableColumn(field="Analitica_2027", title="📅 2027 | Analítica", formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
-        TableColumn(field="Var_Ana_2027_Disp", title="Var. % Anal", formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field="Mercado_2027", title="Mercado", formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
-        TableColumn(field="Var_Mer_2027_Disp", title="Var. % Merc", formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field="Ajustada_2027", title="Ajustada", formatter=HTMLTemplateFormatter(template=CURRENCY_TMPL)),
-        TableColumn(field="Var_Ajs_2027_Disp", title="Var. % Ajs", formatter=HTMLTemplateFormatter(template="<%= value %>")),
-        TableColumn(field="Ajuste_2027", title="Ajuste (Δ)", formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:600;"><%= (value==null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(value)) %></span>'))
+        TableColumn(field=f"Analitica_{ano_prox_str}_Disp", title=f"{ano_projecao_proxima} ANALÍT", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Var_Ana_{ano_prox_str}_Disp", title="VAR % ANAL", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Mercado_{ano_prox_str}_Disp", title="MERCADO", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Var_Mer_{ano_prox_str}_Disp", title="VAR % MERC", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Ajustada_{ano_prox_str}_Disp", title="AJUSTADA", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Var_Ajs_{ano_prox_str}_Disp", title="VAR % AJS", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+        TableColumn(field=f"Ajuste_{ano_prox_str}_Disp", title="AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL))
     ])
 
     tbl_hist = DataTable(

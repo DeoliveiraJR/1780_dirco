@@ -4,6 +4,36 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
+## 🚀 [v2.2.3] - 2026-04-28
+
+### ✅ CORRIGIDO - Tabela da Página Simulador (Série Histórica)
+
+#### 🎯 Solicitação do Cliente: Estrutura anual fixa (Jan-Dez)
+- **Mudança:** Tabela da Série Histórica passou a usar meses fixos de JAN a DEZ.
+- **Resultado:** Visual alinhado ao modelo da planilha (linhas fixas por mês e anos em blocos de colunas).
+
+#### 🎯 Solicitação do Cliente: Blocos por ano com realizado e projeções
+- **2025 (cinza):** Mantido bloco de Realizado + Var. %.
+- **2026 (laranja):** Realizado + Var. % + projeções (Analítica, Mercado, Ajustada, Ajuste).
+- **2027 (azul):** Adicionado Realizado + Var. % + projeções (Analítica, Mercado, Ajustada, Ajuste).
+
+#### 🎯 Regra de negócio preservada e ampliada
+- **Antes:** Sobrescrita por realizado estava concentrada no ano atual.
+- **Agora:** Quando existe realizado válido (não nulo e diferente de zero), a projeção do mês assume o realizado tanto em 2026 quanto em 2027.
+- **Destaque visual:** Células substituídas por realizado recebem destaque específico na tabela.
+
+#### 🎯 Ajuste visual das variações (%)
+- **Removido:** Formato circular (badge/pill) verde/vermelho nas colunas de variação %.
+- **Aplicado:** Exibição textual com cor por sinal (positivo/negativo/neutro), sem cápsula.
+
+#### 🛠️ Arquivo alterado
+- `frontend/pages/simulador.py`
+
+#### 🧪 Validação
+- Compilação sintática do arquivo: `python -m py_compile frontend/pages/simulador.py` ✅
+
+---
+
 ## � [v2.2.2] - 2026-04-24
 
 ### ✅ CORRIGIDO - Sazonalidade (Fixo, Variável e Lógica de Funções)
