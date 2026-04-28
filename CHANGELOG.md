@@ -4,6 +4,31 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
+## 🚀 [v2.2.4] - 2026-04-28
+
+### ✅ MELHORADO - Tabela Histórica do Simulador
+
+#### ✏️ Novo: Coluna Ajuste editável
+- As colunas `AJUSTE (+/-)` de 2026 e 2027 agora são editáveis diretamente na tabela.
+- O valor digitado alimenta a lógica da simulação (`Ajustada = Analítica + Ajuste`) para o mês/ano correspondente.
+
+#### 🔄 Integração com os demais componentes
+- Ao editar Ajuste na tabela, a curva ajustada do gráfico principal é atualizada em tempo real.
+- Variações `%` e colunas de display da Ajustada são recalculadas automaticamente.
+- Card/indicador de incremento e elementos dependentes da curva ajustada permanecem sincronizados.
+
+#### 🎯 Melhorias de layout solicitadas
+- `RLZD 2027` reposicionado próximo ao bloco de projeções de 2027, mantendo sequência lógica por ano.
+- Diferenciação visual reforçada entre anos (2025/2026/2027) com tratamento de fundo/cor por bloco.
+
+#### 🛠️ Arquivo alterado
+- `frontend/pages/simulador.py`
+
+#### 🧪 Validação
+- Compilação sintática: `python -m py_compile frontend/pages/simulador.py` ✅
+
+---
+
 ## 🚀 [v2.2.3] - 2026-04-28
 
 ### ✅ CORRIGIDO - Tabela da Página Simulador (Série Histórica)

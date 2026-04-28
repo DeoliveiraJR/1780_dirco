@@ -1517,6 +1517,9 @@ def renderizar():
     COLOR_2025 = "#475569"
     COLOR_2026 = "#b45309"
     COLOR_2027 = "#0369a1"
+    BG_2025 = "#f1f5f9"
+    BG_2026 = "#fff7ed"
+    BG_2027 = "#f0f9ff"
 
     def _fmt_short(v):
         if v is None or (isinstance(v, float) and not np.isfinite(v)):
@@ -1528,7 +1531,7 @@ def renderizar():
             return f"{v/1e6:.1f}M"
         return f"{int(round(v))}"
 
-    def _build_value_disp(values, color_hex, eh_realizado=None):
+    def _build_value_disp(values, color_hex, bg_hex, eh_realizado=None):
         out = []
         for i, v in enumerate(values):
             txt = _fmt_short(v)
@@ -1541,7 +1544,7 @@ def renderizar():
                     f'<span style="background:#fef08a;padding:1px 5px;border-radius:3px;font-weight:700;color:#92400e;">{txt}</span>'
                 )
             else:
-                out.append(f'<span style="color:{color_hex};font-weight:600;">{txt}</span>')
+                out.append(f'<span style="background:{bg_hex};padding:1px 5px;border-radius:3px;color:{color_hex};font-weight:700;">{txt}</span>')
         return out
 
     def _build_var_text_disp(values):
@@ -1563,19 +1566,19 @@ def renderizar():
         return out
 
     if ano_realizado_ultimo is not None:
-        tbl_hist_data[f"Rlzd_{ano_realizado_ultimo}_Disp"] = _build_value_disp(tbl_hist_data[f"Rlzd_{ano_realizado_ultimo}"], COLOR_2025)
+        tbl_hist_data[f"Rlzd_{ano_realizado_ultimo}_Disp"] = _build_value_disp(tbl_hist_data[f"Rlzd_{ano_realizado_ultimo}"], COLOR_2025, BG_2025)
         tbl_hist_data[f"Var_{ano_realizado_ultimo}_Disp"] = _build_var_text_disp(tbl_hist_data[f"Var_{ano_realizado_ultimo}"])
 
-    tbl_hist_data[f"Rlzd_{ano_atual}_Disp"] = _build_value_disp(tbl_hist_data[f"Rlzd_{ano_atual}"], COLOR_2026)
+    tbl_hist_data[f"Rlzd_{ano_atual}_Disp"] = _build_value_disp(tbl_hist_data[f"Rlzd_{ano_atual}"], COLOR_2026, BG_2026)
     tbl_hist_data[f"Var_{ano_atual}_Disp"] = _build_var_text_disp(tbl_hist_data[f"Var_{ano_atual}"])
-    tbl_hist_data[f"Rlzd_{ano_projecao_proxima}_Disp"] = _build_value_disp(tbl_hist_data[f"Rlzd_{ano_projecao_proxima}"], COLOR_2027)
+    tbl_hist_data[f"Rlzd_{ano_projecao_proxima}_Disp"] = _build_value_disp(tbl_hist_data[f"Rlzd_{ano_projecao_proxima}"], COLOR_2027, BG_2027)
     tbl_hist_data[f"Var_{ano_projecao_proxima}_Disp"] = _build_var_text_disp(tbl_hist_data[f"Var_{ano_projecao_proxima}"])
 
-    for year_suf, color_hex in [(ano_atual_str, COLOR_2026), (ano_prox_str, COLOR_2027)]:
+    for year_suf, color_hex, bg_hex in [(ano_atual_str, COLOR_2026, BG_2026), (ano_prox_str, COLOR_2027, BG_2027)]:
         flags = tbl_hist_data[f"_eh_realizado_{year_suf}"]
-        tbl_hist_data[f"Analitica_{year_suf}_Disp"] = _build_value_disp(tbl_hist_data[f"Analitica_{year_suf}"], color_hex, flags)
-        tbl_hist_data[f"Mercado_{year_suf}_Disp"] = _build_value_disp(tbl_hist_data[f"Mercado_{year_suf}"], color_hex, flags)
-        tbl_hist_data[f"Ajustada_{year_suf}_Disp"] = _build_value_disp(tbl_hist_data[f"Ajustada_{year_suf}"], color_hex, flags)
+        tbl_hist_data[f"Analitica_{year_suf}_Disp"] = _build_value_disp(tbl_hist_data[f"Analitica_{year_suf}"], color_hex, bg_hex, flags)
+        tbl_hist_data[f"Mercado_{year_suf}_Disp"] = _build_value_disp(tbl_hist_data[f"Mercado_{year_suf}"], color_hex, bg_hex, flags)
+        tbl_hist_data[f"Ajustada_{year_suf}_Disp"] = _build_value_disp(tbl_hist_data[f"Ajustada_{year_suf}"], color_hex, bg_hex, flags)
         tbl_hist_data[f"Var_Ana_{year_suf}_Disp"] = _build_var_text_disp(tbl_hist_data[f"Var_Ana_{year_suf}"])
         tbl_hist_data[f"Var_Mer_{year_suf}_Disp"] = _build_var_text_disp(tbl_hist_data[f"Var_Mer_{year_suf}"])
         tbl_hist_data[f"Var_Ajs_{year_suf}_Disp"] = _build_var_text_disp(tbl_hist_data[f"Var_Ajs_{year_suf}"])
@@ -1594,55 +1597,55 @@ def renderizar():
 
     # Construir colunas para série histórica
     columns_hist = [
-        TableColumn(field="Mes", title="Mês", formatter=StringFormatter(text_color="#0b1320"), sortable=False)
+        TableColumn(field="Mes", title="Mês", formatter=StringFormatter(text_color="#0b1320"), sortable=False, editor=None)
     ]
     
     # ============ APENAS ÚLTIMO ANO REALIZADO (2025) ============
     if ano_realizado_ultimo is not None:
         columns_hist.append(TableColumn(
             field=f"Rlzd_{ano_realizado_ultimo}_Disp", title=f"RLZD {ano_realizado_ultimo}",
-            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL),
+            editor=None
         ))
         columns_hist.append(TableColumn(
             field=f"Var_{ano_realizado_ultimo}_Disp", title=f"VAR. % {ano_realizado_ultimo}",
-            formatter=HTMLTemplateFormatter(template="<%= value %>")
+            formatter=HTMLTemplateFormatter(template="<%= value %>"),
+            editor=None
         ))
     
     # ============ REALIZADO DO ANO ATUAL (2026) ============
     columns_hist.extend([
         TableColumn(field=f"Rlzd_{ano_atual}_Disp", title=f"RLZD {ano_atual}",
-            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
         TableColumn(field=f"Var_{ano_atual}_Disp", title=f"VAR. % {ano_atual}",
-            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL))
-    ])
-    columns_hist.extend([
-        TableColumn(field=f"Rlzd_{ano_projecao_proxima}_Disp", title=f"RLZD {ano_projecao_proxima}",
-            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Var_{ano_projecao_proxima}_Disp", title=f"VAR. % {ano_projecao_proxima}",
-            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL))
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None)
     ])
     
     # ============ PROJEÇÕES 2026 ============
     # Separador visual
     columns_hist.extend([
-        TableColumn(field=f"Analitica_{ano_atual_str}_Disp", title=f"{ano_atual} ANALÍT", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Var_Ana_{ano_atual_str}_Disp", title="VAR % ANAL", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Mercado_{ano_atual_str}_Disp", title="MERCADO", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Var_Mer_{ano_atual_str}_Disp", title="VAR % MERC", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Ajustada_{ano_atual_str}_Disp", title="AJUSTADA", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Var_Ajs_{ano_atual_str}_Disp", title="VAR % AJS", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Ajuste_{ano_atual_str}_Disp", title="AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL))
+        TableColumn(field=f"Analitica_{ano_atual_str}_Disp", title=f"🟧 {ano_atual} ANALÍT", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Var_Ana_{ano_atual_str}_Disp", title="VAR % ANAL", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Mercado_{ano_atual_str}_Disp", title="MERCADO", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Var_Mer_{ano_atual_str}_Disp", title="VAR % MERC", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Ajustada_{ano_atual_str}_Disp", title="AJUSTADA", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Var_Ajs_{ano_atual_str}_Disp", title="VAR % AJS", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Ajuste_{ano_atual_str}", title="AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:700;"><%= (value == null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + value.toLocaleString("pt-BR", {maximumFractionDigits:0})) %></span>'), editor=NumberEditor(step=1))
     ])
     
     # ============ PROJEÇÕES 2027 ============
     columns_hist.extend([
-        TableColumn(field=f"Analitica_{ano_prox_str}_Disp", title=f"{ano_projecao_proxima} ANALÍT", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Var_Ana_{ano_prox_str}_Disp", title="VAR % ANAL", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Mercado_{ano_prox_str}_Disp", title="MERCADO", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Var_Mer_{ano_prox_str}_Disp", title="VAR % MERC", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Ajustada_{ano_prox_str}_Disp", title="AJUSTADA", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Var_Ajs_{ano_prox_str}_Disp", title="VAR % AJS", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Ajuste_{ano_prox_str}_Disp", title="AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL))
+        TableColumn(field=f"Rlzd_{ano_projecao_proxima}_Disp", title=f"RLZD {ano_projecao_proxima}",
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Var_{ano_projecao_proxima}_Disp", title=f"VAR. % {ano_projecao_proxima}",
+            formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Analitica_{ano_prox_str}_Disp", title=f"🟦 {ano_projecao_proxima} ANALÍT", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Var_Ana_{ano_prox_str}_Disp", title="VAR % ANAL", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Mercado_{ano_prox_str}_Disp", title="MERCADO", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Var_Mer_{ano_prox_str}_Disp", title="VAR % MERC", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Ajustada_{ano_prox_str}_Disp", title="AJUSTADA", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Var_Ajs_{ano_prox_str}_Disp", title="VAR % AJS", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL), editor=None),
+        TableColumn(field=f"Ajuste_{ano_prox_str}", title="AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:700;"><%= (value == null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + value.toLocaleString("pt-BR", {maximumFractionDigits:0})) %></span>'), editor=NumberEditor(step=1))
     ])
 
     tbl_hist = DataTable(
@@ -1652,10 +1655,114 @@ def renderizar():
         sizing_mode="stretch_width",  # Expande para ocupar toda a largura disponível
         width=10000,  # Mantém fallback, mas stretched width é prioritário
         height=2100,  # Aumentado de 1800 para mostrar as 2 últimas linhas sem scroll
-        editable=False,
+        editable=True,
         reorderable=False,
         stylesheets=[make_stylesheet()],
     )
+
+    # Callback da tabela histórica: edição de AJUSTE -> recalcula AJUSTADA/VAR e sincroniza gráfico
+    cb_hist_sync = CustomJS(
+        args=dict(tbl=tbl_hist_src, src=src_ajs, mes_atual=mes_atual, ano_atual=ano_atual, ano_prox=ano_projecao_proxima),
+        code="""
+        const d = tbl.data;
+
+        function safe(v) {
+            const n = Number(v);
+            return Number.isFinite(n) ? n : 0;
+        }
+        function avg(arr) {
+            if (!arr || arr.length === 0) return 0;
+            let s = 0;
+            for (let i = 0; i < arr.length; i++) s += safe(arr[i]);
+            return s / arr.length;
+        }
+        function varArray(values) {
+            const out = new Array(values.length).fill(0);
+            for (let i = 1; i < values.length; i++) {
+                const prev = safe(values[i - 1]);
+                const cur = safe(values[i]);
+                out[i] = prev === 0 ? 0 : (cur - prev) / Math.abs(prev);
+            }
+            return out;
+        }
+        function fmtShort(v) {
+            const vv = safe(v);
+            const a = Math.abs(vv);
+            if (a >= 1e9) return (vv / 1e9).toFixed(1) + 'B';
+            if (a >= 1e6) return (vv / 1e6).toFixed(1) + 'M';
+            return Math.round(vv).toLocaleString('pt-BR');
+        }
+        function valueDisp(v, color, bg, isReal) {
+            const txt = fmtShort(v);
+            if (isReal) {
+                return `<span style="background:#fef08a;padding:1px 5px;border-radius:3px;font-weight:700;color:#92400e;">${txt}</span>`;
+            }
+            return `<span style="background:${bg};padding:1px 5px;border-radius:3px;color:${color};font-weight:700;">${txt}</span>`;
+        }
+        function varDisp(v, rowIndex) {
+            const vv = safe(v);
+            const color = vv > 0 ? '#059669' : (vv < 0 ? '#dc2626' : '#334155');
+            let txt = `${vv >= 0 ? '+' : ''}${(vv * 100).toFixed(2)}%`;
+            if (rowIndex === 13) txt = vv > 0 ? '▲' : (vv < 0 ? '▼' : '•');
+            return `<span style="color:${color};font-weight:700;">${txt}</span>`;
+        }
+
+        const configs = {
+            [String(ano_atual)]: { color: '#b45309', bg: '#fff7ed' },
+            [String(ano_prox)]: { color: '#0369a1', bg: '#f0f9ff' }
+        };
+
+        const startAbs = (Number(ano_atual) * 12) + (Number(mes_atual) - 1);
+        let srcChanged = false;
+
+        for (const y of [String(ano_atual), String(ano_prox)]) {
+            const kAna = `Analitica_${y}`;
+            const kAjs = `Ajustada_${y}`;
+            const kAjt = `Ajuste_${y}`;
+            const kVarAjs = `Var_Ajs_${y}`;
+            const kAjsDisp = `Ajustada_${y}_Disp`;
+            const kVarAjsDisp = `Var_Ajs_${y}_Disp`;
+            const kAjtDisp = `Ajuste_${y}_Disp`;
+            const kFlags = `_eh_realizado_${y}`;
+
+            for (let i = 0; i < 12; i++) {
+                d[kAjt][i] = safe(d[kAjt][i]);
+                d[kAjs][i] = safe(d[kAna][i]) + d[kAjt][i];
+
+                const absIdx = (Number(y) * 12) + i;
+                const chartIdx = absIdx - startAbs;
+                if (chartIdx >= 0 && chartIdx < 12) {
+                    src.data['y'][chartIdx] = d[kAjs][i];
+                    src.data['y_br'][chartIdx] = d[kAjs][i].toLocaleString('pt-BR');
+                    srcChanged = true;
+                }
+            }
+
+            const varVals = varArray(d[kAjs].slice(0, 12));
+            for (let i = 0; i < 12; i++) d[kVarAjs][i] = varVals[i];
+
+            d[kAjs][12] = avg(d[kAjs].slice(0, 12));
+            d[kVarAjs][12] = avg(d[kVarAjs].slice(0, 12));
+            d[kAjt][12] = avg(d[kAjt].slice(0, 12));
+
+            d[kAjs][13] = safe(d[kAjs][11]) - safe(d[kAjs][0]);
+            d[kVarAjs][13] = d[kAjs][13] > 0 ? 1 : (d[kAjs][13] < 0 ? -1 : 0);
+            d[kAjt][13] = safe(d[kAjt][11]) - safe(d[kAjt][0]);
+
+            for (let i = 0; i < d[kAjs].length; i++) {
+                const isReal = i < 12 ? Boolean(d[kFlags][i]) : false;
+                d[kAjsDisp][i] = valueDisp(d[kAjs][i], configs[y].color, configs[y].bg, isReal);
+                d[kVarAjsDisp][i] = varDisp(d[kVarAjs][i], i);
+                const aj = safe(d[kAjt][i]);
+                d[kAjtDisp][i] = `<span style="color:${aj >= 0 ? '#059669' : '#dc2626'};font-weight:700;">${aj >= 0 ? '+' : ''}${aj.toLocaleString('pt-BR', {maximumFractionDigits:0})}</span>`;
+            }
+        }
+
+        if (srcChanged) src.change.emit();
+        tbl.change.emit();
+    """
+    )
+    tbl_hist_src.js_on_change("patching", cb_hist_sync)
     
     # CSS para renderizar tabela completa sem scroll vertical
     st.markdown("""

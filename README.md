@@ -2,11 +2,17 @@
 
 Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário**, **controle de permissões** e **DRE Gerencial profissional**.
 
-**Versão Atual:** v2.2.3 | **Status:** ✅ Production Ready | **Última Atualização:** 28/04/2026
+**Versão Atual:** v2.2.4 | **Status:** ✅ Production Ready | **Última Atualização:** 28/04/2026
 
 ---
 
 ## 📌 O que foi implementado
+
+### ✅ [v2.2.4] - Simulador (Ajuste Editável na Tabela)
+- **✏️ Ajuste Editável:** Colunas de Ajuste (+/-) em 2026 e 2027 agora aceitam input manual na tabela histórica
+- **🔄 Sincronização Integrada:** Alterar Ajuste na tabela atualiza automaticamente Ajustada, variações e curva do gráfico principal
+- **🧭 Ordem de Colunas:** RLZD 2027 reposicionado junto ao bloco de projeções 2027
+- **🎨 Diferenciação Visual:** Blocos de 2026 e 2027 com identidade visual mais clara para leitura por ano
 
 ### ✅ [v2.2.3] - Tabela do Simulador (Layout Anual)
 - **📅 Meses Fixos:** Tabela da Série Histórica padronizada em JAN-DEZ
@@ -274,6 +280,6 @@ Para questões ou problemas:
 
 ---
 
-**Última atualização:** 28/04/2026 | **Versão:** v2.2.3 | **Status:** ✅ Production Ready
+**Última atualização:** 28/04/2026 | **Versão:** v2.2.4 | **Status:** ✅ Production Ready
 
 Mantém este README como documentação única e oficial. Para histórico detalhado, consulte [CHANGELOG.md](CHANGELOG.md).
