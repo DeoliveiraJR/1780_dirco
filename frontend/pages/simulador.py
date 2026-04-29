@@ -1644,7 +1644,7 @@ def renderizar():
         index_position=None,
         sizing_mode="stretch_width",  # Expande para ocupar toda a largura disponível
         width=10000,  # Mantém fallback, mas stretched width é prioritário
-        height=2100,  # Aumentado de 1800 para mostrar as 2 últimas linhas sem scroll
+        height=560,  # Altura ajustada ao conteúdo real (12 meses + 2 linhas de resumo)
         editable=True,
         reorderable=False,
         stylesheets=[make_stylesheet()],
@@ -1754,31 +1754,9 @@ def renderizar():
     )
     tbl_hist_src.js_on_change("patching", cb_hist_sync)
     
-    # CSS para renderizar tabela completa sem scroll vertical
+    # CSS para manter rolagem horizontal da tabela estável
     st.markdown("""
     <style>
-        /* Força container Bokeh a respeitar altura da tabela */
-        [data-testid="stIFrame"]:has(iframe.bk-root) {
-            height: auto !important;
-            overflow: visible !important;
-        }
-        
-        /* DataTable expande para mostrar todas as linhas */
-        .bk-root .bk-data-table {
-            width: 100% !important;
-        }
-        
-        /* Viewport - sem scroll vertical, apenas horizontal */
-        .bk-root .slick-viewport {
-            height: auto !important;
-            overflow: visible !important;
-        }
-        
-        /* Grid - render completo */
-        .bk-root .slick-canvas {
-            width: 100% !important;
-        }
-        
         /* Scrollbar apenas horizontal */
         .bk-root .bk-data-table::-webkit-scrollbar {
             height: 10px;
@@ -1815,7 +1793,7 @@ def renderizar():
 
     bokeh_editable(
         layout_principal,
-        height=3250,
+        height=1780,
         key=f"sim_bokeh_{combo}"
     )
 
