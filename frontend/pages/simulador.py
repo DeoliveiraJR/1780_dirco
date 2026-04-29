@@ -1642,9 +1642,9 @@ def renderizar():
         source=tbl_hist_src,
         columns=columns_hist,
         index_position=None,
-        sizing_mode="stretch_width",  # Expande para ocupar toda a largura disponível
+        sizing_mode="stretch_width",  # Expande para ocupar toda a largura disponível   
         width=10000,  # Mantém fallback, mas stretched width é prioritário
-        height=560,  # Altura ajustada ao conteúdo real (12 meses + 2 linhas de resumo)
+        height=560,  # Altura suficiente para 14 linhas sem gerar gap extra
         editable=True,
         reorderable=False,
         stylesheets=[make_stylesheet()],
@@ -1754,7 +1754,7 @@ def renderizar():
     )
     tbl_hist_src.js_on_change("patching", cb_hist_sync)
     
-    # CSS para manter rolagem horizontal da tabela estável
+    # CSS apenas para estabilidade visual da barra horizontal
     st.markdown("""
     <style>
         /* Scrollbar apenas horizontal */
