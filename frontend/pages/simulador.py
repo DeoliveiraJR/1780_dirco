@@ -1644,7 +1644,7 @@ def renderizar():
         index_position=None,
         sizing_mode="stretch_width",  # Expande para ocupar toda a largura disponível   
         width=10000,  # Mantém fallback, mas stretched width é prioritário
-        height=560,  # Altura suficiente para 14 linhas sem gerar gap extra
+        height=500,  # Altura suficiente para 14 linhas sem gerar gap extra
         editable=True,
         reorderable=False,
         stylesheets=[make_stylesheet()],
@@ -1793,7 +1793,7 @@ def renderizar():
 
     bokeh_editable(
         layout_principal,
-        height=1780,
+        height=1500,
         key=f"sim_bokeh_{combo}"
     )
 
