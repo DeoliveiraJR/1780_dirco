@@ -4,6 +4,29 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
+## 🚀 [v2.2.7] - 2026-04-29
+
+### ✅ MELHORADO - Tabela Histórica do Simulador
+
+#### ✨ Destaque para colunas de AJUSTE
+- Colunas `AJUSTE (+/-)` (2026 e 2027) passaram a ter formatação visual destacada.
+
+#### 🔒 Edição válida somente em AJUSTE
+- Mantida edição de tabela apenas para `Ajuste_2026` e `Ajuste_2027`.
+- Edições em colunas não permitidas são revertidas automaticamente via callback.
+
+#### 🔄 Sincronização com painel "Ajuste Manual por Mês"
+- Corrigida aplicação de sincronização do localStorage: valores de 12 meses são mapeados para o vetor interno de 24 meses.
+- Com isso, o incremento exibido no painel manual passa a refletir corretamente os ajustes digitados na tabela após sincronização.
+
+#### 🛠️ Arquivo alterado
+- `frontend/pages/simulador.py`
+
+#### 🧪 Validação
+- Compilação sintática: `python -m py_compile frontend/pages/simulador.py` ✅
+
+---
+
 ## 🚀 [v2.2.6] - 2026-04-28
 
 ### ✅ HOTFIX - Conflito de Documento Bokeh no Simulador

@@ -386,7 +386,8 @@ def renderizar():
         valores_localStorage = get_bokeh_updates(key=f"sim_bokeh_{combo}", sync_counter=sync_counter)
         
         if valores_localStorage is not None and len(valores_localStorage) == 12:
-            st.session_state["ajustada"] = valores_localStorage
+            # Armazena para aplicar no mapeamento correto (12 meses visíveis -> vetor de 24 meses)
+            st.session_state["_pending_sync_ajustada12"] = valores_localStorage
     
     # Carrega os valores dos estados (FONTE DE VERDADE) - SERÁ REDEFINIDO DEPOIS COM OS DADOS CORRETOS
     
@@ -528,6 +529,21 @@ def renderizar():
         else:
             mes_idx = mes_abs % 12  # Wrap para 0-11
         indices_proximo_12m.append(mes_idx)
+
+    # Aplica sincronização pendente do localStorage no vetor de 24 meses
+    pending_sync = st.session_state.pop("_pending_sync_ajustada12", None)
+    if pending_sync is not None and len(pending_sync) == 12:
+        cur = st.session_state.get("ajustada", ajustada_base[:])
+        if len(cur) != len(ajustada_base):
+            cur = ajustada_base[:]
+        for i, v in enumerate(pending_sync):
+            idx = indices_proximo_12m[i]
+            try:
+                cur[idx] = float(v)
+            except Exception:
+                pass
+        st.session_state["ajustada"] = cur
+        ajustada = cur
     
     # st.write(f"[DEBUG] indices_proximo_12m: {indices_proximo_12m}")
     # st.write(f"[DEBUG] len(ajustada): {len(ajustada)}, max(indices_proximo_12m): {max(indices_proximo_12m)}")
@@ -1576,11 +1592,35 @@ def renderizar():
         tbl_hist_data[f"Var_Ajs_{year_suf}_Disp"] = _build_var_text_disp(tbl_hist_data[f"Var_Ajs_{year_suf}"])
         tbl_hist_data[f"Ajuste_{year_suf}_Disp"] = [
             (
-                f'<span style="color:{"#059669" if float(v) >= 0 else "#dc2626"};font-weight:700;">'
+                f'<span style="background:{"#ecfdf5" if float(v) >= 0 else "#fef2f2"};'
+                f'border:1px solid {"#86efac" if float(v) >= 0 else "#fca5a5"};'
+                f'padding:2px 6px;border-radius:4px;color:{"#059669" if float(v) >= 0 else "#dc2626"};font-weight:700;">'
                 f'{("+" if float(v) >= 0 else "") + fmt_br(float(v), 0)}</span>'
             )
             for v in tbl_hist_data[f"Ajuste_{year_suf}"]
         ]
+
+    # Colunas que devem permanecer somente leitura (restauradas se o usuário editar)
+    protected_non_ajuste_cols = []
+    if ano_realizado_ultimo is not None:
+        protected_non_ajuste_cols.extend([
+            f"Rlzd_{ano_realizado_ultimo}", f"Var_{ano_realizado_ultimo}",
+            f"Rlzd_{ano_realizado_ultimo}_Disp", f"Var_{ano_realizado_ultimo}_Disp"
+        ])
+
+    for year_suf in [ano_atual_str, ano_prox_str]:
+        protected_non_ajuste_cols.extend([
+            f"Rlzd_{year_suf}", f"Var_{year_suf}",
+            f"Analitica_{year_suf}", f"Var_Ana_{year_suf}",
+            f"Mercado_{year_suf}", f"Var_Mer_{year_suf}",
+            f"Rlzd_{year_suf}_Disp", f"Var_{year_suf}_Disp",
+            f"Analitica_{year_suf}_Disp", f"Var_Ana_{year_suf}_Disp",
+            f"Mercado_{year_suf}_Disp", f"Var_Mer_{year_suf}_Disp"
+        ])
+
+    for col in protected_non_ajuste_cols:
+        if col in tbl_hist_data:
+            tbl_hist_data[f"_orig_{col}"] = list(tbl_hist_data[col])
 
     tbl_hist_src = ColumnDataSource(tbl_hist_data)
 
@@ -1620,7 +1660,7 @@ def renderizar():
         TableColumn(field=f"Var_Mer_{ano_atual_str}_Disp", title="VAR % MERC", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
         TableColumn(field=f"Ajustada_{ano_atual_str}_Disp", title="AJUSTADA", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
         TableColumn(field=f"Var_Ajs_{ano_atual_str}_Disp", title="VAR % AJS", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Ajuste_{ano_atual_str}", title="AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:700;"><%= (value == null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + value.toLocaleString("pt-BR", {maximumFractionDigits:0})) %></span>'), editor=NumberEditor(step=1))
+        TableColumn(field=f"Ajuste_{ano_atual_str}", title="✨ AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template='<span style="background:<%= value >= 0 ? "#ecfdf5" : "#fef2f2" %>;border:1px solid <%= value >= 0 ? "#86efac" : "#fca5a5" %>;padding:2px 6px;border-radius:4px;color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:700;"><%= (value == null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + value.toLocaleString("pt-BR", {maximumFractionDigits:0})) %></span>'), editor=NumberEditor(step=1))
     ])
     
     # ============ PROJEÇÕES 2027 ============
@@ -1635,7 +1675,7 @@ def renderizar():
         TableColumn(field=f"Var_Mer_{ano_prox_str}_Disp", title="VAR % MERC", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
         TableColumn(field=f"Ajustada_{ano_prox_str}_Disp", title="AJUSTADA", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
         TableColumn(field=f"Var_Ajs_{ano_prox_str}_Disp", title="VAR % AJS", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Ajuste_{ano_prox_str}", title="AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template='<span style="color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:700;"><%= (value == null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + value.toLocaleString("pt-BR", {maximumFractionDigits:0})) %></span>'), editor=NumberEditor(step=1))
+        TableColumn(field=f"Ajuste_{ano_prox_str}", title="✨ AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template='<span style="background:<%= value >= 0 ? "#ecfdf5" : "#fef2f2" %>;border:1px solid <%= value >= 0 ? "#86efac" : "#fca5a5" %>;padding:2px 6px;border-radius:4px;color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:700;"><%= (value == null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + value.toLocaleString("pt-BR", {maximumFractionDigits:0})) %></span>'), editor=NumberEditor(step=1))
     ])
 
     tbl_hist = DataTable(
@@ -1652,9 +1692,37 @@ def renderizar():
 
     # Callback da tabela histórica: edição de AJUSTE -> recalcula AJUSTADA/VAR e sincroniza gráfico
     cb_hist_sync = CustomJS(
-        args=dict(tbl=tbl_hist_src, src=src_ajs, mes_atual=mes_atual, ano_atual=ano_atual, ano_prox=ano_projecao_proxima),
+        args=dict(
+            tbl=tbl_hist_src,
+            src=src_ajs,
+            mes_atual=mes_atual,
+            ano_atual=ano_atual,
+            ano_prox=ano_projecao_proxima,
+            protected_cols=protected_non_ajuste_cols,
+        ),
         code="""
         const d = tbl.data;
+
+        const allowedCols = new Set([`Ajuste_${String(ano_atual)}`, `Ajuste_${String(ano_prox)}`]);
+        const protectedCols = protected_cols || [];
+
+        if (typeof cb_data !== 'undefined' && cb_data && cb_data.patch) {
+            const patches = Array.isArray(cb_data.patch) ? cb_data.patch : [cb_data.patch];
+            for (const p of patches) {
+                const col = p.column || p['column'];
+                const inds = p.indices || [];
+                if (!col || allowedCols.has(col)) continue;
+
+                const origKey = `_orig_${col}`;
+                if (protectedCols.includes(col) && d[origKey]) {
+                    for (const idx of inds) {
+                        if (idx >= 0 && idx < d[col].length && idx < d[origKey].length) {
+                            d[col][idx] = d[origKey][idx];
+                        }
+                    }
+                }
+            }
+        }
 
         function safe(v) {
             const n = Number(v);
@@ -1744,7 +1812,7 @@ def renderizar():
                 d[kAjsDisp][i] = valueDisp(d[kAjs][i], configs[y].color, configs[y].bg, isReal);
                 d[kVarAjsDisp][i] = varDisp(d[kVarAjs][i], i);
                 const aj = safe(d[kAjt][i]);
-                d[kAjtDisp][i] = `<span style="color:${aj >= 0 ? '#059669' : '#dc2626'};font-weight:700;">${aj >= 0 ? '+' : ''}${aj.toLocaleString('pt-BR', {maximumFractionDigits:0})}</span>`;
+                d[kAjtDisp][i] = `<span style="background:${aj >= 0 ? '#ecfdf5' : '#fef2f2'};border:1px solid ${aj >= 0 ? '#86efac' : '#fca5a5'};padding:2px 6px;border-radius:4px;color:${aj >= 0 ? '#059669' : '#dc2626'};font-weight:700;">${aj >= 0 ? '+' : ''}${aj.toLocaleString('pt-BR', {maximumFractionDigits:0})}</span>`;
             }
         }
 
