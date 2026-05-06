@@ -346,7 +346,7 @@ else:
                 "Multiplicador de Inclinação (MULT)", 
                 min_value=-10.0, 
                 max_value=50.0, 
-                value=1.0, 
+                value=st.session_state.get("sim_rotacionar_curva", 1.0),
                 step=1.0,
                 help="""
                 Controla o multiplicador da inclinação da curva:
@@ -357,7 +357,7 @@ else:
                 • 25.0x: 25x a inclinação original
                 • 50.0x: 50x a inclinação original (impacto máximo)
                 """,
-                key="sim_rotacionar_mult"
+                key="sim_rotacionar_curva"
             )
             
             # Exibir indicador visual do multiplicador
@@ -428,6 +428,7 @@ else:
                     curva_rot = _calcular_curva_rotacionada_sidebar(mult_rotacao)
                     if curva_rot:
                         st.session_state["ajustada"] = curva_rot
+                        st.session_state["sim_rotacionar_curva"] = mult_rotacao
                         st.success(f"✅ Curva rotacionada com {mult_rotacao:+.2f}x inclinação!")
                         st.rerun()
                     else:

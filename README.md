@@ -2,13 +2,17 @@
 
 Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário**, **controle de permissões** e **DRE Gerencial profissional**.
 
-**Versão Atual:** v2.2.7 | **Status:** ✅ Production Ready | **Última Atualização:** 29/04/2026
+**Versão Atual:** v2.2.8 | **Status:** ✅ Production Ready | **Última Atualização:** 06/05/2026
 
 ---
 
 ## 📌 O que foi implementado
 
-### ✅ [v2.2.7] - Simulador (Ajuste com Edição Restrita)
+### ✅ [v2.2.8] - Rotação de Curva (Bug Fix)
+- **🔧 Correção Crítica:** Funcionalidade de "Rotacionar Curva" na barra lateral estava quebrada
+- **🔀 Sincronização de Estado:** Chave `sim_rotacionar_mult` unificada com `sim_rotacionar_curva`
+- **💾 Persistência Corrigida:** Rotação agora é salva corretamente ao clicar "Aplicar"
+- **✅ Impacto:** Ajustes de inclinação agora funcionam end-to-end (sidebar → simulador → persistência)
 - **✨ Destaque Visual:** Colunas de `AJUSTE (+/-)` com estilo diferenciado para facilitar leitura
 - **🔒 Edição Validada:** Apenas colunas de ajuste aceitam edição válida; alterações em outras colunas são revertidas automaticamente
 - **🔄 Sincronização Completa:** Ajustes digitados na tabela agora alimentam corretamente o estado de 24 meses e refletem no incremento da seção "Ajuste Manual por Mês"
@@ -293,6 +297,6 @@ Para questões ou problemas:
 
 ---
 
-**Última atualização:** 29/04/2026 | **Versão:** v2.2.7 | **Status:** ✅ Production Ready
+**Última atualização:** 06/05/2026 | **Versão:** v2.2.8 | **Status:** ✅ Production Ready
 
 Mantém este README como documentação única e oficial. Para histórico detalhado, consulte [CHANGELOG.md](CHANGELOG.md).

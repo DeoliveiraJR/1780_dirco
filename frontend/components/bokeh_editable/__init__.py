@@ -11,7 +11,7 @@ import json
 
 def bokeh_editable(
     bokeh_figure,
-    height: int = 1200,
+    height: int = 1780,
     key: str = None
 ) -> list:
     """
@@ -117,7 +117,10 @@ def bokeh_editable(
                                 );
                                 
                                 if (debounceTimer) clearTimeout(debounceTimer);
-                                debounceTimer = setTimeout(() => saveToStorage(yValues), 300);
+                                debounceTimer = setTimeout(() => {
+                                    console.log('[BokehEditable] Gráfico mudou, salvando:', yValues);
+                                    saveToStorage(yValues);
+                                }, 300);
                             }
                         });
                     }
@@ -189,7 +192,19 @@ def get_bokeh_updates(key: str = None, sync_counter: int = 0) -> list:
         if result:
             values = json.loads(result)
             if isinstance(values, list) and len(values) == 12:
+                print(f"[get_bokeh_updates] ✓ Valores lidos: {[f'{v:.0f}' for v in values[:3]]}...")
                 return values
+        else:
+            print(f"[get_bokeh_updates] localStorage.getItem('{storage_key}') retornou None")
+            # Debug: imprime o que está no localStorage
+            try:
+                all_keys = streamlit_js_eval(
+                    js_expressions="Object.keys(localStorage).filter(k => k.includes('bokeh')).join(',')",
+                    key=f"_bokeh_keys_{sync_counter}"
+                )
+                print(f"[get_bokeh_updates] Chaves bokeh no localStorage: {all_keys}")
+            except:
+                pass
     except Exception as e:
         print(f"[get_bokeh_updates] Erro: {e}")
     

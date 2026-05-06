@@ -182,6 +182,10 @@ def renderizar():
         st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
         salvar_clicked = st.button("💾 Salvar", type="primary", use_container_width=True)
 
+    save_feedback = st.session_state.pop("_save_feedback_msg", None)
+    if save_feedback:
+        st.success(save_feedback)
+
     # --- Linha de simulações salvas (SEMPRE VISÍVEL) ---
     simulacoes_usuario = get_simulacoes_usuario()
     
@@ -264,45 +268,7 @@ def renderizar():
     }
     if st.session_state.get("filtros") != novo_filtro:
         st.session_state["filtros"] = novo_filtro
-        # Força re-renderização da sidebar para atualizar parâmetros em tempo real
         st.rerun()
-
-    # Ação do botão salvar
-    if salvar_clicked:
-        ajustada_para_salvar = st.session_state.get("ajustada", [0.0]*12)
-        sim_salva = adicionar_simulacao(
-            nome=st.session_state["filtros"].get("nome", "Simulação"),
-            categoria=st.session_state["filtros"].get("categoria", ""),
-            produto=st.session_state["filtros"].get("produto", ""),
-            taxa_crescimento=st.session_state.get("sim_incremento_perc", 0),
-            volatilidade=st.session_state.get("sim_rotacionar_curva", 1.0),
-            cenarios={
-                "Ajustada": True, 
-                "Cliente": st.session_state["filtros"].get("cliente", "Todos"),
-                "ajuste_mensal": st.session_state.get("sim_ajuste_mensal_final", 0),
-                "inclinacao": st.session_state.get("sim_inclinacao", 0),
-            },
-            dados_grafico={"Ajustada": ajustada_para_salvar},
-        )
-        
-        # ===== SINCRONIZAÇÃO COM BACKEND (NOVO) =====
-        try:
-            usuario_id = st.session_state.get("usuario_id", "")
-            cliente_sim = st.session_state["filtros"].get("cliente", "Todos")
-            categoria_sim = st.session_state["filtros"].get("categoria", "")
-            produto_sim = st.session_state["filtros"].get("produto", "")
-            ano_sim = int(st.session_state.get("ano_simulacao", 2026))
-            
-            if usuario_id and cliente_sim and categoria_sim and produto_sim:
-                from data_manager import sincronizar_curva_para_backend
-                sincronizar_curva_para_backend(usuario_id, cliente_sim, categoria_sim, 
-                                              produto_sim, ano_sim, ajustada_para_salvar)
-        except Exception as e:
-            print(f"[SIMULADOR] Aviso: Não foi possível sincronizar com backend: {e}")
-        
-        st.toast(f"✅ Simulação '{sim_salva.get('nome', '')}' salva com sucesso!", icon="💾")
-        st.success(f"✅ Simulação salva! ID: {sim_salva.get('id', '')[:20]}...")
-        st.rerun()  # Força rerun para atualizar a lista de simulações
 
     st.markdown("---")
     # ==================== LÓGICA DO SIMULADOR ====================
@@ -324,18 +290,11 @@ def renderizar():
     combo = f"{cliente}::{categoria}::{produto}"
     
     # ==================== ATUALIZA PARÂMETROS NA SIDEBAR ====================
-    # Qtd. Meses = 12 (fixo para projeções mensais)
     st.session_state["sim_qtd_meses"] = 12
-    
-    # Primeiro mês pjtd = primeiro valor da curva analítica
     primeiro_pjtd = analitica[0] if analitica and len(analitica) > 0 else 0
     st.session_state["sim_primeiro_pjtd"] = primeiro_pjtd
-    
-    # Último mês pjtd = último valor da curva analítica  
     ultimo_pjtd = analitica[11] if analitica and len(analitica) > 11 else 0
     st.session_state["sim_ultimo_pjtd"] = ultimo_pjtd
-    
-    # Inclinação = (último - primeiro) / (qtd_meses - 1)
     qtd_meses = 12
     if qtd_meses > 1:
         inclinacao = (ultimo_pjtd - primeiro_pjtd) / (qtd_meses - 1)
@@ -344,10 +303,15 @@ def renderizar():
     st.session_state["sim_inclinacao"] = inclinacao
     
     # ==================== ESTADOS PARA AS 3 CURVAS ====================
-    # Reinicia estados quando combo muda
+    # IMPORTANTE: Aplicar pending_sync ANTES de checar combo_mudou
+    # para que edições sincronizadas não sejam perdidas no reset do combo
+    pending_sync_pre = st.session_state.pop("_pending_sync_ajustada12", None)
+    print(f"[DEBUG] Salvou pending_sync_pre: {pending_sync_pre is not None}")
+    
     combo_mudou = st.session_state.get("last_combo") != combo
+    print(f"[DEBUG] combo_mudou={combo_mudou}, last_combo={st.session_state.get('last_combo')}, combo={combo}")
+    
     if combo_mudou:
-        # Limpa localStorage do combo anterior para evitar conflitos
         old_combo = st.session_state.get("last_combo")
         if old_combo:
             limpar_localStorage(key=f"sim_bokeh_{old_combo}")
@@ -355,39 +319,69 @@ def renderizar():
         st.session_state["curva_analitica"] = analitica[:]
         st.session_state["curva_mercado"] = mercado[:]
         
-        # ============== NOVO: Tenta carregar curva salva ==============
         curva_salva = carregar_curva_ajustada(cliente, categoria, produto)
         if curva_salva is not None:
             st.session_state["ajustada"] = curva_salva[:]
             print(f"[PERSIST] Curva carregada do banco: {combo}")
             st.toast(f"📂 Carregada simulação salva para {produto}", icon="✅")
         else:
-            st.session_state["ajustada"] = analitica[:]  # Ajustada inicia igual à analítica
+            st.session_state["ajustada"] = analitica[:]
             print(f"[DEBUG] COMBO MUDOU! Usando curva analítica: {combo}")
         
         st.session_state["last_combo"] = combo
         st.session_state["sync_counter"] = 0
+        st.session_state["sync_fetch_retry"] = 0
+        st.session_state["_last_auto_bokeh_vals"] = None
     
     # Verifica se precisa limpar localStorage (flag de reset)
     if st.session_state.get("_limpar_localStorage"):
         limpar_localStorage(key=f"sim_bokeh_{combo}")
         st.session_state["_limpar_localStorage"] = False
     
-    # Inicializa contador se não existir
+    # Inicializa contadores se não existir
     if "sync_counter" not in st.session_state:
         st.session_state["sync_counter"] = 0
-    
+    if "sync_fetch_retry" not in st.session_state:
+        st.session_state["sync_fetch_retry"] = 0
+    if "_last_auto_bokeh_vals" not in st.session_state:
+        st.session_state["_last_auto_bokeh_vals"] = None
+
     sync_counter = st.session_state.get("sync_counter", 0)
+
+    # ==================== LEITURA AUTOMÁTICA DO LOCALSTORAGE ====================
+    # SEMPRE tenta ler localStorage para manter session_state["ajustada"] sincronizado
+    # Não depende do botão "Sincronizar" - isso é automático a cada renderização
+    print(f"[DEBUG] Ciclo de render: combo={combo}, combo_mudou={combo_mudou}")
     
-    # ==================== LEITURA DO LOCALSTORAGE (APENAS NO SYNC) ====================
-    # Lê valores do localStorage APENAS quando o usuário clica em Sincronizar
-    # Isso evita conflitos entre botões de ajuste e drag-and-drop
+    # Usa chave variável por render para evitar cache de None no streamlit_js_eval
+    auto_sync_counter = int(st.session_state.get("_auto_sync_counter", 0)) + 1
+    st.session_state["_auto_sync_counter"] = auto_sync_counter
+    valores_localStorage_auto = get_bokeh_updates(
+        key=f"sim_bokeh_{combo}",
+        sync_counter=auto_sync_counter
+    )
+    
+    if valores_localStorage_auto is not None and len(valores_localStorage_auto) == 12:
+        print(f"[DEBUG] ✓ localStorage auto-sync: {[f'{v:.0f}' for v in valores_localStorage_auto[:3]]}...")
+        st.session_state["_pending_sync_ajustada12"] = [float(v) for v in valores_localStorage_auto]
+    else:
+        print(f"[DEBUG] ✗ localStorage read returned None")
+    
+    # ==================== LEITURA DO LOCALSTORAGE (BOTÃO SINCRONIZAR - LEGADO) ====================
     if sync_counter > 0 and not combo_mudou:
-        valores_localStorage = get_bokeh_updates(key=f"sim_bokeh_{combo}", sync_counter=sync_counter)
-        
+        retry = int(st.session_state.get("sync_fetch_retry", 0))
+        # Chave fixa para este ciclo — não muda no retry para que o 2º render retorne valor
+        sync_key_cycle = sync_counter * 100
+        valores_localStorage = get_bokeh_updates(key=f"sim_bokeh_{combo}", sync_counter=sync_key_cycle)
+
         if valores_localStorage is not None and len(valores_localStorage) == 12:
-            # Armazena para aplicar no mapeamento correto (12 meses visíveis -> vetor de 24 meses)
-            st.session_state["_pending_sync_ajustada12"] = valores_localStorage
+            st.session_state["_pending_sync_ajustada12"] = [float(v) for v in valores_localStorage]
+            st.session_state["_last_auto_bokeh_vals"]    = [float(v) for v in valores_localStorage]
+            st.session_state["sync_fetch_retry"] = 0
+        elif retry < 2:
+            # 1ª renderização da chave retorna None → rerun com MESMA chave → 2ª renderização retorna valor
+            st.session_state["sync_fetch_retry"] = retry + 1
+            st.rerun()
     
     # Carrega os valores dos estados (FONTE DE VERDADE) - SERÁ REDEFINIDO DEPOIS COM OS DADOS CORRETOS
     
@@ -530,20 +524,24 @@ def renderizar():
             mes_idx = mes_abs % 12  # Wrap para 0-11
         indices_proximo_12m.append(mes_idx)
 
-    # Aplica sincronização pendente do localStorage no vetor de 24 meses
-    pending_sync = st.session_state.pop("_pending_sync_ajustada12", None)
-    if pending_sync is not None and len(pending_sync) == 12:
+    # Aplica sincronização pendente (salva ANTES de combo_mudou para evitar perda)
+    if pending_sync_pre is not None and len(pending_sync_pre) == 12:
+        print(f"[SYNC-DEBUG] Aplicando pending_sync_pre: {[f'{v:.0f}' for v in pending_sync_pre[:3]]}...")
         cur = st.session_state.get("ajustada", ajustada_base[:])
         if len(cur) != len(ajustada_base):
             cur = ajustada_base[:]
-        for i, v in enumerate(pending_sync):
+        for i, v in enumerate(pending_sync_pre):
             idx = indices_proximo_12m[i]
             try:
+                print(f"[SYNC-DEBUG]   [{i}] pending_sync[{i}]={v:.0f} -> ajustada[{idx}]")
                 cur[idx] = float(v)
             except Exception:
                 pass
+        print(f"[SYNC-DEBUG] Após aplicação: ajustada={[f'{x:.0f}' for x in cur]}")
         st.session_state["ajustada"] = cur
         ajustada = cur
+    else:
+        print(f"[SYNC-DEBUG] Nenhum pending_sync para aplicar")
     
     # st.write(f"[DEBUG] indices_proximo_12m: {indices_proximo_12m}")
     # st.write(f"[DEBUG] len(ajustada): {len(ajustada)}, max(indices_proximo_12m): {max(indices_proximo_12m)}")
@@ -555,6 +553,75 @@ def renderizar():
     
     # Calcula o incremento líquido para o painel
     incremento_liquido = [ajustada[indices_proximo_12m[i]] - analitica[indices_proximo_12m[i]] for i in range(12)]
+
+    # ==================== HANDLER DO BOTÃO SALVAR ====================
+    # Executado AQUI (após pending_sync aplicado e ajustada atualizado)
+    # para que session_state["ajustada"] já contenha os valores mais recentes da tabela/gráfico.
+    if salvar_clicked:
+        print(f"\n[SAVE-DEBUG] Botao SALVAR clicado")
+        print(f"[SAVE-DEBUG] pending_sync_pre era: {pending_sync_pre is not None}")
+        ajustadas_keys = [k for k in st.session_state.keys() if 'ajustada' in k.lower()]
+        print(f"[SAVE-DEBUG] session_state keys com 'ajustada': {ajustadas_keys}")
+
+        # Força leitura do localStorage no instante do save para capturar a última edição da tabela
+        save_sync_counter = int(st.session_state.get("_save_sync_counter", 0)) + 1
+        st.session_state["_save_sync_counter"] = save_sync_counter
+        valores_save = get_bokeh_updates(
+            key=f"sim_bokeh_{combo}",
+            sync_counter=1_000_000 + save_sync_counter
+        )
+
+        if valores_save is not None and len(valores_save) == 12:
+            cur_save = st.session_state.get("ajustada", ajustada_base[:])
+            if len(cur_save) != len(ajustada_base):
+                cur_save = ajustada_base[:]
+            for i, v in enumerate(valores_save):
+                idx = indices_proximo_12m[i]
+                try:
+                    cur_save[idx] = float(v)
+                except Exception:
+                    pass
+            st.session_state["ajustada"] = cur_save
+            print(f"[SAVE-DEBUG] ✓ localStorage capturado no save: {[f'{v:.0f}' for v in valores_save[:3]]}...")
+            ajustada_para_salvar = cur_save
+        else:
+            print("[SAVE-DEBUG] ✗ Sem leitura de localStorage no save; usando session_state['ajustada']")
+            ajustada_para_salvar = st.session_state.get("ajustada", [0.0] * 24)
+
+        print(f"[SAVE-DEBUG] ajustada_para_salvar primeiros 12: {list(ajustada_para_salvar[:12])}")
+        print(f"[SAVE-DEBUG] soma dos 12 primeiros: {sum(ajustada_para_salvar[:12])}")
+        sim_salva = adicionar_simulacao(
+            nome=st.session_state.get("filtros", {}).get("nome", "Simulação"),
+            categoria=st.session_state.get("filtros", {}).get("categoria", ""),
+            produto=st.session_state.get("filtros", {}).get("produto", ""),
+            taxa_crescimento=st.session_state.get("sim_incremento_perc", 0),
+            volatilidade=st.session_state.get("sim_rotacionar_curva", 1.0),
+            cenarios={
+                "Ajustada": True,
+                "Cliente": st.session_state.get("filtros", {}).get("cliente", "Todos"),
+                "ajuste_mensal": st.session_state.get("sim_ajuste_mensal_final", 0),
+                "inclinacao": st.session_state.get("sim_inclinacao", 0),
+            },
+            dados_grafico={"Ajustada": ajustada_para_salvar},
+        )
+        try:
+            usuario_id = st.session_state.get("usuario_id", "")
+            cliente_sim = st.session_state.get("filtros", {}).get("cliente", "Todos")
+            categoria_sim = st.session_state.get("filtros", {}).get("categoria", "")
+            produto_sim = st.session_state.get("filtros", {}).get("produto", "")
+            ano_sim = int(st.session_state.get("ano_simulacao", ano_atual))
+            if usuario_id and cliente_sim and categoria_sim and produto_sim:
+                from data_manager import sincronizar_curva_para_backend
+                sincronizar_curva_para_backend(usuario_id, cliente_sim, categoria_sim,
+                                              produto_sim, ano_sim, ajustada_para_salvar)
+        except Exception as e:
+            print(f"[SIMULADOR] Aviso: Não foi possível sincronizar com backend: {e}")
+        # Feedback persistente após rerun para atualizar o bloco "Simulações Salvas" imediatamente
+        st.session_state["_save_feedback_msg"] = (
+            f"✅ Simulação '{sim_salva.get('nome', '')}' salva com sucesso! "
+            f"ID: {sim_salva.get('id', '')[:20]}..."
+        )
+        st.rerun()
     
     # Função callback para ajustar mês (atualiza ajustada nos índices corretos)
     def _ajustar_mes(painel_idx: int, delta: float):
@@ -1218,7 +1285,7 @@ def renderizar():
     )
     g2 = _grafico_serie_historica(df_upload, cliente, categoria, produto,
                                 analitica, mercado, ajustada, ano_proj,
-                                style_top, src_ajs_ref=src_ajs)
+                                style_top, src_ajs_ref=src_ajs, mes_proj=mes_atual)
 
     layout_topo = column(
         row(div_valores, div_incremento, sizing_mode="stretch_width", height=100),
@@ -1296,6 +1363,7 @@ def renderizar():
                                 help="Aplicar alterações do drag-and-drop",
                                 use_container_width=True)
         if sync_clicked:
+            st.session_state["sync_fetch_retry"] = 0
             st.session_state["sync_counter"] = sync_counter + 1
             st.rerun()
     
@@ -1601,7 +1669,7 @@ def renderizar():
         ]
 
     # Colunas que devem permanecer somente leitura (restauradas se o usuário editar)
-    protected_non_ajuste_cols = []
+    protected_non_ajuste_cols = ["Mes"]  # Sempre protege a coluna de mês
     if ano_realizado_ultimo is not None:
         protected_non_ajuste_cols.extend([
             f"Rlzd_{ano_realizado_ultimo}", f"Var_{ano_realizado_ultimo}",
@@ -1706,20 +1774,14 @@ def renderizar():
         const allowedCols = new Set([`Ajuste_${String(ano_atual)}`, `Ajuste_${String(ano_prox)}`]);
         const protectedCols = protected_cols || [];
 
-        if (typeof cb_data !== 'undefined' && cb_data && cb_data.patch) {
-            const patches = Array.isArray(cb_data.patch) ? cb_data.patch : [cb_data.patch];
-            for (const p of patches) {
-                const col = p.column || p['column'];
-                const inds = p.indices || [];
-                if (!col || allowedCols.has(col)) continue;
-
-                const origKey = `_orig_${col}`;
-                if (protectedCols.includes(col) && d[origKey]) {
-                    for (const idx of inds) {
-                        if (idx >= 0 && idx < d[col].length && idx < d[origKey].length) {
-                            d[col][idx] = d[origKey][idx];
-                        }
-                    }
+        // Restaura INCONDICIONALMENTE todas as colunas protegidas para seus valores originais.
+        // Isso garante que o usuário não possa editar Mes, Rlzd, Analitica, etc.
+        for (let ci = 0; ci < protectedCols.length; ci++) {
+            const col = protectedCols[ci];
+            const origKey = '_orig_' + col;
+            if (d[origKey]) {
+                for (let ri = 0; ri < d[col].length; ri++) {
+                    d[col][ri] = d[origKey][ri];
                 }
             }
         }
@@ -1773,6 +1835,10 @@ def renderizar():
         const startAbs = (Number(ano_atual) * 12) + (Number(mes_atual) - 1);
         let srcChanged = false;
 
+        // Cria NOVOS arrays para y e y_br (evita mutação in-place que Bokeh não detecta)
+        const newY   = src.data['y'].slice();
+        const newYBr = (src.data['y_br'] || src.data['y']).map(v => String(v));
+
         for (const y of [String(ano_atual), String(ano_prox)]) {
             const kAna = `Analitica_${y}`;
             const kAjs = `Ajustada_${y}`;
@@ -1790,8 +1856,8 @@ def renderizar():
                 const absIdx = (Number(y) * 12) + i;
                 const chartIdx = absIdx - startAbs;
                 if (chartIdx >= 0 && chartIdx < 12) {
-                    src.data['y'][chartIdx] = d[kAjs][i];
-                    src.data['y_br'][chartIdx] = d[kAjs][i].toLocaleString('pt-BR');
+                    newY[chartIdx]   = d[kAjs][i];
+                    newYBr[chartIdx] = d[kAjs][i].toLocaleString('pt-BR');
                     srcChanged = true;
                 }
             }
@@ -1816,7 +1882,11 @@ def renderizar():
             }
         }
 
-        if (srcChanged) src.change.emit();
+        // Atribui novos arrays → Bokeh detecta mudança de referência → re-renderiza
+        // Também dispara js_on_change("data") na Série Histórica e properties.data.change no localStorage
+        if (srcChanged) {
+            src.data = Object.assign({}, src.data, { y: newY, y_br: newYBr });
+        }
         tbl.change.emit();
     """
     )

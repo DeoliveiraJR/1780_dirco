@@ -69,7 +69,8 @@ def _grafico_serie_historica(df_upload: pd.DataFrame, cliente: str,
                              categoria: str, produto: str,
                              ana: list, mer: list, ajs: list,
                              ano_proj: int, stylesheet,
-                             src_ajs_ref: ColumnDataSource | None = None):
+                             src_ajs_ref: ColumnDataSource | None = None,
+                             mes_proj: int = 1):
     p = figure(height=380, sizing_mode="stretch_width", x_axis_type="datetime",
                title="🕒 SÉRIE HISTÓRICA • Realizado vs Projeções",
                stylesheets=[stylesheet], toolbar_location="right")
@@ -138,10 +139,20 @@ def _grafico_serie_historica(df_upload: pd.DataFrame, cliente: str,
             renderers.append(("Proj. Ajustada", [r_aj]))
             
             # Callback JS para sincronizar valores Y do src_ajs_ref
-            cb_sync = CustomJS(args=dict(src_ts=src_ajs_ts, src_ref=src_ajs_ref),
+            # src_ajs_ref tem 12 valores a partir de mes_proj (ex: Abr=4 onward)
+            # src_ajs_ts tem 12 valores de Jan a Dez (indice 0=Jan)
+            # Mapeia: src_ref[i] -> src_ts[mes_proj - 1 + i], apenas se dentro do ano (< 12)
+            cb_sync = CustomJS(args=dict(src_ts=src_ajs_ts, src_ref=src_ajs_ref, mes_proj=mes_proj),
                                code="""
-                const y_new = src_ref.data['y'];
-                src_ts.data['y'] = y_new.slice();
+                const y_ref = src_ref.data['y'];  // 12 valores: mes_proj em diante
+                const y_ts = src_ts.data['y'].slice();  // cópia atual Jan-Dez
+                for (let i = 0; i < 12; i++) {
+                    const posInYear = (mes_proj - 1) + i;  // posicao no array Jan-Dez (0=Jan)
+                    if (posInYear < 12) {  // apenas meses dentro do ano_proj
+                        y_ts[posInYear] = y_ref[i];
+                    }
+                }
+                src_ts.data = Object.assign({}, src_ts.data, {y: y_ts});
                 src_ts.change.emit();
             """)
             src_ajs_ref.js_on_change("data", cb_sync)
