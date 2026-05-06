@@ -393,7 +393,7 @@ else:
             
             with col_button:
                 if st.button("✅ Aplicar", use_container_width=True, key="btn_aplicar_rotacao", help="Aplica a rotação à curva ajustada"):
-                    # Função para calcular curva rotacionada
+                    # Função para calcular curva rotacionada (SEMPRE 24 MESES: 2026 + 2027)
                     def _calcular_curva_rotacionada_sidebar(mult_rot):
                         # Monta a curva analítica atual
                         df_upload = get_dados_upload()
@@ -406,6 +406,7 @@ else:
                         if not analitica or len(analitica) < 12:
                             return None
                         
+                        # ==================== CALCULA PARA OS 12 PRIMEIROS MESES ====================
                         qtd = 12
                         primeiro = analitica[0] if analitica[0] else 0
                         ultimo = analitica[11] if analitica[11] else 0
@@ -415,26 +416,46 @@ else:
                         incl_novo = incl * mult_rot
                         
                         # Distribui a nova inclinação linearmente ao longo dos 12 meses
-                        # Mantém o primeiro valor constante e varia o resto
-                        curva_rot = []
+                        curva_rot_12m = []
                         for i in range(qtd):
                             fator = i / (qtd - 1)  # vai de 0 a 1 ao longo dos 12 meses
-                            # Calcula o ajuste incremental baseado na nova inclinação
                             ajuste = fator * (incl_novo - incl)
                             valor = analitica[i] + ajuste
-                            curva_rot.append(max(0, valor))
+                            curva_rot_12m.append(max(0, valor))
                         
-                        return curva_rot
+                        # ==================== EXPANDE PARA 24 MESES ====================
+                        # O simulador SEMPRE usa 24 meses (ano atual + próximo ano)
+                        # Se existem 12 meses seguintes na base (2027), replica a rotação
+                        # Caso contrário, replica os últimos 12 com mesma inclinação
+                        curva_rot_24m = curva_rot_12m[:]
+                        
+                        if len(analitica) >= 24:
+                            # Temos dados de 2027, aplica mesma rotação
+                            primeiro_2027 = analitica[12] if analitica[12] else 0
+                            ultimo_2027 = analitica[23] if analitica[23] else 0
+                            incl_2027 = (ultimo_2027 - primeiro_2027) / (qtd - 1) if qtd > 1 else 0
+                            incl_novo_2027 = incl_2027 * mult_rot
+                            
+                            for i in range(qtd):
+                                fator = i / (qtd - 1)
+                                ajuste = fator * (incl_novo_2027 - incl_2027)
+                                valor = analitica[12 + i] + ajuste
+                                curva_rot_24m.append(max(0, valor))
+                        else:
+                            # Sem dados de 2027, replica os 12 primeiros (mesma curva rotacionada)
+                            curva_rot_24m.extend(curva_rot_12m[:])
+                        
+                        return curva_rot_24m if len(curva_rot_24m) == 24 else None
                     
                     # Aplica a rotação
                     curva_rot = _calcular_curva_rotacionada_sidebar(mult_rotacao)
                     if curva_rot:
-                        st.session_state["ajustada"] = curva_rot
+                        st.session_state["ajustada"] = curva_rot  # Agora com 24 elementos
                         # Persistir em chave privada (não conflita com widget key)
                         st.session_state["_sim_rotacionar_curva_aplicado"] = mult_rotacao
                         # Também salvar em chave pública para uso no simulador
                         st.session_state["sim_rotacionar_curva"] = mult_rotacao
-                        st.success(f"✅ Curva rotacionada com {mult_rotacao:+.2f}x inclinação!")
+                        st.success(f"✅ Curva rotacionada com {mult_rotacao:+.2f}x inclinação! (24 meses)")
                         st.rerun()
                     else:
                         st.error("❌ Erro ao calcular rotação. Verifique os filtros.")

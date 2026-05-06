@@ -9,48 +9,46 @@ Histórico de alterações, bugs fixados e features implementadas.
 ### ✅ CORRIGIDO - Funcionalidade de Rotação/Inclinação da Curva
 
 #### 🔴 Bug Crítico #1: StreamlitAPIException ao clicar "Aplicar"
-- **Issue:** `st.session_state.sim_rotacionar_curva cannot be modified after the widget is instantiated`
-- **Root Cause:** Tentativa de modificar o estado de um widget enquanto ele estava sendo renderizado
-- **Solução:** Usar chave privada `_sim_rotacionar_curva_aplicado` para persistência
+    - **Issue:** Usuário alterava slider para +11.00x, clicava "Aplicar", mas a curva não mudava
+    - **Root Cause:** Calculava apenas 12 meses (2026) mas simulador ALWAYS usa 24 meses (2026 + 2027)
+        - Quando simulador recarregava, via `len(12) != len(24)` e **resetava para base**
+    - **Solução:** Expandir cálculo para SEMPRE retornar 24 elementos
 
 #### 🔴 Bug Crítico #2: Rotação não persistia corretamente
-- **Issue:** Mismatch de chaves causava conflito Streamlit
-- **Root Cause:** Slider com `key="sim_rotacionar_curva"` e tentativa de modificar mesma chave
-- **Solução:** Sistema de 3 chaves para evitar conflito de renderização
+    - **Issue:** `st.session_state.sim_rotacionar_curva cannot be modified after widget instantiated`
+    - **Root Cause:** Conflito de renderização com chaves do Streamlit
+    - **Solução:** Sistema de 3 chaves separadas (sem conflito)
 
 #### ✅ Correções Aplicadas
 
 **1. Sistema de Chaves Corrigido:**
-- Slider: `key="sim_rotacionar_mult"` (widget Streamlit - não modificável)
-- Persistência: `_sim_rotacionar_curva_aplicado` (chave privada - dados após "Aplicar")
-- Simulador: `sim_rotacionar_curva` (chave pública - para uso em simulação)
+**1. Expansão para 24 Meses:**
+    - Calcula para 12 primeiros (2026)
+    - Se tem 24 elementos, aplica mesma rotação aos 12 seguintes (2027)
+    - Caso contrário, replica os 12 primeiros
+    - Sempre retorna 24 elementos
 
 **2. Fluxo de Persistência:**
-```python
-# Carregar valor anterior aplicado
-valor_inicial_slider = st.session_state.get("_sim_rotacionar_curva_aplicado", 1.0)
-
-# Renderizar slider sem conflito
-mult_rotacao = st.slider(..., value=valor_inicial_slider, key="sim_rotacionar_mult")
-
-# Ao aplicar, salvar em ambas as chaves
-st.session_state["_sim_rotacionar_curva_aplicado"] = mult_rotacao
-st.session_state["sim_rotacionar_curva"] = mult_rotacao
-```
+**2. Sistema de Chaves:**
+    - Slider: `key="sim_rotacionar_mult"` (não modificável)
+    - Persistência: `_sim_rotacionar_curva_aplicado` (privada)
+    - Simulador: `sim_rotacionar_curva` (pública)
 
 #### 📝 Fluxo Corrigido (End-to-End)
 1. Usuário ajusta slider → clica "✅ Aplicar"
-2. Rotação calculada e aplicada à curva
-3. Persistida em _sim_rotacionar_curva_aplicado + sim_rotacionar_curva
-4. st.rerun() recarrega com slider mostrando valor
-5. Ao salvar simulação, rotação incluída corretamente
+2. Rotação calculada para 12 meses (2026)
+3. Expandida para 24 meses (2026 + 2027)
+4. Salva com tamanho correto: `len(ajustada) == 24`
+5. Simulador carrega sem resetar, mostra rotação
+6. Curva visualiza a rotação corretamente
 
 #### 🛠️ Arquivo alterado
-- `frontend/app.py` (linhas 345-365, 428-440)
+    - `frontend/app.py` (função `_calcular_curva_rotacionada_sidebar`)
 
 #### 🧪 Validação
-- Compilação sintática: `python -m py_compile frontend/app.py` ✅
-- Sem conflito de chaves Streamlit: ✅
+    - Compilação sintática: `python -m py_compile frontend/app.py` ✅
+    - Retorna 24 elementos ✅
+    - Sem reset de dados ✅
 
 ---
 
