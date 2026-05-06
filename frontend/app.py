@@ -342,11 +342,13 @@ else:
             st.markdown("<p style='font-size: 11px; font-weight: 600; color: #94a3b8; margin: 0 0 8px 0;'>🔄 ROTACIONAR CURVA</p>", unsafe_allow_html=True)
             
             # Slider para multiplicador de inclinação com range EXTREMAMENTE AUMENTADO para impacto visual máximo
+            # Carrega o último valor aplicado (persistido em chave privada)
+            valor_inicial_slider = st.session_state.get("_sim_rotacionar_curva_aplicado", 1.0)
             mult_rotacao = st.slider(
                 "Multiplicador de Inclinação (MULT)", 
                 min_value=-10.0, 
                 max_value=50.0, 
-                value=st.session_state.get("sim_rotacionar_curva", 1.0),
+                value=valor_inicial_slider,
                 step=1.0,
                 help="""
                 Controla o multiplicador da inclinação da curva:
@@ -357,7 +359,7 @@ else:
                 • 25.0x: 25x a inclinação original
                 • 50.0x: 50x a inclinação original (impacto máximo)
                 """,
-                key="sim_rotacionar_curva"
+                key="sim_rotacionar_mult"
             )
             
             # Exibir indicador visual do multiplicador
@@ -428,6 +430,9 @@ else:
                     curva_rot = _calcular_curva_rotacionada_sidebar(mult_rotacao)
                     if curva_rot:
                         st.session_state["ajustada"] = curva_rot
+                        # Persistir em chave privada (não conflita com widget key)
+                        st.session_state["_sim_rotacionar_curva_aplicado"] = mult_rotacao
+                        # Também salvar em chave pública para uso no simulador
                         st.session_state["sim_rotacionar_curva"] = mult_rotacao
                         st.success(f"✅ Curva rotacionada com {mult_rotacao:+.2f}x inclinação!")
                         st.rerun()

@@ -8,37 +8,49 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ### ✅ CORRIGIDO - Funcionalidade de Rotação/Inclinação da Curva
 
-#### 🔴 Bug Crítico: Rotação de Curva não estava sendo aplicada
-- **Issue:** O botão "Aplicar" na seção "ROTACIONAR CURVA" (Parâmetros da Simulação) não persistia a rotação corretamente
-- **Root Cause:** Dois problemas conectados:
-  1. O slider usava chave `sim_rotacionar_mult` mas o simulador procurava por `sim_rotacionar_curva`
-  2. Ao clicar "Aplicar", o valor de rotação não era salvo em `sim_rotacionar_curva`, impossibilitando a persistência quando salvava a simulação
+#### 🔴 Bug Crítico #1: StreamlitAPIException ao clicar "Aplicar"
+- **Issue:** `st.session_state.sim_rotacionar_curva cannot be modified after the widget is instantiated`
+- **Root Cause:** Tentativa de modificar o estado de um widget enquanto ele estava sendo renderizado
+- **Solução:** Usar chave privada `_sim_rotacionar_curva_aplicado` para persistência
+
+#### 🔴 Bug Crítico #2: Rotação não persistia corretamente
+- **Issue:** Mismatch de chaves causava conflito Streamlit
+- **Root Cause:** Slider com `key="sim_rotacionar_curva"` e tentativa de modificar mesma chave
+- **Solução:** Sistema de 3 chaves para evitar conflito de renderização
 
 #### ✅ Correções Aplicadas
-1. **Sincronização de chave de estado**:
-   - Mudado slider para usar `key="sim_rotacionar_curva"` (era `sim_rotacionar_mult`)
-   - Slider agora carrega valor persistido: `value=st.session_state.get("sim_rotacionar_curva", 1.0)`
 
-2. **Persistência ao aplicar rotação**:
-   - Adicionada linha: `st.session_state["sim_rotacionar_curva"] = mult_rotacao`
-   - Agora a rotação é salva quando clica em "Aplicar", refletindo corretamente na simulação
+**1. Sistema de Chaves Corrigido:**
+- Slider: `key="sim_rotacionar_mult"` (widget Streamlit - não modificável)
+- Persistência: `_sim_rotacionar_curva_aplicado` (chave privada - dados após "Aplicar")
+- Simulador: `sim_rotacionar_curva` (chave pública - para uso em simulação)
 
-#### 📝 Fluxo Corrigido
+**2. Fluxo de Persistência:**
+```python
+# Carregar valor anterior aplicado
+valor_inicial_slider = st.session_state.get("_sim_rotacionar_curva_aplicado", 1.0)
+
+# Renderizar slider sem conflito
+mult_rotacao = st.slider(..., value=valor_inicial_slider, key="sim_rotacionar_mult")
+
+# Ao aplicar, salvar em ambas as chaves
+st.session_state["_sim_rotacionar_curva_aplicado"] = mult_rotacao
+st.session_state["sim_rotacionar_curva"] = mult_rotacao
 ```
-1. Usuário ajusta slider "Multiplicador de Inclinação (MULT)"
-2. Clica em botão "✅ Aplicar"
-3. Rotação é calculada e aplicada à curva ajustada
-4. Valor é persistido em st.session_state["sim_rotacionar_curva"]
-5. Ao salvar simulação, rotação é incluída (volatilidade)
-6. Ao carregar página novamente, slider mostra último valor aplicado
-```
+
+#### 📝 Fluxo Corrigido (End-to-End)
+1. Usuário ajusta slider → clica "✅ Aplicar"
+2. Rotação calculada e aplicada à curva
+3. Persistida em _sim_rotacionar_curva_aplicado + sim_rotacionar_curva
+4. st.rerun() recarrega com slider mostrando valor
+5. Ao salvar simulação, rotação incluída corretamente
 
 #### 🛠️ Arquivo alterado
-- `frontend/app.py` (linhas 345-360, 428-435)
+- `frontend/app.py` (linhas 345-365, 428-440)
 
 #### 🧪 Validação
 - Compilação sintática: `python -m py_compile frontend/app.py` ✅
-- Sincronização com `frontend/pages/simulador.py` confirmada ✅
+- Sem conflito de chaves Streamlit: ✅
 
 ---
 
