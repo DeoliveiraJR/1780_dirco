@@ -73,6 +73,18 @@ def _recarregar_opcoes(df, cliente_escolhido):
 if not st.session_state.autenticado:
     autenticacao.renderizar()
 else:
+    # ============== INICIALIZAR SESSION STATE ==============
+    # Garantir que as chaves necessárias existem
+    if "filtros" not in st.session_state:
+        st.session_state["filtros"] = {
+            "cliente": "Todos",
+            "categoria": "",
+            "produto": "",
+            "nome": "Simulação 2026"
+        }
+    if "sim_nome" not in st.session_state:
+        st.session_state["sim_nome"] = "Simulação 2026"
+    
     with st.sidebar:
         # Ocultar navegação padrão (preserva botão de colapsar sidebar)
         st.markdown("""
@@ -585,7 +597,9 @@ else:
             
             # Atualizar filtro de produto se selecionou TODOS
             if sim_produto_sb == "TODOS":
-                st.session_state["filtros"]["produto"] = "TODOS"
+                filtros = st.session_state.get("filtros", {})
+                filtros["produto"] = "TODOS"
+                st.session_state["filtros"] = filtros
             
             st.markdown('<div style="height: 12px;"></div>', unsafe_allow_html=True)
             
