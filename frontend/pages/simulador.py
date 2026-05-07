@@ -1963,21 +1963,9 @@ def renderizar():
     if ano_barras_default not in anos_disponiveis_barras:
         ano_barras_default = anos_disponiveis_barras[-1]
 
-    col_ano_barras, _ = st.columns([1.3, 4.7])
-    with col_ano_barras:
-        ano_barras = st.selectbox(
-            "📅 Ano - Barras",
-            options=anos_disponiveis_barras,
-            index=anos_disponiveis_barras.index(ano_barras_default),
-            key="sim_ano_barras",
-        )
-
-    agreg_barras = _agregados_por_categoria(
-        df_upload,
-        cliente,
-        int(ano_barras),
-        mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS,
-    )
+    ano_barras = st.session_state.get("sim_ano_barras", ano_barras_default)
+    if ano_barras not in anos_disponiveis_barras:
+        ano_barras = ano_barras_default
     
     # Função auxiliar para garantir arrays de 12 elementos
     def _safe_array_12(arr):
@@ -2007,7 +1995,6 @@ def renderizar():
         agreg_dict[categoria]["ajs"] = list(serie_cat_ajs + diff)
 
     _aplicar_diff_categoria(agreg_cards, ano_cards)
-    _aplicar_diff_categoria(agreg_barras, int(ano_barras))
     
     agreg_base_ordem = agreg_cards if agreg_cards else agreg_barras
     if agreg_base_ordem:
@@ -2022,6 +2009,36 @@ def renderizar():
                 card_data = agreg_cards.get(cat) or agreg_base_ordem.get(cat, {})
                 card_html = _cards_categoria_html(cat, card_data)
                 st_components.html(card_html, height=260, scrolling=False)
+
+        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+        
+        # Layout compacto do filtro de ano
+        col_filter_label, col_filter_select, col_filter_spacer = st.columns([0.8, 1.5, 3.7])
+        
+        with col_filter_label:
+            st.markdown(
+                "<div style='padding:8px 0;font-size:0.9rem;color:#475569;font-weight:600;'>📅 Ano:</div>",
+                unsafe_allow_html=True
+            )
+        
+        with col_filter_select:
+            ano_barras = st.selectbox(
+                "Ano - Barras",
+                options=anos_disponiveis_barras,
+                index=anos_disponiveis_barras.index(ano_barras),
+                key="sim_ano_barras",
+                label_visibility="collapsed",
+            )
+        
+        st.markdown("<div style='height:2px'></div>", unsafe_allow_html=True)
+
+        agreg_barras = _agregados_por_categoria(
+            df_upload,
+            cliente,
+            int(ano_barras),
+            mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS,
+        )
+        _aplicar_diff_categoria(agreg_barras, int(ano_barras))
 
         # ===== LINHA 2: Gráficos de barras =====
         cols_barras = st.columns(3, gap="small")

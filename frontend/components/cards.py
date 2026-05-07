@@ -69,26 +69,32 @@ body, html { margin: 0; padding: 0; background: transparent; }
 
 .data-table {
   width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
 }
 
 .table-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1.2fr 0.9fr 0.9fr 0.95fr 0.95fr;
   align-items: center;
-  padding: 4px 0 6px 0;
+  gap: 8px;
+  padding: 6px 0 8px 0;
   border-bottom: 2px solid #e2e8f0;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
-.th-serie { flex: 0 0 95px; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; }
-.th-total { flex: 0 0 56px; font-size: 10px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; }
-.th-media { flex: 0 0 54px; font-size: 10px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; }
-.th-ref-total { flex: 0 0 72px; font-size: 9px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; }
-.th-ref-media { flex: 0 0 72px; font-size: 9px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; }
+.th-serie { font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.2px; }
+.th-total { font-size: 9.5px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
+.th-media { font-size: 9.5px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
+.th-ref-total { font-size: 8.5px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
+.th-ref-media { font-size: 8.5px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
 
 .data-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1.2fr 0.9fr 0.9fr 0.95fr 0.95fr;
   align-items: center;
-  padding: 5px 0;
+  gap: 8px;
+  padding: 6px 0;
   border-bottom: 1px solid #f8fafc;
 }
 
@@ -97,33 +103,35 @@ body, html { margin: 0; padding: 0; background: transparent; }
 }
 
 .col-serie {
-  flex: 0 0 95px;
   font-size: 12px;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .col-total {
-  flex: 0 0 56px;
   font-size: 12px;
   font-weight: 700;
   text-align: right;
 }
 
 .col-media {
-  flex: 0 0 54px;
   font-size: 11px;
   text-align: right;
   color: #475569;
 }
 
 .col-ref-total {
-  flex: 0 0 72px;
   text-align: right;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .col-ref-media {
-  flex: 0 0 72px;
   text-align: right;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .badge {
@@ -224,25 +232,25 @@ def _cards_categoria_html(cat: str, d: dict) -> str:
     
     rows = ""
     for label, cur, pr, css in linhas:
-      total_num = float(np.nansum(cur))
-      media_num = float(np.nanmean(cur)) if len(cur) else 0.0
-      total = fmt_compact(total_num)
-      media = fmt_compact(media_num)
+        total_num = float(np.nansum(cur))
+        media_num = float(np.nanmean(cur)) if len(cur) else 0.0
+        total = fmt_compact(total_num)
+        media = fmt_compact(media_num)
 
-      if label == "Realizado":
-        ref_total_cell = fmt_compact(ref_total_abs)
-        ref_media_cell = fmt_compact(ref_media_abs)
-      else:
-        ref_total_cell = _badge(_pct_vs(ref_total_abs, total_num))
-        ref_media_cell = _badge(_pct_vs(ref_media_abs, media_num))
+        if label == "Realizado":
+            ref_total_cell = fmt_compact(ref_total_abs)
+            ref_media_cell = fmt_compact(ref_media_abs)
+        else:
+            ref_total_cell = _badge(_pct_vs(ref_total_abs, total_num))
+            ref_media_cell = _badge(_pct_vs(ref_media_abs, media_num))
 
         rows += f'''
         <div class="data-row">
             <div class="col-serie {css}">{label}</div>
             <div class="col-total">{total}</div>
             <div class="col-media">{media}</div>
-        <div class="col-ref-total">{ref_total_cell}</div>
-        <div class="col-ref-media">{ref_media_cell}</div>
+            <div class="col-ref-total">{ref_total_cell}</div>
+            <div class="col-ref-media">{ref_media_cell}</div>
         </div>
         '''
 
