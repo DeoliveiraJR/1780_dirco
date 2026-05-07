@@ -7,7 +7,13 @@ import streamlit as st
 import pandas as pd
 from styles import CORES, CSS_CUSTOM, aplicar_tema
 from pages import autenticacao, dashboard, simulador, perfil, upload, dre
-from data_manager import init_data_state, get_dados_upload, adicionar_simulacao
+from data_manager import (
+    init_data_state,
+    get_dados_upload,
+    get_simulacoes_usuario,
+    restaurar_simulacao,
+    deletar_simulacao,
+)
 from services.aggregations import _carregar_curvas_base
 
 # Inicializar data state logo no início
@@ -544,6 +550,9 @@ else:
             )
             if sim_nome_sb:
                 st.session_state["sim_nome"] = sim_nome_sb
+                filtros = st.session_state.get("filtros", {})
+                filtros["nome"] = sim_nome_sb
+                st.session_state["filtros"] = filtros
             
             st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
             
@@ -605,22 +614,35 @@ else:
             
             # --- Botão Salvar ---
             def _salvar_simulacao_sidebar():
-                """Salva a simulação com os filtros atuais."""
+                """Dispara o save no fluxo do simulador (com dados completos)."""
                 nome_sim = st.session_state.get("sim_nome", "Sem Nome")
-                cliente_sim = st.session_state.get("filtros", {}).get("cliente", "Todos")
                 categoria_sim = st.session_state.get("filtros", {}).get("categoria", "")
-                produto_sim = st.session_state.get("filtros", {}).get("produto", "")
                 
                 if not categoria_sim:
                     st.session_state["_save_feedback_msg"] = "⚠️ Selecione uma categoria antes de salvar."
                     return
+
+                if pagina != "Simulador":
+                    st.session_state["_save_feedback_msg"] = "⚠️ Abra a página Simulador para salvar a curva atual."
+                    return
+
+                filtros = st.session_state.get("filtros", {})
+                filtros["nome"] = nome_sim
+                st.session_state["filtros"] = filtros
                 
-                adicionar_simulacao(nome_sim, cliente_sim, categoria_sim, produto_sim)
-                st.session_state["_save_feedback_msg"] = f"✅ Simulação '{nome_sim}' salva com sucesso!"
+                # Flag consumida no simulador para salvar com a curva ajustada atual.
+                st.session_state["_trigger_save_simulador"] = True
                 st.rerun()
             
             if st.button("💾 Salvar Simulação", use_container_width=True, type="primary", key="sb_btn_salvar"):
                 _salvar_simulacao_sidebar()
+
+            feedback_msg = st.session_state.pop("_save_feedback_msg", None)
+            if feedback_msg:
+                if feedback_msg.startswith("✅"):
+                    st.success(feedback_msg)
+                else:
+                    st.warning(feedback_msg)
 
         st.markdown("---")
         

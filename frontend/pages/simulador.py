@@ -120,9 +120,10 @@ def renderizar():
     sim_cliente = filtros.get("cliente", "Todos")
     sim_categoria = filtros.get("categoria", "")
     sim_produto = filtros.get("produto", "")
+    produto_todos_selecionado = sim_produto == "TODOS"
     
     # Valida se produto é "TODOS" e ajusta para vazio (usar todos os produtos)
-    if sim_produto == "TODOS":
+    if produto_todos_selecionado:
         sim_produto = ""
     
     # Feedback visual de filtros ativos
@@ -144,8 +145,6 @@ def renderizar():
         """, unsafe_allow_html=True)
     
     st.markdown("---")
-    
-    st.markdown("---")
     # ==================== LÓGICA DO SIMULADOR ====================
     # Usa filtros da sidebar sincronizados em st.session_state["filtros"]
     cliente  = sim_cliente
@@ -157,7 +156,7 @@ def renderizar():
     if not categoria and not base_f.empty:
         categoria = str(base_f["CATEGORIA"].dropna().astype(str).unique()[0])
     base_fc = base_f[base_f["CATEGORIA"].astype(str) == str(categoria)]
-    if not produto and not base_fc.empty:
+    if not produto_todos_selecionado and not produto and not base_fc.empty:
         produto = str(base_fc["PRODUTO"].dropna().astype(str).unique()[0])
 
     analitica, mercado, ano_proj = _carregar_curvas_base(df_upload, cliente, categoria, produto)
@@ -431,6 +430,7 @@ def renderizar():
     # ==================== HANDLER DO BOTÃO SALVAR ====================
     # Executado AQUI (após pending_sync aplicado e ajustada atualizado)
     # para que session_state["ajustada"] já contenha os valores mais recentes da tabela/gráfico.
+    salvar_clicked = bool(st.session_state.pop("_trigger_save_simulador", False))
     if salvar_clicked:
         print(f"\n[SAVE-DEBUG] Botao SALVAR clicado")
         print(f"[SAVE-DEBUG] pending_sync_pre era: {pending_sync_pre is not None}")

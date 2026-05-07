@@ -6,6 +6,18 @@ from utils_ext.series import (
     _norm_txt, _mes_to_num, _ensure_cli_n, _mask_trailing_zeros
 )
 
+
+def _filtrar_categoria_produto(dff: pd.DataFrame, categoria: str, produto: str) -> pd.DataFrame:
+    """Filtra por categoria e, opcionalmente, por produto.
+
+    Quando produto for vazio ou 'TODOS', agrega todos os produtos da categoria.
+    """
+    dff = dff[dff["CAT_N"] == _norm_txt(categoria)]
+    produto_norm = _norm_txt(produto)
+    if produto_norm and produto_norm != "todos":
+        dff = dff[dff["PROD_N"] == produto_norm]
+    return dff
+
 def _carregar_curvas_base(df_upload: pd.DataFrame, cliente: str, categoria: str, produto: str):
     if df_upload is None or len(df_upload) == 0:
         return [0.0]*12, [0.0]*12, None
@@ -29,7 +41,7 @@ def _carregar_curvas_base(df_upload: pd.DataFrame, cliente: str, categoria: str,
 
     if cliente and cliente != "Todos":
         dff = dff[dff["CLI_N"] == _norm_txt(cliente)]
-    dff = dff[(dff["CAT_N"] == _norm_txt(categoria)) & (dff["PROD_N"] == _norm_txt(produto))]
+    dff = _filtrar_categoria_produto(dff, categoria, produto)
     if dff.empty:
         return [0.0]*12, [0.0]*12, None
 
@@ -68,7 +80,7 @@ def _carregar_curvas_por_ano(df_upload: pd.DataFrame, cliente: str, categoria: s
     if cliente and cliente != "Todos":
         dff = dff[dff["CLI_N"] == _norm_txt(cliente)]
     
-    dff = dff[(dff["CAT_N"] == _norm_txt(categoria)) & (dff["PROD_N"] == _norm_txt(produto))]
+    dff = _filtrar_categoria_produto(dff, categoria, produto)
     dff = dff[(dff["ANO_NUM"] == int(ano_proj)) & (pd.to_numeric(dff["MES_NUM"], errors="coerce").between(1, 12))]
     
     if dff.empty:
@@ -184,7 +196,7 @@ def _carregar_ajustada_produto(df_upload: pd.DataFrame, cliente: str, categoria:
         dff["CAT_N"] = dff["CATEGORIA"].astype(str).apply(_norm_txt)
     if "PROD_N" not in dff.columns:
         dff["PROD_N"] = dff["PRODUTO"].astype(str).apply(_norm_txt)
-    dff = dff[(dff["CAT_N"] == _norm_txt(categoria)) & (dff["PROD_N"] == _norm_txt(produto))]
+    dff = _filtrar_categoria_produto(dff, categoria, produto)
     if dff.empty:
         return None
 
@@ -222,7 +234,7 @@ def _obter_realizados_por_ano(df_upload: pd.DataFrame, cliente: str, categoria: 
 
     if cliente and cliente != "Todos":
         dff = dff[dff["CLI_N"] == _norm_txt(cliente)]
-    dff = dff[(dff["CAT_N"] == _norm_txt(categoria)) & (dff["PROD_N"] == _norm_txt(produto))]
+    dff = _filtrar_categoria_produto(dff, categoria, produto)
     dff = dff[pd.to_numeric(dff["MES_NUM"], errors="coerce").between(1, 12)]
     dff = dff[pd.to_numeric(dff["ANO_NUM"], errors="coerce") >= 2022]
     if dff.empty:
