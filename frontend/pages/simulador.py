@@ -87,7 +87,7 @@ def _recarregar_opcoes(df, cliente_escolhido):
 
 
 def renderizar():
-    # ==================== FILTROS NO TOPO DA PÁGINA ====================
+    # ==================== VALIDAÇÃO DE DADOS ====================
     df_upload = get_dados_upload()
     
     # Aplica todas as curvas salvas ao DataFrame (garante persistência)
@@ -114,169 +114,43 @@ def renderizar():
         """)
         return
 
-    # --- Carrega opções de clientes ---
-    clientes_opcoes = ["Todos"]
-    if isinstance(df_upload, pd.DataFrame) and not df_upload.empty:
-        if "TIPO_CLIENTE" in df_upload.columns:
-            clientes_opcoes += sorted([c for c in df_upload["TIPO_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
-        elif "TP_CLIENTE" in df_upload.columns:
-            clientes_opcoes += sorted([c for c in df_upload["TP_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
-
-    # --- Layout filtros: 5 colunas (Nome | Cliente | Categoria | Produto | Botão) ---
-    # Callbacks para atualizar filtros imediatamente quando mudam
-    def _on_cliente_change():
-        filtros = st.session_state.get("filtros", {})
-        filtros["cliente"] = st.session_state.get("sim_cliente_page", "Todos")
-        # Limpar categoria e produto quando cliente muda (serão recalculados)
-        filtros["categoria"] = ""
-        filtros["produto"] = ""
-        st.session_state["filtros"] = filtros
+    # ==================== SINCRONIZAÇÃO COM FILTROS DA SIDEBAR ====================
+    # Os filtros agora estão na sidebar, vamos sincronizar com a lógica do simulador
+    filtros = st.session_state.get("filtros", {})
+    sim_cliente = filtros.get("cliente", "Todos")
+    sim_categoria = filtros.get("categoria", "")
+    sim_produto = filtros.get("produto", "")
     
-    def _on_categoria_change():
-        filtros = st.session_state.get("filtros", {})
-        filtros["categoria"] = st.session_state.get("sim_categoria_page", "")
-        # Limpar produto quando categoria muda (será recalculado)
-        filtros["produto"] = ""
-        st.session_state["filtros"] = filtros
+    # Valida se produto é "TODOS" e ajusta para vazio (usar todos os produtos)
+    if sim_produto == "TODOS":
+        sim_produto = ""
     
-    def _on_produto_change():
-        filtros = st.session_state.get("filtros", {})
-        filtros["produto"] = st.session_state.get("sim_produto_page", "")
-        st.session_state["filtros"] = filtros
+    # Feedback visual de filtros ativos
+    if sim_categoria or sim_cliente != "Todos":
+        filtro_info = []
+        if sim_cliente != "Todos":
+            filtro_info.append(f"👤 {sim_cliente}")
+        if sim_categoria:
+            filtro_info.append(f"📁 {sim_categoria}")
+        if sim_produto:
+            filtro_info.append(f"📦 {sim_produto}")
+        
+        st.markdown(f"""
+        <div style="background:#eff6ff;border-left:4px solid #06b6d4;border-radius:6px;padding:8px 12px;margin-bottom:12px;">
+            <p style="margin:0;font-size:0.85rem;color:#0c3a66;font-weight:600;">
+                ✓ Filtros ativos: {' • '.join(filtro_info)}
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
     
-    col_nome, col_cli, col_cat, col_prod, col_btn = st.columns([1.5, 1.2, 1.5, 1.5, 0.8])
-
-    with col_nome:
-        sim_nome_default = st.session_state.get("sim_nome", "Simulação 2026")
-        sim_nome = st.text_input("📝 Nome da Simulação", value=sim_nome_default, key="sim_nome_page")
-
-    with col_cli:
-        cliente_mem = st.session_state.get("filtros", {}).get("cliente", "Todos")
-        idx_cliente = clientes_opcoes.index(cliente_mem) if cliente_mem in clientes_opcoes else 0
-        sim_cliente = st.selectbox(
-            "👤 Cliente", clientes_opcoes, index=idx_cliente, 
-            key="sim_cliente_page", on_change=_on_cliente_change
-        )
-
-    # Recarrega categorias/produtos com base no cliente selecionado
-    cats, map_cat_prod, df_subset = _recarregar_opcoes(df_upload, sim_cliente)
-
-    with col_cat:
-        categoria_mem = st.session_state.get("filtros", {}).get("categoria", "")
-        idx_cat = cats.index(categoria_mem) if categoria_mem in cats else (0 if cats else None)
-        sim_categoria = st.selectbox(
-            "📁 Categoria", cats, index=idx_cat, 
-            key="sim_categoria_page", on_change=_on_categoria_change                        
-        )
-
-    with col_prod:
-        prds = map_cat_prod.get(sim_categoria, [])
-        produto_mem = st.session_state.get("filtros", {}).get("produto", "")
-        idx_prd = prds.index(produto_mem) if produto_mem in prds else (0 if prds else None)
-        sim_produto = st.selectbox(
-            "📦 Produto", prds, index=idx_prd, 
-            key="sim_produto_page", on_change=_on_produto_change
-        )
-
-    with col_btn:
-        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-        salvar_clicked = st.button("💾 Salvar", type="primary", use_container_width=True)
-
-    save_feedback = st.session_state.pop("_save_feedback_msg", None)
-    if save_feedback:
-        st.success(save_feedback)
-
-    # --- Linha de simulações salvas (SEMPRE VISÍVEL) ---
-    simulacoes_usuario = get_simulacoes_usuario()
+    st.markdown("---")
     
-    # Container para simulações salvas - sempre aparece
-    st.markdown("""
-    <style>
-        .sim-table-row { border-radius: 8px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.04); margin-bottom: 4px; }
-        .sim-table-row.alt { background: #f8fafc; }
-        .sim-table-row.total, .sim-table-row.uan-row-media { background: linear-gradient(90deg, #fce7f3 0%, #f8fafc 100%) !important; font-weight: bold; border: 2px solid #f9a8d4; }
-        .sim-table-row.total span, .sim-table-row.total div, .sim-table-row.uan-row-media span, .sim-table-row.uan-row-media div { color: #c026d3 !important; }
-        .sim-table-row.uan-row-cresc { background: linear-gradient(90deg, #f0fdf4 0%, #f8fafc 100%) !important; font-weight: bold; border-bottom: 2px solid #34d399; }
-        .sim-table-row.uan-row-cresc span, .sim-table-row.uan-row-cresc div { color: #059669 !important; }
-        .sim-table-row .sim-cell { padding: 6px 8px; font-size: 0.95rem; }
-        .sim-table-row .sim-cell.version { font-weight: 600; color: #0c3a66; }
-        .sim-table-row .sim-cell.actions button { background: #f1f5f9 !important; border-radius: 6px !important; color: #0c3a66 !important; border: 1px solid #e2e8f0 !important; font-weight: 500 !important; }
-        .sim-table-row .sim-cell.actions button:hover { background: #fce7f3 !important; color: #c026d3 !important; border-color: #c026d3 !important; }
-    </style>
-    """, unsafe_allow_html=True)
-    with st.expander(f"📂 Simulações Salvas ({len(simulacoes_usuario)})", expanded=len(simulacoes_usuario) > 0):
-        if not simulacoes_usuario:
-            st.info("📋 Nenhuma simulação salva ainda. Use o botão 💾 Salvar para guardar sua simulação.")
-        else:
-            # Cabeçalho da tabela
-            cols = st.columns([0.8, 2, 1.5, 2, 1.2, 1.2, 1.5, 1.5])
-            headers = ["🏷️ V.", "📌 Nome", "📁 Cat.", "🛍️ Produto", "📅 Data", "🕐 Hora", "👤 Usuário", "⚙️ Ações"]
-            for i, h in enumerate(headers):
-                with cols[i]:
-                    st.markdown(f"<div style='font-weight:600;font-size:1rem;color:#0c3a66;'>{h}</div>", unsafe_allow_html=True)
-            st.divider()
-            total_sims = len(simulacoes_usuario)
-            for idx, sim in enumerate(simulacoes_usuario):
-                versao_num = total_sims - idx
-                sim_id = sim.get("id")
-                nome = sim.get("nome", "Sem nome")
-                categoria = sim.get("categoria", "-")
-                produto = sim.get("produto", "-")[:25]
-                data_salvo = sim.get("data_salvo", "-")
-                hora_salvo = sim.get("hora_salvo", "-")
-                usuario_salvo = sim.get("usuario", "anonimo")[:15]
-                # Destacar as duas últimas linhas com classes customizadas
-                row_class = "sim-table-row"
-                if idx == total_sims - 2:
-                    row_class += " uan-row-media"
-                elif idx == total_sims - 1:
-                    row_class += " uan-row-cresc"
-                elif idx % 2 == 1:
-                    row_class += " alt"
-                cols = st.columns([0.8, 2, 1.5, 2, 1.2, 1.2, 1.5, 1.5])
-                with cols[0]:
-                    st.markdown(f"<div class='sim-cell version {row_class}'>v{versao_num}</div>", unsafe_allow_html=True)
-                with cols[1]:
-                    st.markdown(f"<div class='sim-cell {row_class}'><span>{nome}</span></div>", unsafe_allow_html=True)
-                with cols[2]:
-                    st.markdown(f"<div class='sim-cell {row_class}'><span style='background:#eff6ff;padding:2px 6px;border-radius:3px;font-size:11px;'>{categoria}</span></div>", unsafe_allow_html=True)
-                with cols[3]:
-                    st.markdown(f"<div class='sim-cell {row_class}'><span>{produto}</span></div>", unsafe_allow_html=True)
-                with cols[4]:
-                    st.markdown(f"<div class='sim-cell {row_class}'>📅 {data_salvo}</div>", unsafe_allow_html=True)
-                with cols[5]:
-                    st.markdown(f"<div class='sim-cell {row_class}'>🕐 {hora_salvo}</div>", unsafe_allow_html=True)
-                with cols[6]:
-                    st.markdown(f"<div class='sim-cell {row_class}'><span style='background:#fce7f3;padding:2px 6px;border-radius:3px;font-size:11px;'>👤 {usuario_salvo}</span></div>", unsafe_allow_html=True)
-                with cols[7]:
-                    btn_col1, btn_col2 = st.columns(2)
-                    with btn_col1:
-                        if st.button("🔄", key=f"rest_{sim_id}", help=f"Restaurar v{versao_num}", use_container_width=True):
-                            restaurar_simulacao(sim_id)
-                            st.rerun()
-                    with btn_col2:
-                        if st.button("🗑️", key=f"del_{sim_id}", help=f"Excluir v{versao_num}", use_container_width=True):
-                            deletar_simulacao(sim_id)
-                            st.rerun()
-
-    # Atualiza session_state com os filtros selecionados APENAS se mudou
-    novo_filtro = {
-        "cliente": sim_cliente,
-        "categoria": sim_categoria if sim_categoria else "",
-        "produto": sim_produto if sim_produto else "",
-        "nome": sim_nome
-    }
-    if st.session_state.get("filtros") != novo_filtro:
-        st.session_state["filtros"] = novo_filtro
-        st.rerun()
-
     st.markdown("---")
     # ==================== LÓGICA DO SIMULADOR ====================
-    filtros = st.session_state.get("filtros", {}) or {}
-
-    cliente  = filtros.get("cliente", "Todos")
-    categoria= filtros.get("categoria", "")
-    produto  = filtros.get("produto", "")
+    # Usa filtros da sidebar sincronizados em st.session_state["filtros"]
+    cliente  = sim_cliente
+    categoria= sim_categoria
+    produto  = sim_produto if sim_produto else ""  # Se vazio ou "TODOS", usa vazio
 
     dff_check = _ensure_cli_n(df_upload)
     base_f = dff_check if cliente=="Todos" else dff_check[dff_check["CLI_N"] == _norm_txt(cliente)]

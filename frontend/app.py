@@ -462,7 +462,266 @@ else:
 
         st.markdown("---")
         
-        # ============== LOGOUT ==============
+        # ============== FILTROS DA SIMULAÇÃO ==============
+        with st.expander("🎯 Filtros da Simulação", expanded=True):
+            # Função auxiliar para recarregar opções
+            def _recarregar_opcoes_sidebar(df, cliente_escolhido):
+                """Retorna (categorias, map_cat_prod) com base no cliente."""
+                dff = df.copy() if df is not None else pd.DataFrame()
+                
+                # Normalizar CLI_N
+                if "CLI_N" not in dff.columns:
+                    if "TIPO_CLIENTE" in dff.columns:
+                        dff["CLI_N"] = dff["TIPO_CLIENTE"].astype(str).apply(_norm)
+                    elif "TP_CLIENTE" in dff.columns:
+                        dff["CLI_N"] = dff["TP_CLIENTE"].astype(str).apply(_norm)
+                    else:
+                        dff["CLI_N"] = ""
+                
+                if cliente_escolhido and cliente_escolhido != "Todos":
+                    dff = dff[dff["CLI_N"] == _norm(cliente_escolhido)]
+                
+                categorias = sorted(dff["CATEGORIA"].dropna().astype(str).unique()) if "CATEGORIA" in dff.columns else []
+                map_cat_prod = {}
+                if "CATEGORIA" in dff.columns and "PRODUTO" in dff.columns:
+                    map_cat_prod = (
+                        dff.groupby("CATEGORIA")["PRODUTO"]
+                           .apply(lambda s: sorted(s.dropna().astype(str).unique().tolist()))
+                           .to_dict()
+                    )
+                return categorias, map_cat_prod
+            
+            # Callbacks para sincronização
+            def _on_cliente_sidebar_change():
+                filtros = st.session_state.get("filtros", {})
+                filtros["cliente"] = st.session_state.get("sb_sim_cliente", "Todos")
+                filtros["categoria"] = ""
+                filtros["produto"] = ""
+                st.session_state["filtros"] = filtros
+            
+            def _on_categoria_sidebar_change():
+                filtros = st.session_state.get("filtros", {})
+                filtros["categoria"] = st.session_state.get("sb_sim_categoria", "")
+                filtros["produto"] = ""
+                st.session_state["filtros"] = filtros
+            
+            def _on_produto_sidebar_change():
+                filtros = st.session_state.get("filtros", {})
+                filtros["produto"] = st.session_state.get("sb_sim_produto", "")
+                st.session_state["filtros"] = filtros
+            
+            # Obter dados
+            df_upload_sb = get_dados_upload()
+            
+            # Opções de clientes
+            clientes_opcoes_sb = ["Todos"]
+            if isinstance(df_upload_sb, pd.DataFrame) and not df_upload_sb.empty:
+                if "TIPO_CLIENTE" in df_upload_sb.columns:
+                    clientes_opcoes_sb += sorted([c for c in df_upload_sb["TIPO_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
+                elif "TP_CLIENTE" in df_upload_sb.columns:
+                    clientes_opcoes_sb += sorted([c for c in df_upload_sb["TP_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
+            
+            # --- Nome da Simulação ---
+            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📝 NOME DA SIMULAÇÃO</p>", unsafe_allow_html=True)
+            sim_nome_sb = st.text_input(
+                "Nome",
+                value=st.session_state.get("sim_nome", "Simulação 2026"),
+                key="sb_sim_nome",
+                label_visibility="collapsed",
+                placeholder="Ex: Cenário Otimista Q2"
+            )
+            if sim_nome_sb:
+                st.session_state["sim_nome"] = sim_nome_sb
+            
+            st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
+            
+            # --- Cliente ---
+            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>👤 CLIENTE</p>", unsafe_allow_html=True)
+            cliente_mem_sb = st.session_state.get("filtros", {}).get("cliente", "Todos")
+            idx_cliente_sb = clientes_opcoes_sb.index(cliente_mem_sb) if cliente_mem_sb in clientes_opcoes_sb else 0
+            sim_cliente_sb = st.selectbox(
+                "Cliente",
+                clientes_opcoes_sb,
+                index=idx_cliente_sb,
+                key="sb_sim_cliente",
+                on_change=_on_cliente_sidebar_change,
+                label_visibility="collapsed"
+            )
+            
+            st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
+            
+            # Recarrega categorias/produtos
+            cats_sb, map_cat_prod_sb = _recarregar_opcoes_sidebar(df_upload_sb, sim_cliente_sb)
+            
+            # --- Categoria ---
+            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📁 CATEGORIA</p>", unsafe_allow_html=True)
+            categoria_mem_sb = st.session_state.get("filtros", {}).get("categoria", "")
+            idx_cat_sb = cats_sb.index(categoria_mem_sb) if categoria_mem_sb in cats_sb else (0 if cats_sb else None)
+            sim_categoria_sb = st.selectbox(
+                "Categoria",
+                cats_sb,
+                index=idx_cat_sb,
+                key="sb_sim_categoria",
+                on_change=_on_categoria_sidebar_change,
+                label_visibility="collapsed"
+            )
+            
+            st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
+            
+            # --- Produto (com opção TODOS) ---
+            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📦 PRODUTO</p>", unsafe_allow_html=True)
+            prds_sb = map_cat_prod_sb.get(sim_categoria_sb, [])
+            prds_sb_com_todos = ["TODOS"] + prds_sb if prds_sb else ["TODOS"]
+            produto_mem_sb = st.session_state.get("filtros", {}).get("produto", "TODOS")
+            idx_prd_sb = prds_sb_com_todos.index(produto_mem_sb) if produto_mem_sb in prds_sb_com_todos else 0
+            sim_produto_sb = st.selectbox(
+                "Produto",
+                prds_sb_com_todos,
+                index=idx_prd_sb,
+                key="sb_sim_produto",
+                on_change=_on_produto_sidebar_change,
+                label_visibility="collapsed"
+            )
+            
+            # Atualizar filtro de produto se selecionou TODOS
+            if sim_produto_sb == "TODOS":
+                st.session_state["filtros"]["produto"] = "TODOS"
+            
+            st.markdown('<div style="height: 12px;"></div>', unsafe_allow_html=True)
+            
+            # --- Botão Salvar ---
+            def _salvar_simulacao_sidebar():
+                """Salva a simulação com os filtros atuais."""
+                nome_sim = st.session_state.get("sim_nome", "Sem Nome")
+                cliente_sim = st.session_state.get("filtros", {}).get("cliente", "Todos")
+                categoria_sim = st.session_state.get("filtros", {}).get("categoria", "")
+                produto_sim = st.session_state.get("filtros", {}).get("produto", "")
+                
+                if not categoria_sim:
+                    st.session_state["_save_feedback_msg"] = "⚠️ Selecione uma categoria antes de salvar."
+                    return
+                
+                adicionar_simulacao(nome_sim, cliente_sim, categoria_sim, produto_sim)
+                st.session_state["_save_feedback_msg"] = f"✅ Simulação '{nome_sim}' salva com sucesso!"
+                st.rerun()
+            
+            if st.button("💾 Salvar Simulação", use_container_width=True, type="primary", key="sb_btn_salvar"):
+                _salvar_simulacao_sidebar()
+
+        st.markdown("---")
+        
+        # ============== HISTÓRICO DE SIMULAÇÕES ==============
+        simulacoes_usuario_sb = get_simulacoes_usuario()
+        
+        with st.expander(f"📂 Histórico ({len(simulacoes_usuario_sb)})", expanded=False):
+            if not simulacoes_usuario_sb:
+                st.info("📋 Nenhuma simulação salva ainda.")
+            else:
+                # Container com altura máxima e scroll
+                st.markdown("""
+                <style>
+                    .sim-history-container {
+                        max-height: 400px;
+                        overflow-y: auto;
+                        border: 1px solid #e2e8f0;
+                        border-radius: 8px;
+                        padding: 8px;
+                        background: #f8fafc;
+                    }
+                    .sim-history-item {
+                        background: white;
+                        border: 1px solid #e2e8f0;
+                        border-radius: 6px;
+                        padding: 8px;
+                        margin-bottom: 6px;
+                        font-size: 0.85rem;
+                    }
+                    .sim-history-item:hover {
+                        background: #f1f5f9;
+                        border-color: #06b6d4;
+                    }
+                    .sim-history-name {
+                        font-weight: 600;
+                        color: #0c3a66;
+                        margin: 0 0 4px 0;
+                    }
+                    .sim-history-meta {
+                        font-size: 0.75rem;
+                        color: #64748b;
+                        display: flex;
+                        gap: 8px;
+                        margin: 4px 0;
+                        flex-wrap: wrap;
+                    }
+                    .sim-history-actions {
+                        display: flex;
+                        gap: 4px;
+                        margin-top: 6px;
+                    }
+                </style>
+                """, unsafe_allow_html=True)
+                
+                items_por_pagina = 6
+                total_items = len(simulacoes_usuario_sb)
+                paginas = (total_items + items_por_pagina - 1) // items_por_pagina
+                
+                if "_sim_history_page" not in st.session_state:
+                    st.session_state["_sim_history_page"] = 0
+                
+                pagina_atual = st.session_state["_sim_history_page"]
+                inicio = pagina_atual * items_por_pagina
+                fim = inicio + items_por_pagina
+                
+                items_paginados = simulacoes_usuario_sb[inicio:fim]
+                
+                for sim in items_paginados:
+                    sim_id = sim.get("id")
+                    nome = sim.get("nome", "Sem nome")
+                    categoria = sim.get("categoria", "-")
+                    produto = sim.get("produto", "-")
+                    data_salvo = sim.get("data_salvo", "-")
+                    
+                    st.markdown(f"""
+                    <div class="sim-history-item">
+                        <p class="sim-history-name">📌 {nome}</p>
+                        <div class="sim-history-meta">
+                            <span>📁 {categoria}</span>
+                            <span>📦 {produto[:20]}</span>
+                            <span>📅 {data_salvo}</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    col_rest, col_del = st.columns(2, gap="small")
+                    with col_rest:
+                        if st.button("🔄 Restaurar", key=f"sb_rest_{sim_id}", use_container_width=True, size="small"):
+                            restaurar_simulacao(sim_id)
+                            st.rerun()
+                    with col_del:
+                        if st.button("🗑️ Excluir", key=f"sb_del_{sim_id}", use_container_width=True, size="small"):
+                            deletar_simulacao(sim_id)
+                            st.rerun()
+                    st.markdown('<div style="height: 2px;"></div>', unsafe_allow_html=True)
+                
+                # Paginação
+                if paginas > 1:
+                    st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
+                    col_prev, col_info, col_next = st.columns([0.8, 1.4, 0.8])
+                    
+                    with col_prev:
+                        if st.button("⬅️ Ant.", use_container_width=True, disabled=pagina_atual == 0, key="sb_hist_prev"):
+                            st.session_state["_sim_history_page"] = pagina_atual - 1
+                            st.rerun()
+                    
+                    with col_info:
+                        st.markdown(f"<div style='text-align:center;padding:6px;font-size:0.85rem;color:#64748b;font-weight:600;'>{pagina_atual + 1}/{paginas}</div>", unsafe_allow_html=True)
+                    
+                    with col_next:
+                        if st.button("Prox ➡️", use_container_width=True, disabled=pagina_atual >= paginas - 1, key="sb_hist_next"):
+                            st.session_state["_sim_history_page"] = pagina_atual + 1
+                            st.rerun()
+        
+        st.markdown("---")
         col_logout = st.columns([1])[0]
         with col_logout:
             if st.button("🚪 Logout", use_container_width=True, type="secondary"):
