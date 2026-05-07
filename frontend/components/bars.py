@@ -15,7 +15,7 @@ def _get_cat_color(cat: str) -> str:
     return "#1e40af"  # Fallback azul
 
 
-def _grafico_barras_categoria(cat: str, d: dict, stylesheet):
+def _grafico_barras_categoria(cat: str, d: dict, stylesheet, ano=None):
     """Gráfico de barras para uma categoria com 4 séries: Real, Analítica, Mercado e Ajustada."""
     months = MESES_ABR_LIST
     # Trunca nome da categoria se muito longo
@@ -41,12 +41,14 @@ def _grafico_barras_categoria(cat: str, d: dict, stylesheet):
     mer = safe_array(d.get("mer", []))
     ajs = safe_array(d.get("ajs", []))
 
+    titulo_ano = f" • {ano}" if ano else ""
+
     p = figure(
         height=280,
         sizing_mode="stretch_width",
         x_range=months,
         stylesheets=[stylesheet],
-        title=f"📊 {cat_short.upper()}",
+        title=f"📊 {cat_short.upper()}{titulo_ano}",
         toolbar_location="right"
     )
     p.toolbar.logo = None  # Remove logo Bokeh

@@ -1937,8 +1937,47 @@ def renderizar():
 
     st.markdown("<h2 class='uan-sec' style='margin:8px 0 4px 0;padding:4px 0;font-size:1.2rem;border-top:1px solid #e2e8f0;'>🗂️ Análises por Categoria</h2>", unsafe_allow_html=True)
     
-    # Carrega dados agregados por categoria
-    agreg = _agregados_por_categoria(df_upload, cliente, ano_proj or 0, mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS)
+    # Cards usam o ano da simulação corrente.
+    ano_cards = int(ano_proj or 0)
+    agreg_cards = _agregados_por_categoria(
+        df_upload,
+        cliente,
+        ano_cards,
+        mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS,
+    )
+
+    # Gráficos de barras com filtro explícito por ano.
+    dff_anos = _ensure_cli_n(df_upload.copy())
+    if cliente and cliente != "Todos":
+        dff_anos = dff_anos[dff_anos["CLI_N"] == _norm_txt(cliente)]
+    if "ANO_NUM" not in dff_anos.columns:
+        dff_anos["ANO_NUM"] = pd.to_numeric(dff_anos.get("ANO", 0), errors="coerce").fillna(0).astype(int)
+
+    anos_disponiveis_barras = sorted(
+        [int(a) for a in dff_anos["ANO_NUM"].dropna().astype(int).unique().tolist() if int(a) >= 2022]
+    )
+    if not anos_disponiveis_barras:
+        anos_disponiveis_barras = [ano_cards] if ano_cards else [2025]
+
+    ano_barras_default = st.session_state.get("sim_ano_barras", ano_cards)
+    if ano_barras_default not in anos_disponiveis_barras:
+        ano_barras_default = anos_disponiveis_barras[-1]
+
+    col_ano_barras, _ = st.columns([1.3, 4.7])
+    with col_ano_barras:
+        ano_barras = st.selectbox(
+            "📅 Ano - Barras",
+            options=anos_disponiveis_barras,
+            index=anos_disponiveis_barras.index(ano_barras_default),
+            key="sim_ano_barras",
+        )
+
+    agreg_barras = _agregados_por_categoria(
+        df_upload,
+        cliente,
+        int(ano_barras),
+        mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS,
+    )
     
     # Função auxiliar para garantir arrays de 12 elementos
     def _safe_array_12(arr):
@@ -1952,33 +1991,45 @@ def renderizar():
         return arr[:12]
     
     # ==== APLICA AJUSTES DO DRAG-AND-DROP À CATEGORIA ATUAL ====
-    if agreg and categoria in agreg:
+    def _aplicar_diff_categoria(agreg_dict, ano_base):
+        if not agreg_dict or categoria not in agreg_dict:
+            return
+        # O vetor ajustada em memória corresponde ao ano de simulação corrente.
+        if int(ano_base or 0) != int(ano_cards or 0):
+            return
+
         serie_prod_orig = _carregar_ajustada_produto(df_upload, cliente, categoria, produto, ano_proj) or analitica[:]
         serie_prod_orig = np.array(_safe_array_12(serie_prod_orig), dtype=float)
         serie_drag = np.array(_safe_array_12(ajustada), dtype=float)
         
         diff = serie_drag - serie_prod_orig
-        serie_cat_ajs = np.array(_safe_array_12(agreg[categoria].get("ajs", [])), dtype=float)
-        agreg[categoria]["ajs"] = list(serie_cat_ajs + diff)
+        serie_cat_ajs = np.array(_safe_array_12(agreg_dict[categoria].get("ajs", [])), dtype=float)
+        agreg_dict[categoria]["ajs"] = list(serie_cat_ajs + diff)
+
+    _aplicar_diff_categoria(agreg_cards, ano_cards)
+    _aplicar_diff_categoria(agreg_barras, int(ano_barras))
     
-    if agreg:
+    agreg_base_ordem = agreg_cards if agreg_cards else agreg_barras
+    if agreg_base_ordem:
         principais = ["CAPTAÇÕES", "OPERAÇÕES CRÉDITO", "SERVIÇOS", "CRÉDITO"]
-        ordem = [c for c in principais if c in agreg] + [c for c in agreg.keys() if c not in principais]
+        ordem = [c for c in principais if c in agreg_base_ordem] + [c for c in agreg_base_ordem.keys() if c not in principais]
         ordem = ordem[:3]
 
         # ===== LINHA 1: Cards das categorias =====
         cols_cards = st.columns(3, gap="small")
         for i, cat in enumerate(ordem):
             with cols_cards[i]:
-                card_html = _cards_categoria_html(cat, agreg[cat])
+                card_data = agreg_cards.get(cat) or agreg_base_ordem.get(cat, {})
+                card_html = _cards_categoria_html(cat, card_data)
                 st_components.html(card_html, height=260, scrolling=False)
 
         # ===== LINHA 2: Gráficos de barras =====
         cols_barras = st.columns(3, gap="small")
         for i, cat in enumerate(ordem):
             with cols_barras[i]:
-                barras = _grafico_barras_categoria(cat, agreg[cat], make_stylesheet())
-                streamlit_bokeh(barras, use_container_width=True, key=f"bar_{cat}_{combo}")
+                barras_data = agreg_barras.get(cat) or agreg_base_ordem.get(cat, {})
+                barras = _grafico_barras_categoria(cat, barras_data, make_stylesheet(), ano=ano_barras)
+                streamlit_bokeh(barras, use_container_width=True, key=f"bar_{cat}_{combo}_{ano_barras}")
 
         # ===== LINHA 3: Gráficos de pizza =====
         st.markdown("<h4 style='margin:0.5rem 0 0.25rem 0;'>🍩 Share por Tipo de Projeção</h4>", unsafe_allow_html=True)
@@ -1987,5 +2038,5 @@ def renderizar():
         
         for i, (tipo, nome) in enumerate(tipos_projecao):
             with cols_pizza[i]:
-                pizza = _grafico_pizza_share_por_projecao(tipo, agreg, make_stylesheet())
+                pizza = _grafico_pizza_share_por_projecao(tipo, agreg_cards, make_stylesheet())
                 streamlit_bokeh(pizza, use_container_width=True, key=f"pizza_{tipo}_{combo}")

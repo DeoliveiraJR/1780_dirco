@@ -2,11 +2,18 @@
 
 Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário**, **controle de permissões** e **DRE Gerencial profissional**.
 
-**Versão Atual:** v2.2.8 | **Status:** ✅ Production Ready | **Última Atualização:** 06/05/2026
+**Versão Atual:** v2.2.9 | **Status:** ✅ Production Ready | **Última Atualização:** 06/05/2026
 
 ---
 
 ## 📌 O que foi implementado
+
+### ✅ [v2.2.9] - Cards de Categoria e Filtro de Ano nas Barras
+- **🧩 Cards Enriquecidos:** Incluídas duas colunas de referência com realizado de 2025 (Total e Média) dentro dos cards de categoria
+- **📐 Relevância para Projeções:** Nas linhas de projeção, as colunas de referência agora exibem variação percentual vs base de realizado 2025 (em vez de comparação com histórico de projeção inexistente)
+- **📅 Filtro de Ano (Barras):** Adicionado seletor de ano dedicado para os gráficos de barras por categoria
+- **🏷️ Contexto Visual:** Título dos gráficos de barras passou a exibir o ano selecionado
+- **🔒 Sem quebra de fluxo:** Cards, barras e pizzas seguem preservando estrutura e sincronismo do simulador
 
 ### ✅ [v2.2.8] - Rotação de Curva (Bug Fix)
 - **🔧 Correção Crítica:** Funcionalidade de "Rotacionar Curva" na barra lateral estava quebrada
@@ -297,6 +304,6 @@ Para questões ou problemas:
 
 ---
 
-**Última atualização:** 06/05/2026 | **Versão:** v2.2.8 | **Status:** ✅ Production Ready
+**Última atualização:** 06/05/2026 | **Versão:** v2.2.9 | **Status:** ✅ Production Ready
 
 Mantém este README como documentação única e oficial. Para histórico detalhado, consulte [CHANGELOG.md](CHANGELOG.md).

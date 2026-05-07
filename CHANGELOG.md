@@ -4,6 +4,39 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
+## 🚀 [v2.2.9] - 2026-05-06
+
+### ✅ MELHORADO - Cards de Categoria e Gráficos de Barras
+
+#### 🧩 Cards com referência de realizado 2025
+- Incluídas duas colunas novas nos cards de categoria com base de realizado 2025:
+    - `Ref. 2025 Tot.`
+    - `Ref. 2025 Méd.`
+
+#### 📊 Informação relevante para linhas de projeção
+- Como não há histórico de projeção de anos anteriores (viram realizado), as linhas de projeção passaram a mostrar comparação percentual contra a base de realizado 2025 nas colunas de referência.
+- A linha de `Realizado` mantém a leitura absoluta da referência (Total e Média).
+
+#### 📅 Filtro de ano nos gráficos de barras
+- Adicionado seletor `Ano - Barras` na seção de análises por categoria.
+- Os gráficos de barras agora são recalculados conforme o ano selecionado, sem impactar cards e pizzas.
+- O título de cada gráfico de barras exibe o ano ativo para reduzir ambiguidades visuais.
+
+#### 🛠️ Arquivos alterados
+- `frontend/services/aggregations.py`
+- `frontend/components/cards.py`
+- `frontend/components/bars.py`
+- `frontend/pages/simulador.py`
+
+#### 🧪 Validação
+- Compilação sintática:
+    - `python -m py_compile frontend/pages/simulador.py` ✅
+    - `python -m py_compile frontend/components/cards.py` ✅
+    - `python -m py_compile frontend/components/bars.py` ✅
+    - `python -m py_compile frontend/services/aggregations.py` ✅
+
+---
+
 ## � [v2.2.8] - 2026-05-06
 
 ### ✅ CORRIGIDO - Funcionalidade de Rotação/Inclinação da Curva
@@ -421,4 +454,4 @@ Totalizadores: MFB, MFBE
 
 ---
 
-**Última atualização:** 2026-04-23 | **Versão Atual:** v2.2.1
+**Última atualização:** 2026-05-06 | **Versão Atual:** v2.2.9

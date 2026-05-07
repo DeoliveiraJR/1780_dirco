@@ -79,10 +79,11 @@ body, html { margin: 0; padding: 0; background: transparent; }
   margin-bottom: 4px;
 }
 
-.th-serie { flex: 0 0 100px; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; }
-.th-total { flex: 0 0 65px; font-size: 10px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; }
-.th-media { flex: 0 0 60px; font-size: 10px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; }
-.th-var { flex: 1; font-size: 10px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; }
+.th-serie { flex: 0 0 95px; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+.th-total { flex: 0 0 56px; font-size: 10px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; }
+.th-media { flex: 0 0 54px; font-size: 10px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; }
+.th-ref-total { flex: 0 0 72px; font-size: 9px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; }
+.th-ref-media { flex: 0 0 72px; font-size: 9px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; }
 
 .data-row {
   display: flex;
@@ -96,34 +97,39 @@ body, html { margin: 0; padding: 0; background: transparent; }
 }
 
 .col-serie {
-  flex: 0 0 100px;
+  flex: 0 0 95px;
   font-size: 12px;
   font-weight: 600;
 }
 
 .col-total {
-  flex: 0 0 65px;
-  font-size: 13px;
+  flex: 0 0 56px;
+  font-size: 12px;
   font-weight: 700;
   text-align: right;
 }
 
 .col-media {
-  flex: 0 0 60px;
-  font-size: 12px;
+  flex: 0 0 54px;
+  font-size: 11px;
   text-align: right;
   color: #475569;
 }
 
-.col-var {
-  flex: 1;
+.col-ref-total {
+  flex: 0 0 72px;
+  text-align: right;
+}
+
+.col-ref-media {
+  flex: 0 0 72px;
   text-align: right;
 }
 
 .badge {
   padding: 2px 6px;
   border-radius: 8px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 
@@ -139,13 +145,13 @@ body, html { margin: 0; padding: 0; background: transparent; }
 """
 
 
-def _var_pct(prev, cur):
-    """Calcula variação percentual."""
-    p = float(np.nansum(prev)) if prev else 0.0
-    c = float(np.nansum(cur)) if cur else 0.0
-    if p == 0.0:
+def _pct_vs(base, val):
+  """Calcula delta percentual de val vs base."""
+  b = float(base) if base is not None else 0.0
+  v = float(val) if val is not None else 0.0
+  if b == 0.0:
         return None
-    return (c - p) / abs(p)
+  return (v - b) / abs(b)
 
 
 def _badge(v):
@@ -189,6 +195,11 @@ def _cards_categoria_html(cat: str, d: dict) -> str:
     prev_ana = _safe_array(prev.get("ana", []))
     prev_mer = _safe_array(prev.get("mer", []))
     prev_ajs = _safe_array(prev.get("ajs", []))
+    rlzd_ref = _safe_array(d.get("rlzd_ref", []))
+    rlzd_ref_ano = d.get("rlzd_ref_ano") or 2025
+
+    ref_total_abs = float(np.nansum(rlzd_ref))
+    ref_media_abs = float(np.nanmean(rlzd_ref)) if len(rlzd_ref) else 0.0
 
     linhas = [
         ("Realizado", rlzd, prev_rlzd, "text-real"),
@@ -201,26 +212,37 @@ def _cards_categoria_html(cat: str, d: dict) -> str:
     icone = _get_cat_icon(cat)
     
     # Cabeçalho da tabela
-    header = '''
+    header = f'''
     <div class="table-header">
         <div class="th-serie">Série</div>
         <div class="th-total">Total</div>
         <div class="th-media">Média</div>
-        <div class="th-var">Var. %</div>
+      <div class="th-ref-total">Ref. {rlzd_ref_ano} Tot.</div>
+      <div class="th-ref-media">Ref. {rlzd_ref_ano} Méd.</div>
     </div>
     '''
     
     rows = ""
     for label, cur, pr, css in linhas:
-        total = fmt_compact(float(np.nansum(cur)))
-        media = fmt_compact(float(np.nanmean(cur)) if len(cur) else 0.0)
-        var = _var_pct(pr, cur)
+      total_num = float(np.nansum(cur))
+      media_num = float(np.nanmean(cur)) if len(cur) else 0.0
+      total = fmt_compact(total_num)
+      media = fmt_compact(media_num)
+
+      if label == "Realizado":
+        ref_total_cell = fmt_compact(ref_total_abs)
+        ref_media_cell = fmt_compact(ref_media_abs)
+      else:
+        ref_total_cell = _badge(_pct_vs(ref_total_abs, total_num))
+        ref_media_cell = _badge(_pct_vs(ref_media_abs, media_num))
+
         rows += f'''
         <div class="data-row">
             <div class="col-serie {css}">{label}</div>
             <div class="col-total">{total}</div>
             <div class="col-media">{media}</div>
-            <div class="col-var">{_badge(var)}</div>
+        <div class="col-ref-total">{ref_total_cell}</div>
+        <div class="col-ref-media">{ref_media_cell}</div>
         </div>
         '''
 

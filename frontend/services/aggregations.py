@@ -291,13 +291,34 @@ def _agregados_por_categoria(df_upload: pd.DataFrame, cliente: str, ano_proj: in
         anos_r = sorted(dff["ANO_NUM"].unique())
         ano_r  = ano_proj if (ano_proj in anos_r) else (anos_r[-1] if anos_r else ano_proj)
         ano_rp = prev_year if (prev_year in anos_r) else (max([a for a in anos_r if a < (ano_proj or 9999)], default=None))
+        # Referência principal para cards: 2025; fallback para último ano anterior disponível.
+        if 2025 in anos_r:
+            ano_ref_cards = 2025
+        else:
+            ano_ref_cards = max([a for a in anos_r if a < (ano_proj or 9999)], default=(anos_r[-1] if anos_r else None))
         rl  = (dff[dff["ANO_NUM"] == int(ano_r)]  .groupby(["CATEGORIA","MES_NUM"], as_index=False)[col_real].sum()) if ano_r  is not None else dff.iloc[0:0]
         rlp = (dff[dff["ANO_NUM"] == int(ano_rp)].groupby(["CATEGORIA","MES_NUM"], as_index=False)[col_real].sum()) if ano_rp is not None else dff.iloc[0:0]
+        rlr = (dff[dff["ANO_NUM"] == int(ano_ref_cards)].groupby(["CATEGORIA","MES_NUM"], as_index=False)[col_real].sum()) if ano_ref_cards is not None else dff.iloc[0:0]
     else:
+        ano_ref_cards = None
         rl  = dff.iloc[0:0]
         rlp = dff.iloc[0:0]
+        rlr = dff.iloc[0:0]
 
-    categorias = list(pd.concat([grp_proj["CATEGORIA"], grp_prev["CATEGORIA"]], ignore_index=True).dropna().astype(str).unique())
+    categorias = list(
+        pd.concat(
+            [
+                grp_proj.get("CATEGORIA", pd.Series(dtype=str)),
+                grp_prev.get("CATEGORIA", pd.Series(dtype=str)),
+                rl.get("CATEGORIA", pd.Series(dtype=str)),
+                rlr.get("CATEGORIA", pd.Series(dtype=str)),
+            ],
+            ignore_index=True,
+        )
+        .dropna()
+        .astype(str)
+        .unique()
+    )
 
     def arr(df_, cat, col):
         if df_.empty or col not in df_.columns:
@@ -313,6 +334,9 @@ def _agregados_por_categoria(df_upload: pd.DataFrame, cliente: str, ano_proj: in
         rlz   = arr(rl,       cat, col_real) if not rl.empty else [0.0]*12
         if mascarar_zeros_finais:
             rlz = _mask_trailing_zeros(rlz)
+        rlz_ref = arr(rlr, cat, col_real) if not rlr.empty else [0.0] * 12
+        if mascarar_zeros_finais:
+            rlz_ref = _mask_trailing_zeros(rlz_ref)
 
         ana_p  = arr(grp_prev, cat, "PROJETADO_ANALITICO")
         mer_p  = arr(grp_prev, cat, "PROJETADO_MERCADO")
@@ -321,7 +345,9 @@ def _agregados_por_categoria(df_upload: pd.DataFrame, cliente: str, ano_proj: in
 
         out[cat] = {
             "ana": ana, "mer": mer, "ajs": ajs, "rlzd": rlz,
-            "prev": {"ana": ana_p, "mer": mer_p, "ajs": ajs_p, "rlzd": rlz_p}
+            "prev": {"ana": ana_p, "mer": mer_p, "ajs": ajs_p, "rlzd": rlz_p},
+            "rlzd_ref": rlz_ref,
+            "rlzd_ref_ano": int(ano_ref_cards) if ano_ref_cards is not None else None,
         }
     return out
 
