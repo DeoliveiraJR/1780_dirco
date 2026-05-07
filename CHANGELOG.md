@@ -4,6 +4,59 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
+## 🚀 [v2.4.2] - 2026-05-07
+
+### ✅ CORRIGIDO - Fluxo de Save e Filtro de Produto
+
+#### 🐛 NameError no simulador
+- Corrigido erro `name 'salvar_clicked' is not defined` no fluxo de renderização da página Simulador.
+
+#### 💾 Save unificado via sidebar
+- O botão de salvar na sidebar passou a disparar o fluxo oficial de save dentro do simulador, preservando a curva ajustada atual e o sincronismo com localStorage/Bokeh.
+- Removida duplicidade de lógica de persistência que poderia gerar comportamento inconsistente.
+
+#### 📦 Opção "TODOS" no produto (comportamento real)
+- As funções de agregação agora tratam produto vazio/TODOS como agregação por categoria (todos os produtos), em vez de filtrar por um único produto.
+- Ajustado fallback para não substituir "TODOS" automaticamente pelo primeiro produto da lista.
+
+#### 🛠️ Arquivos alterados
+- `frontend/app.py`
+- `frontend/pages/simulador.py`
+- `frontend/services/aggregations.py`
+
+#### 🧪 Validação
+- `python -m py_compile frontend/app.py` ✅
+- `python -m py_compile frontend/pages/simulador.py` ✅
+- `python -m py_compile frontend/services/aggregations.py` ✅
+
+---
+
+## 🚀 [v2.4.1] - 2026-05-07
+
+### ✅ HOTFIX - Inicialização de Session State
+
+- Inicialização preventiva de `st.session_state["filtros"]` e `st.session_state["sim_nome"]`.
+- Correção de acesso seguro às chaves de filtros para evitar `KeyError` na sidebar.
+
+#### 🛠️ Arquivo alterado
+- `frontend/app.py`
+
+---
+
+## 🚀 [v2.4.0] - 2026-05-07
+
+### ✅ MELHORADO - Reorganização de UX no Simulador
+
+- Filtros principais movidos para a barra lateral em expander dedicado.
+- Reorganização do histórico de simulações em formato compacto com paginação.
+- Inclusão da opção "TODOS" no filtro de produto.
+
+#### 🛠️ Arquivos alterados
+- `frontend/app.py`
+- `frontend/pages/simulador.py`
+
+---
+
 ## 🚀 [v2.2.9] - 2026-05-06
 
 ### ✅ MELHORADO - Cards de Categoria e Gráficos de Barras
@@ -454,4 +507,4 @@ Totalizadores: MFB, MFBE
 
 ---
 
-**Última atualização:** 2026-05-06 | **Versão Atual:** v2.2.9
+**Última atualização:** 2026-05-07 | **Versão Atual:** v2.4.2

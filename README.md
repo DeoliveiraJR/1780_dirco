@@ -2,11 +2,27 @@
 
 Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário**, **controle de permissões** e **DRE Gerencial profissional**.
 
-**Versão Atual:** v2.2.9 | **Status:** ✅ Production Ready | **Última Atualização:** 06/05/2026
+**Versão Atual:** v2.4.2 | **Status:** ✅ Production Ready | **Última Atualização:** 07/05/2026
 
 ---
 
 ## 📌 O que foi implementado
+
+### ✅ [v2.4.2] - Correções de Save + Filtro Produto TODOS
+- **🐛 NameError Corrigido:** removida dependência de variável órfã (`salvar_clicked`) no simulador.
+- **💾 Save Unificado:** botão de salvar na sidebar agora dispara o fluxo oficial do simulador (captura da curva ajustada atual e persistência correta).
+- **🔄 Sincronização de Estado:** nome da simulação e feedback de save passaram a ser sincronizados em `session_state` de forma consistente.
+- **📦 Produto "TODOS" funcional:** serviços de agregação agora tratam produto vazio/TODOS como agregação de todos os produtos da categoria.
+- **🧩 UX estável:** evita erros em cascata no ciclo sidebar → simulador → histórico.
+
+### ✅ [v2.4.1] - Hotfix de Inicialização de Session State
+- Inicialização defensiva de `st.session_state["filtros"]` e `st.session_state["sim_nome"]`.
+- Correção de acesso seguro para evitar `KeyError` na montagem dos filtros da sidebar.
+
+### ✅ [v2.4.0] - Releitura de UX no Simulador
+- Filtros principais migrados para sidebar em expander dedicado.
+- Inclusão do campo de histórico em layout compacto (paginação) para evitar crescimento vertical excessivo.
+- Inclusão da opção "TODOS" no filtro de produto.
 
 ### ✅ [v2.2.9] - Cards de Categoria e Filtro de Ano nas Barras
 - **🧩 Cards Enriquecidos:** Incluídas duas colunas de referência com realizado de 2025 (Total e Média) dentro dos cards de categoria
@@ -304,6 +320,6 @@ Para questões ou problemas:
 
 ---
 
-**Última atualização:** 06/05/2026 | **Versão:** v2.2.9 | **Status:** ✅ Production Ready
+**Última atualização:** 07/05/2026 | **Versão:** v2.4.2 | **Status:** ✅ Production Ready
 
 Mantém este README como documentação única e oficial. Para histórico detalhado, consulte [CHANGELOG.md](CHANGELOG.md).
