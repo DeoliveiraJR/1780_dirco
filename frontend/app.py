@@ -14,7 +14,7 @@ from data_manager import (
     restaurar_simulacao,
     deletar_simulacao,
 )
-from services.aggregations import _carregar_curvas_base
+from services.aggregations import _carregar_curvas_base, _carregar_curvas_por_ano
 
 # Inicializar data state logo no início
 init_data_state()
@@ -206,6 +206,7 @@ else:
             cliente = filtros_atuais.get("cliente", "Todos")
             categoria = filtros_atuais.get("categoria", "")
             produto = filtros_atuais.get("produto", "")
+            produto_todos = produto == "TODOS"
             
             # Validar e auto-detectar categoria/produto se necessário
             if df_upload is not None and not df_upload.empty:
@@ -228,12 +229,15 @@ else:
                     )
                 
                 # Se produto vazio ou não existe NA CATEGORIA ATUAL, usar primeiro disponível
-                if not produto or produto not in prods_disponiveis:
+                if (not produto_todos) and (not produto or produto not in prods_disponiveis):
                     if prods_disponiveis:
                         produto = prods_disponiveis[0]
             
+            # Normaliza produto para cálculo (TODOS = agregado da categoria)
+            produto_calc = "" if produto_todos else produto
+            
             # Detectar mudança de combo para sincronização em tempo real
-            combo_atual = f"{cliente}::{categoria}::{produto}"
+            combo_atual = f"{cliente}::{categoria}::{produto_calc}"
             combo_anterior = st.session_state.get("_ultimo_combo_sidebar", "")
             
             if combo_atual != combo_anterior:
@@ -249,19 +253,48 @@ else:
             inclinacao = 0
             incremento_perc = 0.0
             
-            if df_upload is not None and not df_upload.empty and categoria and produto:
+            if df_upload is not None and not df_upload.empty and categoria:
                 try:
-                    analitica, _, _ = _carregar_curvas_base(df_upload, cliente, categoria, produto)
-                    if analitica and len(analitica) >= 12:
+                    from datetime import datetime
+
+                    ano_atual = datetime.now().year
+                    ano_proximo = ano_atual + 1
+
+                    ana_ano_atual, _, _ = _carregar_curvas_por_ano(
+                        df_upload,
+                        cliente,
+                        categoria,
+                        produto_calc,
+                        ano_atual,
+                    )
+                    ana_ano_proximo, _, _ = _carregar_curvas_por_ano(
+                        df_upload,
+                        cliente,
+                        categoria,
+                        produto_calc,
+                        ano_proximo,
+                    )
+
+                    analitica_24 = (ana_ano_atual[:] + ana_ano_proximo[:])[:24]
+                    if not analitica_24 or len(analitica_24) < 12:
+                        analitica_base, _, _ = _carregar_curvas_base(
+                            df_upload,
+                            cliente,
+                            categoria,
+                            produto_calc,
+                        )
+                        analitica_24 = (analitica_base[:] + analitica_base[:])[:24]
+
+                    if analitica_24 and len(analitica_24) >= 12:
                         # Usar valores ajustados se disponíveis E do combo atual, senão usar analítica
                         ajustada = st.session_state.get("ajustada", None)
                         last_combo = st.session_state.get("last_combo", "")
                         
                         # SÓ USAR AJUSTADA se for do mesmo combo
-                        if ajustada and len(ajustada) == 12 and last_combo == combo_atual:
-                            curva_exibir = ajustada
+                        if ajustada and len(ajustada) >= 12 and last_combo == combo_atual:
+                            curva_exibir = ajustada[:12]
                         else:
-                            curva_exibir = analitica
+                            curva_exibir = analitica_24[:12]
                         
                         primeiro_pjtd = curva_exibir[0] if curva_exibir[0] else 0
                         ultimo_pjtd = curva_exibir[11] if curva_exibir[11] else 0
@@ -417,11 +450,33 @@ else:
                         df_upload = get_dados_upload()
                         cliente_atual = st.session_state.get("filtros", {}).get("cliente", "Todos")
                         categoria_atual = st.session_state.get("filtros", {}).get("categoria", "")
-                        produto_atual = st.session_state.get("filtros", {}).get("produto", "")
-                        
-                        analitica, _, _ = _carregar_curvas_base(df_upload, cliente_atual, categoria_atual, produto_atual)
-                        
-                        if not analitica or len(analitica) < 12:
+                        produto_raw = st.session_state.get("filtros", {}).get("produto", "")
+                        produto_atual = "" if produto_raw == "TODOS" else produto_raw
+
+                        if df_upload is None or df_upload.empty or not categoria_atual:
+                            return None
+
+                        from datetime import datetime
+                        ano_atual = datetime.now().year
+                        ano_proximo = ano_atual + 1
+
+                        ana_ano_atual, _, _ = _carregar_curvas_por_ano(
+                            df_upload,
+                            cliente_atual,
+                            categoria_atual,
+                            produto_atual,
+                            ano_atual,
+                        )
+                        ana_ano_proximo, _, _ = _carregar_curvas_por_ano(
+                            df_upload,
+                            cliente_atual,
+                            categoria_atual,
+                            produto_atual,
+                            ano_proximo,
+                        )
+
+                        analitica = (ana_ano_atual[:] + ana_ano_proximo[:])[:24]
+                        if len(analitica) < 12:
                             return None
                         
                         # ==================== CALCULA PARA OS 12 PRIMEIROS MESES ====================
@@ -443,8 +498,6 @@ else:
                         
                         # ==================== EXPANDE PARA 24 MESES ====================
                         # O simulador SEMPRE usa 24 meses (ano atual + próximo ano)
-                        # Se existem 12 meses seguintes na base (2027), replica a rotação
-                        # Caso contrário, replica os últimos 12 com mesma inclinação
                         curva_rot_24m = curva_rot_12m[:]
                         
                         if len(analitica) >= 24:
@@ -468,7 +521,11 @@ else:
                     # Aplica a rotação
                     curva_rot = _calcular_curva_rotacionada_sidebar(mult_rotacao)
                     if curva_rot:
+                        produto_combo = "" if st.session_state.get("filtros", {}).get("produto", "") == "TODOS" else st.session_state.get("filtros", {}).get("produto", "")
+                        combo_rot = f"{st.session_state.get('filtros', {}).get('cliente', 'Todos')}::{st.session_state.get('filtros', {}).get('categoria', '')}::{produto_combo}"
+
                         st.session_state["ajustada"] = curva_rot  # Agora com 24 elementos
+                        st.session_state["last_combo"] = combo_rot
                         # Persistir em chave privada (não conflita com widget key)
                         st.session_state["_sim_rotacionar_curva_aplicado"] = mult_rotacao
                         # Também salvar em chave pública para uso no simulador

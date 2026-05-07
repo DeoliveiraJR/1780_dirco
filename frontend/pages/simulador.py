@@ -126,23 +126,45 @@ def renderizar():
     if produto_todos_selecionado:
         sim_produto = ""
     
-    # Feedback visual de filtros ativos
-    if sim_categoria or sim_cliente != "Todos":
-        filtro_info = []
-        if sim_cliente != "Todos":
-            filtro_info.append(f"👤 {sim_cliente}")
-        if sim_categoria:
-            filtro_info.append(f"📁 {sim_categoria}")
-        if sim_produto:
-            filtro_info.append(f"📦 {sim_produto}")
-        
-        st.markdown(f"""
-        <div style="background:#eff6ff;border-left:4px solid #06b6d4;border-radius:6px;padding:8px 12px;margin-bottom:12px;">
-            <p style="margin:0;font-size:0.85rem;color:#0c3a66;font-weight:600;">
-                ✓ Filtros ativos: {' • '.join(filtro_info)}
+    cliente_label = sim_cliente if sim_cliente else "Todos"
+    categoria_label = sim_categoria if sim_categoria else "Selecione uma categoria"
+    if produto_todos_selecionado:
+        produto_label = "TODOS"
+    else:
+        produto_label = sim_produto if sim_produto else "Selecione um produto"
+
+    st.markdown(
+        f"""
+        <div style="background: linear-gradient(135deg, #0c3a66 0%, #06b6d4 100%);
+                    padding: 24px; border-radius: 12px; margin-bottom: 14px;
+                    box-shadow: 0 8px 16px rgba(0,0,0,0.10);">
+            <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 800;">
+                🎯 Simulador de Projeções
+            </h1>
+            <p style="color: rgba(255,255,255,0.92); margin: 8px 0 0 0; font-size: 13px;">
+                Ajuste cenários, simule curvas e acompanhe impactos por categoria e produto.
+            </p>
+            <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px;">
+                <span style="background: rgba(255,255,255,0.18); color: #ffffff; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;">👤 {cliente_label}</span>
+                <span style="background: rgba(255,255,255,0.18); color: #ffffff; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;">📁 {categoria_label}</span>
+                <span style="background: rgba(255,255,255,0.18); color: #ffffff; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;">📦 {produto_label}</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Faixa compacta com contexto do filtro atual
+    st.markdown(
+        f"""
+        <div style="background:#eff6ff;border-left:4px solid #06b6d4;border-radius:8px;padding:8px 12px;margin-bottom:12px;">
+            <p style="margin:0;font-size:0.84rem;color:#0c3a66;font-weight:600;">
+                ✓ Contexto ativo: {cliente_label} • {categoria_label} • {produto_label}
             </p>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
     
     st.markdown("---")
     # ==================== LÓGICA DO SIMULADOR ====================
