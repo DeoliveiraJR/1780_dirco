@@ -138,7 +138,7 @@ def renderizar():
         <div style="background: linear-gradient(135deg, #0c3a66 0%, #06b6d4 100%);
                     padding: 24px; border-radius: 12px; margin-bottom: 14px;
                     box-shadow: 0 8px 16px rgba(0,0,0,0.10);">
-            <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 800;">
+            <h1 style="color: #ffffff !important; margin: 0; font-size: 28px; font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">
                 🎯 Simulador de Projeções
             </h1>
             <p style="color: rgba(255,255,255,0.92); margin: 8px 0 0 0; font-size: 13px;">
@@ -1909,11 +1909,11 @@ def renderizar():
         st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
         
         # Layout compacto do filtro de ano
-        col_filter_label, col_filter_select, col_filter_spacer = st.columns([0.8, 1.5, 3.7])
+        col_filter_label, col_filter_select, col_filter_spacer = st.columns([0.45, 1.4, 4.15])
         
         with col_filter_label:
             st.markdown(
-                "<div style='padding:8px 0;font-size:0.9rem;color:#475569;font-weight:600;'>📅 Ano:</div>",
+                "<div style='padding:8px 0 8px 0;font-size:0.9rem;color:#475569;font-weight:600;'>📅 Ano:</div>",
                 unsafe_allow_html=True
             )
         

@@ -92,7 +92,10 @@ def _grafico_serie_historica(df_upload: pd.DataFrame, cliente: str,
         dff["CAT_N"] = dff["CATEGORIA"].astype(str).apply(_norm_txt)
     if "PROD_N" not in dff.columns:
         dff["PROD_N"] = dff["PRODUTO"].astype(str).apply(_norm_txt)
-    dff = dff[(dff["CAT_N"] == _norm_txt(categoria)) & (dff["PROD_N"] == _norm_txt(produto))]
+    dff = dff[dff["CAT_N"] == _norm_txt(categoria)]
+    produto_norm = _norm_txt(produto)
+    if produto_norm and produto_norm != "todos":
+        dff = dff[dff["PROD_N"] == produto_norm]
     if dff.empty:
         return p
 

@@ -416,6 +416,7 @@ else:
             # Exibir indicador visual do multiplicador
             mult_color = "#10b981" if mult_rotacao >= 1.0 else "#ef4444"
             mult_icon = "📈" if mult_rotacao >= 1.0 else "📉"
+            rot_feedback = st.session_state.pop("_rotacao_feedback", None)
             
             col_display, col_button = st.columns([1.5, 1])
             with col_display:
@@ -530,10 +531,23 @@ else:
                         st.session_state["_sim_rotacionar_curva_aplicado"] = mult_rotacao
                         # Também salvar em chave pública para uso no simulador
                         st.session_state["sim_rotacionar_curva"] = mult_rotacao
-                        st.success(f"✅ Curva rotacionada com {mult_rotacao:+.2f}x inclinação! (24 meses)")
+                        st.session_state["_rotacao_feedback"] = {
+                            "tipo": "success",
+                            "mensagem": f"Curva rotacionada com {mult_rotacao:+.2f}x de inclinação.",
+                        }
                         st.rerun()
                     else:
-                        st.error("❌ Erro ao calcular rotação. Verifique os filtros.")
+                        st.session_state["_rotacao_feedback"] = {
+                            "tipo": "error",
+                            "mensagem": "Não foi possível calcular a rotação. Verifique cliente/categoria/produto e tente novamente.",
+                        }
+                        st.rerun()
+
+            if rot_feedback:
+                if rot_feedback.get("tipo") == "success":
+                    st.success(f"✅ {rot_feedback.get('mensagem', '')}")
+                else:
+                    st.error(f"❌ {rot_feedback.get('mensagem', '')}")
 
         st.markdown("---")
         
@@ -625,6 +639,9 @@ else:
                 on_change=_on_cliente_sidebar_change,
                 label_visibility="collapsed"
             )
+            filtros = st.session_state.get("filtros", {})
+            filtros["cliente"] = sim_cliente_sb
+            st.session_state["filtros"] = filtros
             
             st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
             
@@ -643,6 +660,9 @@ else:
                 on_change=_on_categoria_sidebar_change,
                 label_visibility="collapsed"
             )
+            filtros = st.session_state.get("filtros", {})
+            filtros["categoria"] = sim_categoria_sb
+            st.session_state["filtros"] = filtros
             
             st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
             
@@ -660,12 +680,9 @@ else:
                 on_change=_on_produto_sidebar_change,
                 label_visibility="collapsed"
             )
-            
-            # Atualizar filtro de produto se selecionou TODOS
-            if sim_produto_sb == "TODOS":
-                filtros = st.session_state.get("filtros", {})
-                filtros["produto"] = "TODOS"
-                st.session_state["filtros"] = filtros
+            filtros = st.session_state.get("filtros", {})
+            filtros["produto"] = sim_produto_sb
+            st.session_state["filtros"] = filtros
             
             st.markdown('<div style="height: 12px;"></div>', unsafe_allow_html=True)
             
@@ -787,11 +804,11 @@ else:
                     
                     col_rest, col_del = st.columns(2, gap="small")
                     with col_rest:
-                        if st.button("🔄 Restaurar", key=f"sb_rest_{sim_id}", use_container_width=True, size="small"):
+                        if st.button("🔄 Restaurar", key=f"sb_rest_{sim_id}", use_container_width=True):
                             restaurar_simulacao(sim_id)
                             st.rerun()
                     with col_del:
-                        if st.button("🗑️ Excluir", key=f"sb_del_{sim_id}", use_container_width=True, size="small"):
+                        if st.button("🗑️ Excluir", key=f"sb_del_{sim_id}", use_container_width=True):
                             deletar_simulacao(sim_id)
                             st.rerun()
                     st.markdown('<div style="height: 2px;"></div>', unsafe_allow_html=True)

@@ -83,11 +83,11 @@ body, html { margin: 0; padding: 0; background: transparent; }
   margin-bottom: 6px;
 }
 
-.th-serie { font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.2px; }
-.th-total { font-size: 9.5px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
-.th-media { font-size: 9.5px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
-.th-ref-total { font-size: 8.5px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
-.th-ref-media { font-size: 8.5px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
+.th-serie { font-size: 10.8px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.2px; }
+.th-total { font-size: 10.8px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
+.th-media { font-size: 10.8px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
+.th-ref-total { font-size: 9.8px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
+.th-ref-media { font-size: 9.8px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
 
 .data-row {
   display: grid;
