@@ -570,9 +570,11 @@ def renderizar():
     <div style="background: linear-gradient(135deg, #0c3a66 0%, #06b6d4 100%); 
                 padding: 24px; border-radius: 12px; margin-bottom: 24px;
                 box-shadow: 0 8px 16px rgba(0,0,0,0.1);">
-        <h1 style="color: #ffffff !important; margin: 0; font-size: 28px; font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">
+        <div style="margin: 0; font-size: 42px; line-height: 1; font-weight: 800;
+                    color: #ffffff !important; -webkit-text-fill-color: #ffffff !important;
+                    text-shadow: 0 1px 2px rgba(0,0,0,0.25); letter-spacing: 0.2px;">
             📊 DRE Gerencial - Demonstrativo de Resultado
-        </h1>
+        </div>
         <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0 0; font-size: 13px;">
             Simule e projete os componentes do Demonstrativo de Resultado Gerencial
         </p>

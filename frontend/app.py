@@ -741,27 +741,34 @@ else:
                     .sim-history-item {
                         background: white;
                         border: 1px solid #e2e8f0;
-                        border-radius: 6px;
-                        padding: 8px;
-                        margin-bottom: 6px;
-                        font-size: 0.85rem;
+                        border-radius: 8px;
+                        padding: 10px 10px 8px 10px;
+                        margin-bottom: 8px;
+                        font-size: 0.9rem;
+                        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
                     }
                     .sim-history-item:hover {
                         background: #f1f5f9;
                         border-color: #06b6d4;
                     }
                     .sim-history-name {
-                        font-weight: 600;
+                        font-weight: 700;
                         color: #0c3a66;
-                        margin: 0 0 4px 0;
+                        margin: 0 0 6px 0;
+                        font-size: 1.03rem;
                     }
                     .sim-history-meta {
-                        font-size: 0.75rem;
+                        font-size: 0.82rem;
                         color: #64748b;
                         display: flex;
-                        gap: 8px;
-                        margin: 4px 0;
+                        gap: 10px;
+                        margin: 3px 0;
                         flex-wrap: wrap;
+                    }
+                    .sim-history-meta.time {
+                        color: #475569;
+                        font-size: 0.8rem;
+                        margin-top: 2px;
                     }
                     .sim-history-actions {
                         display: flex;
@@ -790,6 +797,7 @@ else:
                     categoria = sim.get("categoria", "-")
                     produto = sim.get("produto", "-")
                     data_salvo = sim.get("data_salvo", "-")
+                    hora_salvo = sim.get("hora_salvo", "-")
                     
                     st.markdown(f"""
                     <div class="sim-history-item">
@@ -797,7 +805,10 @@ else:
                         <div class="sim-history-meta">
                             <span>📁 {categoria}</span>
                             <span>📦 {produto[:20]}</span>
+                        </div>
+                        <div class="sim-history-meta time">
                             <span>📅 {data_salvo}</span>
+                            <span>🕐 {hora_salvo}</span>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
