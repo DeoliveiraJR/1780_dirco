@@ -2,11 +2,24 @@
 
 Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário**, **controle de permissões** e **DRE Gerencial profissional**.
 
-**Versão Atual:** v2.4.2 | **Status:** ✅ Production Ready | **Última Atualização:** 07/05/2026
+**Versão Atual:** v2.5.0 | **Status:** ✅ Production Ready | **Última Atualização:** 27/05/2026
 
 ---
 
 ## 📌 O que foi implementado
+
+### ✅ [v2.5.0] - Sistema de Índices Econômicos (COMPLETO)
+- **📈 Upload Multi-Aba:** Arquivo Excel detecta automaticamente abas `DADOS` e `INDICES_TESOU` ✅
+- **🏗️ Armazenamento Independente:** Base de projeções e índices em arquivos separados ✅
+- **📊 Nova Aba "Índices Econômicos" na DRE:** 
+  - Visualização completa com 120+ registros de índices
+  - 5 índices econômicos únicos (IPCA, SELIC, IGP-M, DOLAR, IBOVESPA)
+  - Filtro por índice com dropdown
+  - Tabela interativa com primeiras 50 linhas
+  - Exportação em CSV e JSON
+- **🔌 Backend Expandido:** Funções para carregar/gerenciar/exportar índices compartilhados ✅
+- **✨ Integração Completa:** Índices funcionando end-to-end com persistência ✅
+- **🧪 Validação:** Teste full-stack realizado com sucesso
 
 ### ✅ [v2.4.2] - Correções de Save + Filtro Produto TODOS
 - **🐛 NameError Corrigido:** removida dependência de variável órfã (`salvar_clicked`) no simulador.
@@ -83,9 +96,12 @@ Sistema completo de análise e simulação de projeções financeiras desenvolvi
 ## 🚀 Funcionalidades Principais
 
 ### 📤 **Upload de Dados** (Admin)
-- Importação de arquivos Excel com projeções
-- Validação automática de colunas
-- Compartilhamento automático com todos os usuários
+- Importação de arquivo Excel com **múltiplas abas**:
+  - Aba `DADOS`: projeções/realizados com validação de estrutura
+  - Aba `INDICES_TESOU`: índices econômicos (importação direta, sem transformação)
+- Ambas as bases são carregadas e compartilhadas simultaneamente com todos os usuários
+- Armazenamento em arquivos separados para isolamento e performance
+- Validação automática de colunas e tipos de dados
 
 ### 📊 **Dashboard Analítico**
 - KPIs principais e evolução mensal
@@ -119,7 +135,20 @@ Sistema completo de análise e simulação de projeções financeiras desenvolvi
 - Tabela detalhada com totalizadores destacados
 - Exportação JSON/CSV
 
-### 🔐 **Autenticação e Acesso**
+### 📈 **Índices Econômicos** (v2.5.0 - ✅ COMPLETO)
+- **Base Compartilhada:** Importação de índices econômicos de múltiplas fontes (BCB, FGV, B3)
+- **Visualização Completa:** 
+  - Aba dedicada "Índices Econômicos" na página DRE
+  - Estatísticas: 120 registros, 5 índices únicos
+  - Filtro por índice (IPCA, SELIC, IGP-M, DOLAR, IBOVESPA)
+  - Tabela interativa com primeiras 50 linhas
+  - Períodos com data primeira e data última
+- **Exportação:** CSV (semicolon-separated) e JSON
+- **Multi-Usuário:** Todos os usuários acessam a mesma base de índices
+- **Persistência:** Dados salvos em JSON estruturado para rápidas consultas
+- **Sem Transformação:** Dados importados exatamente como no arquivo original
+
+### �🔐 **Autenticação e Acesso**
 - Login seguro com 2 perfis: Admin e Usuário
 - Isolamento completo de dados entre usuários
 - Base compartilhada para todos
@@ -247,14 +276,36 @@ docker run -p 8503:8503 uan-dashboard
    - ✅ Cada mês deve ter valor único (não estático)
    - ✅ Janeiro deve incluir últimos 7 períodos (Jul-Jan com wrap-around)
 
+### Teste de Índices Econômicos (v2.5.0)
+
+1. **Preparar Arquivo Excel com Múltiplas Abas:**
+   - Aba 1: Nomeada `DADOS` com estrutura de projeções (conforme template)
+   - Aba 2: Nomeada `INDICES_TESOU` com dados econômicos (ex: DT_ALVO, VL_PRBB, etc.)
+
+2. **Fazer Upload (Admin):**
+   - `Menu → Upload → Selecionar arquivo (ambas abas serão detectadas)`
+   - Sistema mostrará prévia de AMBAS as abas
+   - Clique "Confirmar e Carregar"
+
+3. **Verificar Importação:**
+   - ✅ Mensagem de sucesso: "Base de Projeções: X registros + Índices Econômicos: Y registros"
+   - ✅ Aba "Dados Carregados" mostra dados de projeção
+   - ✅ Aba "Índices Econômicos" mostra dados de índices com estatísticas
+
+4. **Usar Índices em DRE (próximas versões):**
+   - Índices estarão disponíveis para referência em fórmulas de metodologias
+   - Ex.: `=SOMA(TD71) * INDICE_VALOR` (sintaxe a confirmar)
+
 ### Teste Completo de Fluxo
 
 1. **Upload (Admin):** 
-   - `Menu → Upload → Escolher Arquivo.xlsx → Salvar`
+   - `Menu → Upload → Escolher Arquivo.xlsx (com abas DADOS + INDICES_TESOU) → Salvar`
 2. **Simulador:** 
    - `Menu → Simulador → Ajustar curva → Salvar`
 3. **DRE:** 
    - `Menu → DRE → Editor → Verificar TD71 preenchido`
+4. **Índices:**
+   - `Menu → Upload → Aba "Índices Econômicos" → Verificar visualização`
 
 ---
 

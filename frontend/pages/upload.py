@@ -250,17 +250,21 @@ def renderizar():
     Você pode fazer upload de novos arquivos que serão compartilhados com todos os usuários do sistema.
     """)
     
-    tab1, tab2 = st.tabs(["📤 Carregar Dados", "📊 Dados Carregados"])
+    tab1, tab2, tab3 = st.tabs(["📤 Carregar Dados", "📊 Dados Carregados", "📈 Índices Econômicos"])
     with tab1:
         upload_interface()
     with tab2:
         dados_carregados()
+    with tab3:
+        indices_carregados()
 
 def upload_interface():
     col1, col2 = st.columns([2, 1])
 
     with col1:
         st.markdown("#### Selecione o arquivo Excel para importar")
+        st.markdown("Aceita 1 ou 2 abas: **DADOS** (projeções) e/ou **INDICES_TESOU** (índices econômicos)")
+        
         uploaded_file = st.file_uploader(
             "Escolha um arquivo Excel (.xlsx ou .xls)",
             type=["xlsx", "xls"],
@@ -268,23 +272,45 @@ def upload_interface():
         )
         if uploaded_file is not None:
             try:
-                df_raw = pd.read_excel(uploaded_file)
-                st.success("✅ Arquivo carregado com sucesso!")
-                st.info(f"📊 Total de registros (bruto): {len(df_raw)}")
-                with st.expander("📋 Prévia do arquivo (BRUTO)"):
-                    st.dataframe(df_raw.head(200), use_container_width=True)
-                if st.button("✔️ Confirmar e Carregar Dados", type="primary", use_container_width=True):
-                    processar_dados(df_raw)
+                import openpyxl
+                from io import BytesIO
+                
+                # Detectar abas disponíveis
+                arquivo_io = BytesIO(uploaded_file.getvalue())
+                wb = openpyxl.load_workbook(arquivo_io)
+                abas = wb.sheetnames
+                
+                st.success(f"✅ Arquivo carregado com sucesso! Abas detectadas: {', '.join(abas)}")
+                
+                # Lê e mostra prévia de cada aba
+                for aba_nome in abas:
+                    if aba_nome.lower().strip() in ['dados', 'data']:
+                        df_raw = pd.read_excel(uploaded_file, sheet_name=aba_nome)
+                        st.info(f"📊 **Aba '{aba_nome}' (Projeções)**: {len(df_raw)} registros")
+                        with st.expander(f"📋 Prévia de '{aba_nome}'"):
+                            st.dataframe(df_raw.head(100), use_container_width=True)
+                    
+                    elif aba_nome.lower().strip() == 'indices_tesou':
+                        df_indices = pd.read_excel(uploaded_file, sheet_name=aba_nome)
+                        st.info(f"📈 **Aba '{aba_nome}' (Índices)**: {len(df_indices)} registros")
+                        with st.expander(f"📋 Prévia de '{aba_nome}'"):
+                            st.dataframe(df_indices.head(100), use_container_width=True)
+                
+                # Botão para confirmar
+                if st.button("✔️ Confirmar e Carregar", type="primary", use_container_width=True):
+                    processar_arquivo_completo(uploaded_file)
             except Exception as e:
                 st.error(f"❌ Erro ao ler arquivo: {str(e)}")
+                import traceback
+                traceback.print_exc()
 
     with col2:
         st.markdown("#### Estrutura Esperada")
         st.markdown("""
-**Colunas Obrigatórias:**
+**Aba DADOS - Colunas Obrigatórias:**
 
-- DATA_COMPLETA (ex.: 15/01/2026) — aceita também serial do Excel (ex.: 44962)
-- MES (ex.: janeiro | jan | jan.)
+- DATA_COMPLETA (ex.: 15/01/2026)
+- MES (ex.: janeiro | jan)
 - ANO (ex.: 2026)
 - COD_CATEGORIA
 - CATEGORIA
@@ -294,11 +320,78 @@ def upload_interface():
 - PROJETADO_ANALITICO
 - PROJETADO_MERCADO
 - PROJETADO_AJUSTADO
+
+**Aba INDICES_TESOU (Opcional):**
+
+Importada sem tratamento, apenas como está no arquivo
         """)
         if st.button("📥 Baixar Template", use_container_width=True):
             gerar_template()
 
-def processar_dados(df_raw: pd.DataFrame):
+
+def processar_arquivo_completo(uploaded_file):
+    """Processa arquivo com múltiplas abas (dados + índices)"""
+    try:
+        import openpyxl
+        from io import BytesIO
+        
+        arquivo_bytes = uploaded_file.getvalue()
+        arquivo_io = BytesIO(arquivo_bytes)
+        wb = openpyxl.load_workbook(arquivo_io)
+        abas = wb.sheetnames
+        
+        st.info(f"📋 Abas detectadas no arquivo: {', '.join(abas)}")
+        
+        # Processa aba de DADOS
+        aba_dados = next((a for a in abas if a.lower().strip() in ['dados', 'data']), None)
+        if aba_dados:
+            st.markdown(f"**ℹ️ Processando aba '{aba_dados}' (Projeções)...**")
+            df_raw = pd.read_excel(uploaded_file, sheet_name=aba_dados)
+            
+            # Processa os dados de projeção (sem mostrar botão de salvar duplicado)
+            processar_dados(df_raw, mostrar_botao_salvar=False)
+            
+            # Se admin, oferece ÚNICO botão para salvar na base compartilhada
+            if eh_usuario_admin():
+                st.markdown("---")
+                st.markdown("#### 💾 Salvar na Base de Dados Compartilhada")
+                st.info("✓ Como administrador, você pode salvar este arquivo completo (com ambas as abas) como a nova base de dados compartilhada para todos os usuários.")
+                
+                if st.button("💾 Confirmar e Carregar", type="primary", use_container_width=True, key="btn_salvar_completo"):
+                    usuario_id = st.session_state.get("usuario_id", "")
+                    if not usuario_id:
+                        st.error("❌ Erro: usuario_id não definido no session_state")
+                        st.info("Por favor, faça logout e login novamente")
+                        return
+                    
+                    st.info(f"📤 Enviando arquivo para backend... (usuario_id: {usuario_id})")
+                    
+                    # Salva o arquivo Excel COMPLETO (com ambas as abas)
+                    sucesso, mensagem = salvar_upload_admin(arquivo_bytes, uploaded_file.name, usuario_id)
+                    
+                    st.write(f"[DEBUG] Resultado: sucesso={sucesso}, msg='{mensagem}'")
+                    
+                    if sucesso:
+                        st.success(f"✅ {mensagem}")
+                        st.balloons()
+                    else:
+                        st.error(f"❌ {mensagem}")
+                        st.info("💡 Dica: Verifique se o backend está rodando (python backend/run.py)")
+        else:
+            st.warning("⚠️ Nenhuma aba 'DADOS' ou 'DATA' encontrada no arquivo")
+        
+        # Verifica aba de INDICES_TESOU (apenas informa)
+        aba_indices = next((a for a in abas if a.lower().strip() == 'indices_tesou'), None)
+        if aba_indices:
+            st.markdown(f"✅ **Aba '{aba_indices}' (Índices Econômicos)** detectada e será importada automaticamente!")
+        
+    except Exception as e:
+        st.error(f"❌ Erro ao processar arquivo: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+def processar_dados(df_raw: pd.DataFrame, mostrar_botao_salvar: bool = True):
     try:
         # Renomeia e unifica ANTES de validar required
         df_raw = _rename_columns_flex(df_raw)
@@ -363,43 +456,9 @@ def processar_dados(df_raw: pd.DataFrame):
             st.warning("⚠️ Backend indisponível. Dados salvos localmente.")
             st.session_state.dados_carregados = dados_json
         
-        # ============== NOVO: Salvar na base de dados compartilhada (admin) ==============
-        if eh_usuario_admin():
-            st.markdown("---")
-            st.markdown("#### 💾 Salvar na Base de Dados Compartilhada")
-            
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                st.info("✓ Como administrador, você pode salvar este arquivo como a nova base de dados compartilhada que será utilizada por todos os usuários.")
-            
-            with col2:
-                if st.button("💾 Salvar como Base Compartilhada", type="primary", use_container_width=True):
-                    # Converte DataFrame para bytes Excel
-                    from io import BytesIO
-                    import openpyxl
-                    
-                    # Salva em memória
-                    buffer = BytesIO()
-                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                        df_clean.to_excel(writer, sheet_name='Dados', index=False)
-                    
-                    arquivo_bytes = buffer.getvalue()
-                    nome_arquivo = "base_dados_compartilhada.xlsx"
-                    
-                    # Salva no database - PRECISA DO usuario_id
-                    usuario_id = st.session_state.get("usuario_id", "")
-                    if not usuario_id:
-                        st.error("❌ Erro: usuario_id não definido no session_state")
-                        st.info("Por favor, faça logout e login novamente")
-                        return
-                    
-                    sucesso, mensagem = salvar_upload_admin(arquivo_bytes, nome_arquivo, usuario_id)
-                    
-                    if sucesso:
-                        st.success(f"✅ {mensagem}")
-                        st.info("📢 Todos os usuários do sistema verão esta base de dados no próximo acesso.")
-                    else:
-                        st.error(f"❌ {mensagem}")
+        # ============== BOTÃO DE SALVAR (apenas se mostrar_botao_salvar=True) ==============
+        # Nota: Este botão é desabilitado quando chamado de processar_arquivo_completo
+        # para evitar duplicação. O fluxo unificado é em processar_arquivo_completo()
 
     except Exception as e:
         st.error(f"❌ Erro ao processar dados: {str(e)}")
@@ -443,6 +502,75 @@ def dados_carregados():
         st.session_state.dados_carregados = None
         set_dados_upload(pd.DataFrame())
         st.rerun()
+
+def indices_carregados():
+    """Visualiza os índices econômicos compartilhados"""
+    
+    try:
+        # Calcular path do backend corretamente
+        # __file__ = frontend/pages/upload.py
+        # Precisamos chegar em 1780_dirco/backend
+        current_file = os.path.abspath(__file__)  # .../frontend/pages/upload.py
+        frontend_dir = os.path.dirname(os.path.dirname(current_file))  # .../frontend
+        root_dir = os.path.dirname(frontend_dir)  # .../1780_dirco
+        backend_dir = os.path.join(root_dir, 'backend')
+        
+        sys.path.insert(0, backend_dir)
+        from database import carregar_indices_compartilhados, obter_metadados_ultimo_upload_indices, indices_existem
+        
+    except ImportError as e:
+        st.error(f"❌ Erro ao importar funções de índices do backend: {str(e)}")
+        return
+    
+    # Verifica se há índices importados
+    if not indices_existem():
+        st.info("ℹ️ Nenhum índice econômico foi importado ainda. Faça upload na aba 'Carregar Dados' com a aba INDICES_TESOU.")
+        return
+    
+    # Carrega os índices
+    df_indices = carregar_indices_compartilhados()
+    
+    if df_indices is None or len(df_indices) == 0:
+        st.warning("⚠️ Erro ao carregar índices ou nenhum dado disponível")
+        return
+    
+    # Mostra informações dos índices
+    metadata = obter_metadados_ultimo_upload_indices()
+    
+    if metadata:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total de Registros", len(df_indices))
+        with col2:
+            st.metric("Total de Colunas", len(df_indices.columns))
+        with col3:
+            data_upload = metadata.get("data_upload", "N/A")
+            st.info(f"📅 Último upload: {data_upload[:10]}")
+    
+    st.markdown("---")
+    
+    # Lista as colunas disponíveis
+    st.markdown("#### 📋 Colunas Disponíveis")
+    st.markdown("**Campos principais:**")
+    colunas_principais = ["DT_ALVO", "DT_PRJ", "VL_PJTD", "NM_IN"]
+    for col in colunas_principais:
+        if col in df_indices.columns:
+            st.markdown(f"  - ✅ `{col}`")
+        else:
+            st.markdown(f"  - ⚠️ `{col}` (não encontrado)")
+    
+    st.markdown("---")
+    st.markdown("#### 📊 Visualização dos Dados (Primeiros 100 registros)")
+    st.dataframe(df_indices.head(100), use_container_width=True)
+    
+    # Estatísticas básicas para colunas numéricas
+    st.markdown("---")
+    st.markdown("#### 📈 Estatísticas Básicas")
+    numeric_cols = df_indices.select_dtypes(include=['number']).columns
+    if len(numeric_cols) > 0:
+        st.dataframe(df_indices[numeric_cols].describe(), use_container_width=True)
+    else:
+        st.info("ℹ️ Nenhuma coluna numérica para estatísticas")
 
 def gerar_template():
     meses = ['janeiro','fevereiro','março','abril','maio','junho',

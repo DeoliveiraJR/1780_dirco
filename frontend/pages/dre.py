@@ -567,11 +567,17 @@ def renderizar():
     
     # ===== HEADER =====
     st.markdown("""
+    <style>
+        .uan-header-main { color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; }
+        .uan-header-main * { color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
     <div style="background: linear-gradient(135deg, #0c3a66 0%, #06b6d4 100%); 
                 padding: 24px; border-radius: 12px; margin-bottom: 24px;
                 box-shadow: 0 8px 16px rgba(0,0,0,0.1);">
-        <div style="margin: 0; font-size: 42px; line-height: 1; font-weight: 800;
-                    color: #ffffff !important; -webkit-text-fill-color: #ffffff !important;
+        <div class="uan-header-main" style="margin: 0; font-size: 42px; line-height: 1; font-weight: 800;
                     text-shadow: 0 1px 2px rgba(0,0,0,0.25); letter-spacing: 0.2px;">
             📊 DRE Gerencial - Demonstrativo de Resultado
         </div>
@@ -699,10 +705,11 @@ def renderizar():
     st.divider()
     
     # ===== ABAS =====
-    tab_editor, tab_metodologias, tab_analise = st.tabs([
+    tab_editor, tab_metodologias, tab_analise, tab_indices = st.tabs([
         "📝 Editor DRE",
         "🔧 Metodologias",
-        "📈 Análise"
+        "📈 Análise",
+        "📊 Índices Econômicos"
     ])
     
     with tab_editor:
@@ -713,6 +720,9 @@ def renderizar():
     
     with tab_analise:
         _renderizar_analise()
+    
+    with tab_indices:
+        _renderizar_indices_economicos()
 
 
 def _renderizar_editor_dre():
@@ -1589,3 +1599,223 @@ def _renderizar_analise():
                 mime="text/csv",
                 use_container_width=True
             )
+
+
+def _renderizar_indices_economicos():
+    """Renderiza a aba de visualização de Índices Econômicos"""
+    
+    st.markdown("### 📊 Índices Econômicos Disponíveis")
+    
+    # Carregar índices do backend
+    caminho_backend = os.path.join(os.path.dirname(__file__), "..", "..")
+    sys.path.insert(0, caminho_backend)
+    
+    try:
+        from backend.database import carregar_indices_json, obter_metadados_ultimo_upload_indices
+        
+        # Carregar dados de índices
+        dados_indices = carregar_indices_json()
+        
+        if dados_indices is None or not dados_indices.get("indices", {}):
+            st.warning(
+                "📭 Nenhum índice econômico carregado ainda.\n\n"
+                "Por favor, faça upload de um arquivo Excel com a aba 'INDICES_TESOU' "
+                "na página de **Upload de Dados** para visualizar os índices aqui."
+            )
+            return
+        
+        # Obter metadata
+        metadata = obter_metadados_ultimo_upload_indices()
+        
+        # ===== INFORMAÇÕES GERAIS =====
+        st.markdown("#### 📋 Informações Gerais")
+        
+        col_info1, col_info2, col_info3, col_info4 = st.columns(4)
+        
+        with col_info1:
+            total_registros = dados_indices["metadata"].get("total_linhas", 0)
+            st.metric("📊 Total de Registros", f"{total_registros:,}")
+        
+        with col_info2:
+            indices_unicos = dados_indices["metadata"].get("indices_unicos", 0)
+            st.metric("🏷️ Índices Únicos", f"{indices_unicos}")
+        
+        with col_info3:
+            total_colunas = dados_indices["metadata"].get("total_colunas", 0)
+            st.metric("📐 Total de Colunas", f"{total_colunas}")
+        
+        with col_info4:
+            if metadata:
+                data_upload = metadata.get("data_upload", "N/A")
+                st.metric("📅 Último Upload", data_upload.split("T")[0] if data_upload != "N/A" else "N/A")
+        
+        st.divider()
+        
+        # ===== FILTRO POR ÍNDICE =====
+        st.markdown("#### 🔍 Filtrar por Índice")
+        
+        # Obter lista de índices únicos
+        indices_disponiveis = sorted(dados_indices.get("indices", {}).keys())
+        
+        if not indices_disponiveis:
+            st.error("Nenhum índice encontrado nos dados carregados.")
+            return
+        
+        col_filtro1, col_filtro2 = st.columns([2, 1])
+        
+        with col_filtro1:
+            indice_selecionado = st.selectbox(
+                "Selecione o Índice:",
+                indices_disponiveis,
+                key="dre_indice_select"
+            )
+        
+        with col_filtro2:
+            # Botão para atualizar
+            if st.button("🔄 Atualizar", use_container_width=True):
+                st.rerun()
+        
+        st.divider()
+        
+        # ===== DADOS DO ÍNDICE SELECIONADO =====
+        if indice_selecionado:
+            dados_indice = dados_indices["indices"].get(indice_selecionado, [])
+            
+            if dados_indice:
+                st.markdown(f"#### 📈 Dados do Índice: **{indice_selecionado}**")
+                
+                # Converter para DataFrame
+                df_indice = pd.DataFrame(dados_indice)
+                
+                # Informações sobre o índice
+                col_info_ind1, col_info_ind2, col_info_ind3 = st.columns(3)
+                
+                with col_info_ind1:
+                    st.metric("📊 Registros", f"{len(df_indice):,}")
+                
+                with col_info_ind2:
+                    # Tentar obter data mínima e máxima
+                    try:
+                        datas = pd.to_datetime(df_indice["DT_ALVO"], errors="coerce").dropna()
+                        if len(datas) > 0:
+                            data_min = datas.min().strftime("%d/%m/%Y")
+                            st.metric("📅 Período (Início)", data_min)
+                    except:
+                        st.metric("📅 Período (Início)", "N/A")
+                
+                with col_info_ind3:
+                    try:
+                        datas = pd.to_datetime(df_indice["DT_ALVO"], errors="coerce").dropna()
+                        if len(datas) > 0:
+                            data_max = datas.max().strftime("%d/%m/%Y")
+                            st.metric("📅 Período (Fim)", data_max)
+                    except:
+                        st.metric("📅 Período (Fim)", "N/A")
+                
+                st.divider()
+                
+                # Opções de visualização
+                col_viz1, col_viz2 = st.columns(2)
+                
+                with col_viz1:
+                    st.markdown("**Primeiras 50 linhas:**")
+                    
+                    # Selecionar colunas importantes
+                    colunas_importante = []
+                    for col in ["DT_ALVO", "DT_PRJ", "VL_PJTD", "NM_IN"]:
+                        if col in df_indice.columns:
+                            colunas_importante.append(col)
+                    
+                    # Adicionar outras colunas
+                    outras_colunas = [c for c in df_indice.columns if c not in colunas_importante]
+                    colunas_exibir = colunas_importante + outras_colunas
+                    
+                    st.dataframe(
+                        df_indice[colunas_exibir].head(50),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                
+                with col_viz2:
+                    st.markdown("**Estatísticas:**")
+                    
+                    # Mostrar estatísticas das colunas numéricas
+                    colunas_numericas = df_indice.select_dtypes(include=[np.number]).columns
+                    
+                    if len(colunas_numericas) > 0:
+                        stats_data = {
+                            "Coluna": [],
+                            "Mínimo": [],
+                            "Máximo": [],
+                            "Média": [],
+                            "Desvio Padrão": []
+                        }
+                        
+                        for col in colunas_numericas:
+                            stats_data["Coluna"].append(col)
+                            stats_data["Mínimo"].append(f"{df_indice[col].min():.2f}")
+                            stats_data["Máximo"].append(f"{df_indice[col].max():.2f}")
+                            stats_data["Média"].append(f"{df_indice[col].mean():.2f}")
+                            stats_data["Desvio Padrão"].append(f"{df_indice[col].std():.2f}")
+                        
+                        df_stats = pd.DataFrame(stats_data)
+                        st.dataframe(df_stats, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Nenhuma coluna numérica encontrada para análise estatística.")
+                
+                st.divider()
+                
+                # ===== GRÁFICO DE VALORES =====
+                try:
+                    if "DT_ALVO" in df_indice.columns and "VL_PJTD" in df_indice.columns:
+                        st.markdown("**📊 Evolução de Valores**")
+                        
+                        # Preparar dados para gráfico
+                        df_grafico = df_indice[["DT_ALVO", "VL_PJTD"]].copy()
+                        df_grafico["DT_ALVO"] = pd.to_datetime(df_grafico["DT_ALVO"], errors="coerce")
+                        df_grafico = df_grafico.dropna().sort_values("DT_ALVO")
+                        
+                        if len(df_grafico) > 0:
+                            df_grafico_pivot = df_grafico.set_index("DT_ALVO")
+                            st.line_chart(df_grafico_pivot, use_container_width=True)
+                        else:
+                            st.info("Não há dados suficientes para gráfico.")
+                except Exception as e:
+                    st.warning(f"Erro ao gerar gráfico: {str(e)}")
+                
+                st.divider()
+                
+                # ===== EXPORTAR DADOS DO ÍNDICE =====
+                st.markdown("#### 💾 Exportar Dados do Índice")
+                
+                col_exp_ind1, col_exp_ind2 = st.columns(2)
+                
+                with col_exp_ind1:
+                    csv_export = df_indice.to_csv(index=False, sep=";")
+                    st.download_button(
+                        "📥 Baixar como CSV",
+                        data=csv_export,
+                        file_name=f"indice_{indice_selecionado}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+                
+                with col_exp_ind2:
+                    json_export = df_indice.to_json(orient="records", force_ascii=False)
+                    st.download_button(
+                        "📥 Baixar como JSON",
+                        data=json_export,
+                        file_name=f"indice_{indice_selecionado}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                        mime="application/json",
+                        use_container_width=True
+                    )
+            else:
+                st.error(f"Nenhum dado encontrado para o índice '{indice_selecionado}'")
+    
+    except ImportError as e:
+        st.error(f"❌ Erro ao carregar módulos do backend: {str(e)}")
+        st.info("Verifique se o backend está configurado corretamente.")
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar índices: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
