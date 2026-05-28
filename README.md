@@ -12,14 +12,15 @@ Sistema completo de análise e simulação de projeções financeiras desenvolvi
 - **📈 Upload Multi-Aba:** Arquivo Excel detecta automaticamente abas `DADOS` e `INDICES_TESOU` ✅
 - **🏗️ Armazenamento Independente:** Base de projeções e índices em arquivos separados ✅
 - **📊 Nova Aba "Índices Econômicos" na DRE:** 
-  - Visualização completa com 120+ registros de índices
-  - 5 índices econômicos únicos (IPCA, SELIC, IGP-M, DOLAR, IBOVESPA)
-  - Filtro por índice com dropdown
+  - Visualização completa com **1506 registros de índices**
+  - **50 índices econômicos únicos** (balanca_comercial, cds_5_anos, ipca, pib, dolar_ptax, igp_m, taxa_selic, e mais...)
+  - Filtro dinâmico por índice com dropdown (50 opções)
   - Tabela interativa com primeiras 50 linhas
-  - Exportação em CSV e JSON
+  - **18 colunas** de dados estruturados (DT_ALVO, DT_PRJ, VL_PJTD, NM_IN, VL_PRBB, CD_CNR, NM_CNR, etc.)
+  - Exportação em CSV (semicolon-separated) e JSON
 - **🔌 Backend Expandido:** Funções para carregar/gerenciar/exportar índices compartilhados ✅
 - **✨ Integração Completa:** Índices funcionando end-to-end com persistência ✅
-- **🧪 Validação:** Teste full-stack realizado com sucesso
+- **🧪 Validação:** Teste full-stack realizado com sucesso (1506 registros processados corretamente)
 
 ### ✅ [v2.4.2] - Correções de Save + Filtro Produto TODOS
 - **🐛 NameError Corrigido:** removida dependência de variável órfã (`salvar_clicked`) no simulador.
@@ -139,13 +140,14 @@ Sistema completo de análise e simulação de projeções financeiras desenvolvi
 - **Base Compartilhada:** Importação de índices econômicos de múltiplas fontes (BCB, FGV, B3)
 - **Visualização Completa:** 
   - Aba dedicada "Índices Econômicos" na página DRE
-  - Estatísticas: 120 registros, 5 índices únicos
-  - Filtro por índice (IPCA, SELIC, IGP-M, DOLAR, IBOVESPA)
+  - Estatísticas: **1506 registros, 50 índices únicos**
+  - Filtro dinâmico por índice (50 opções disponíveis)
   - Tabela interativa com primeiras 50 linhas
-  - Períodos com data primeira e data última
+  - Período de cobertura em formato tabular (data primeira e última)
+  - **18 colunas** com informações estruturadas
 - **Exportação:** CSV (semicolon-separated) e JSON
 - **Multi-Usuário:** Todos os usuários acessam a mesma base de índices
-- **Persistência:** Dados salvos em JSON estruturado para rápidas consultas
+- **Persistência:** Dados salvos em JSON estruturado + XLSX para rápidas consultas
 - **Sem Transformação:** Dados importados exatamente como no arquivo original
 
 ### �🔐 **Autenticação e Acesso**

@@ -16,7 +16,7 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 #### 🏗️ Armazenamento Separado e Persistente
 - Dados de projeções → `/uploads/base_dados_compartilhada.xlsx` (2.400 registros)
-- Índices econômicos → `/uploads/base_indices_compartilhada.xlsx` (120 registros)
+- Índices econômicos → `/uploads/base_indices_compartilhada.xlsx` (**1.506 registros**)
 - Índices estruturados → `/database/indices/indices_compartilhados.json`
 - Metadados → `/database/metadata/ultimo_upload_indices.json`
 
@@ -29,16 +29,16 @@ Histórico de alterações, bugs fixados e features implementadas.
 #### 📊 Nova Aba "Índices Econômicos" (DRE)
 - **Visualização Dedicada:** Aba totalmente nova na página DRE (`/dre?tab=Índices Econômicos`)
 - **Informações Gerais (Cards):**
-  - Total de Registros: 120
-  - Índices Únicos: 5
-  - Total de Colunas: 0 (N/A - configurável)
+  - Total de Registros: **1.506**
+  - Índices Únicos: **50**
+  - Total de Colunas: **18**
   - Último Upload: 2026-05-27
-- **Filtro por Índice:** Dropdown com seleção de IPCA, SELIC, IGP-M, DOLAR, IBOVESPA
+- **Filtro por Índice:** Dropdown com seleção de 50 índices (balanca_comercial, cds_5_anos, ipca, pib, dolar_ptax, igp_m, taxa_selic, e mais...)
 - **Dados do Índice:** Estatísticas por índice selecionado
-  - Registros: 24 (por índice)
-  - Período (Início): 2022-01-01
-  - Período (Fim): 2023-12-01
-- **Primeiras 50 Linhas:** Tabela interativa com colunas DT_ALVO, DT_PRJ, VL_PJTD, NM_IN, FONTE
+  - Registros por índice: 6-102 (conforme tipo de índice)
+  - Período (Início): 2020-01-01 (base compartilhada)
+  - Período (Fim): 2030-12-31 (projeções futuras)
+- **Primeiras 50 Linhas:** Tabela interativa com colunas DT_ALVO, DT_PRJ, VL_PJTD, NM_IN, VL_PRBB, CD_CNR, NM_CNR, TX_CFDD_PRJ, NM_TIP_CNR, CD_IEC, TIT_IN, NM_UND_MDD, NM_CTGR, NM_PERC, MM_PERC, TX_RGAO_GEO, TX_PRF_UMD_EXB, TX_SFX_UMD_EXB
 - **Estatísticas:** Análise de colunas numéricas (Min, Max, Mean, Std Dev)
 - **Exportação:** Botões para CSV (semicolon-separated) e JSON download
 
@@ -63,14 +63,18 @@ salvar_indices_json(dados_indices: Dict) → Tuple[bool, str]
 salvar_upload_admin(arquivo_excel: bytes, nome_arquivo: str, usuario_id: str) → Tuple[bool, str]
 ```
 
-#### 📊 Dados de Teste Inclusos
-- 5 índices econômicos pré-carregados:
-  - **IPCA:** 24 registros (Índice de Preços ao Consumidor)
-  - **SELIC:** 24 registros (Sistema Especial de Liquidação)
-  - **IGP-M:** 24 registros (Índice Geral de Preços)
-  - **DOLAR:** 24 registros (Cotação do Dólar - B3)
-  - **IBOVESPA:** 24 registros (Índice Bovespa - B3)
-- Período: 2022-01-01 a 2023-12-01 (24 meses)
+#### 📊 Dados Reais Importados
+- **50 índices econômicos** de múltiplas fontes:
+  - Inflação: IPCA (102 reg.), IGP-M (72 reg.), IGP-DI (102 reg.), INPC (72 reg.)
+  - Juros: taxa_selic (72 reg.), taxa_selic_efetiva_acm_12_meses (102 reg.), fed_funds (72 reg.)
+  - Câmbio: dolar_ptax (102 reg.), dolar_variacao_nominal (72 reg.)
+  - Atividade: PIB (102 reg.), PIB Agropecuária (70 reg.), PIB Indústria (70 reg.), PIB Serviços (70 reg.)
+  - Risco: EMBI Brasil (6 reg.), CDS 5 anos (36 reg.)
+  - Crédito: Crédito Total (6 reg.), Crédito Direcionado (6 reg.), Crédito Livre (6 reg.), e mais...
+  - Comércio: Balança Comercial (6 reg.), Exportações (6 reg.), Importações (6 reg.), etc.
+- **Período:** 2020-01-01 a 2030-12-31 (cobertura de 11 anos)
+- **1.506 registros no total** distribuídos entre 50 índices
+- **18 colunas** com informações estruturadas (datas, valores, metadados, unidades)
 - Arquivo: `bd_dados_v4_Real.xlsx`
 
 #### 🧪 Validação Completa (Full-Stack)
@@ -87,19 +91,23 @@ salvar_upload_admin(arquivo_excel: bytes, nome_arquivo: str, usuario_id: str) �
 - Single button "✔️ Confirmar e Carregar" funciona
 
 ✅ **DRE - Aba de Índices:**
-- Carregamento de 120 registros com sucesso
-- Filtro por índice funciona (5 opções disponíveis)
+- Carregamento de **1.506 registros** com sucesso
+- Filtro por índice funciona (**50 opções** disponíveis)
 - Tabela mostra primeiras 50 linhas com dados corretos
-- Exportação CSV/JSON disponível
+- Exportação CSV/JSON disponível e funcional
+- Estatísticas calculadas para todas as colunas numéricas
+- Período de cobertura de 11 anos (2020-2030)
 - Último upload: 2026-05-27
 
 ✅ **Logs de Backend:**
 ```
-[DB] Índices compartilhados carregados: 120 linhas
+[DB] Índices compartilhados carregados: 1506 linhas
+[DB] Índices únicos encontrados: 50
+[DB] Colunas estruturadas: 18
 [DB] === RESULTADO FINAL ===
 [DB] resultados['dados'] = True
 [DB] resultados['indices'] = True
-[DB] mensagem final: Base de Projeções: 2400 registros + Índices Econômicos: 120 registros (5 indices unicos)
+[DB] mensagem final: Base de Projeções: 2400 registros + Índices Econômicos: 1506 registros (50 indices unicos)
 ```
 
 #### 🛠️ Arquivos Alterados

@@ -1633,7 +1633,7 @@ def _renderizar_indices_economicos():
         col_info1, col_info2, col_info3, col_info4 = st.columns(4)
         
         with col_info1:
-            total_registros = dados_indices["metadata"].get("total_linhas", 0)
+            total_registros = dados_indices["metadata"].get("total_registros", 0)
             st.metric("📊 Total de Registros", f"{total_registros:,}")
         
         with col_info2:
@@ -1641,7 +1641,7 @@ def _renderizar_indices_economicos():
             st.metric("🏷️ Índices Únicos", f"{indices_unicos}")
         
         with col_info3:
-            total_colunas = dados_indices["metadata"].get("total_colunas", 0)
+            total_colunas = len(dados_indices["metadata"].get("colunas", []))
             st.metric("📐 Total de Colunas", f"{total_colunas}")
         
         with col_info4:
