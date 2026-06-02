@@ -15,6 +15,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_manager import set_dados_upload, get_dados_upload, salvar_upload_admin, eh_usuario_admin
+from utils_ext.icons import render_page_header
 
 # ==============================
 # Configurações / Constantes
@@ -222,8 +223,12 @@ def _consolidar_duplicatas(df: pd.DataFrame, metodo: str = "sum") -> pd.DataFram
 # Página
 # ==============================
 def renderizar():
-    st.markdown("### 📤 Upload da base de dados")
-    st.markdown("---")
+    # Header elegante padronizado
+    render_page_header(
+        "Upload de Dados",
+        "fa-cloud-arrow-up",
+        "Envie seus arquivos Excel com os dados de projeção"
+    )
     
     # ============== CONTROLE DE PERMISSÕES ==============
     if not eh_usuario_admin():

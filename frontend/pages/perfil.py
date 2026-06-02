@@ -7,13 +7,18 @@ from datetime import datetime
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils_ext.icons import render_page_header
 
 
 def renderizar():
     """Renderiza página de perfil"""
     
-    st.markdown("### 👤 Perfil do Usuário")
-    st.markdown("---")
+    # Header elegante padronizado
+    render_page_header(
+        "Perfil do Usuário",
+        "fa-id-card",
+        "Gerencie seus dados pessoais, segurança e histórico de acessos"
+    )
     
     tab1, tab2, tab3 = st.tabs(["👤 Dados Pessoais", "🔐 Segurança", "📝 Histórico"])
     

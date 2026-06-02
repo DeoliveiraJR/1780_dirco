@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_manager import get_dados_upload
 from utils_ext.series import _norm_txt, _mes_to_num, _ensure_cli_n
 from utils_ext.constants import MESES_ABR_LIST, CAT_COLORS
+from utils_ext.icons import render_page_header
 
 # ==============================
 # Constantes e Configurações
@@ -856,7 +857,12 @@ def renderizar():
     </style>
     """, unsafe_allow_html=True)
     
-    st.markdown("# 📊 Dashboard Analítico")
+    # Header elegante padronizado
+    render_page_header(
+        "Dashboard Analítico",
+        "fa-chart-pie",
+        "Visualize e analise os dados de DRE com gráficos interativos avançados"
+    )
     
     # Carregar dados
     df_upload = get_dados_upload()

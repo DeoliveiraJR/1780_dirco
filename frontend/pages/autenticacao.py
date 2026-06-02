@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from styles import CORES, CSS_CUSTOM, aplicar_tema
 from database import validar_login, inicializar_database, carregar_usuarios
+from utils_ext.icons import render_page_header
 
 def renderizar():
     # Inicializa database na primeira execução

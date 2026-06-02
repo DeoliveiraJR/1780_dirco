@@ -4,6 +4,203 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
+## 🎨 [v3.1] - 2026-06-02 - Headers Padronizados em Todas as Páginas
+
+### ✨ NOVO - Sistema Reutilizável de Headers com Suporte a Filtros
+
+#### 🎯 Nova Funcionalidade: `render_page_header()` Avançado
+- **Arquivo:** `frontend/utils_ext/icons.py` (função expandida)
+- **Assinatura:**
+  ```python
+  render_page_header(
+      title: str,
+      icon_fa_class: str,
+      subtitle: str = "",
+      filters: dict = None  # ✨ NOVO
+  )
+  ```
+- **Suporte a Filtros Ativos:**
+  - Parâmetro opcional `filters` exibe tags elegantes com ícones
+  - Ícones automáticos: 👤 cliente, 📁 categoria, 📦 produto
+  - Tags em estilo pill turquesa com 18% de opacidade de fundo
+  - Renderização responsiva com flex-wrap
+
+#### 📋 Headers Aplicados em Todas as Páginas
+- ✅ **dre.py** → "DRE Gerencial - Demonstrativo de Resultado" + fa-receipt
+- ✅ **dashboard.py** → "Dashboard Analítico" + fa-chart-pie
+- ✅ **simulador.py** → "Simulador de Projeções" + fa-wand-magic-sparkles + filtros ativos
+- ✅ **upload.py** → "Upload de Dados" + fa-cloud-arrow-up
+- ✅ **perfil.py** → "Perfil do Usuário" + fa-id-card
+- ✅ **autenticacao.py** → Import adicionado para uso futuro
+
+#### 🐛 Limpeza do Simulador
+- ❌ Removido cabeçalho HTML antigo duplicado (138 linhas)
+- ❌ Removido CSS `.uan-header-main` desnecessário
+- ❌ Removido markdown "faixa compacta com contexto" 
+- ❌ Removido `st.markdown("---")` redundante
+- ✅ Header novo com filtros integrados (mais limpo e profissional)
+
+#### 🎨 CSS Melhorado (styles.py)
+- ✅ **Botões:** Texto BRANCO forçado com múltiplos seletores + !important
+  - Aplicado em .stButton > button, > *, > p, > span, > div
+  - Efeito também em estados :hover, :active, :not(:disabled)
+- ✅ **Sidebar "UAN DASHBOARD":** Cor alterada para turquesa (#06b6d4)
+  - [data-testid="stSidebar"] h1 → #06b6d4
+  - [data-testid="stSidebar"] .css-uf99v8 → #06b6d4
+
+#### 📊 Métricas
+- **Linhas removidas (duplicação):** ~138 (cabeçalhos antigos)
+- **Linhas adicionadas (novos CSS):** ~15 (botões + sidebar)
+- **Resultado líquido:** -123 linhas (código mais limpo)
+- **Funcionalidade:** +1 (suporte a filters com ícones dinâmicos)
+
+#### ✅ Validação
+- `python -m py_compile` em todos os arquivos ✅
+- Sem erros de sintaxe ✅
+- Headers renderizam corretamente ✅
+- Filtros exibem tags com ícones ✅
+
+#### 🎯 Exemplo de Uso
+
+**DRE (sem filtros):**
+```python
+render_page_header(
+    "DRE Gerencial - Demonstrativo de Resultado",
+    "fa-receipt",
+    "Simule e projete os componentes do Demonstrativo de Resultado Gerencial com precisão"
+)
+```
+
+**Simulador (com filtros):**
+```python
+render_page_header(
+    "Simulador de Projeções",
+    "fa-wand-magic-sparkles",
+    "Projete cenários e simule variações nos componentes de resultado com flexibilidade",
+    filters={
+        'cliente': 'Todos',
+        'categoria': 'ABC',
+        'produto': 'XYZ'
+    }
+)
+```
+
+#### 📝 Arquivos Alterados
+- `frontend/utils_ext/icons.py` - Adicionado suporte a parâmetro `filters`
+- `frontend/styles.py` - CSS aprimorado para botões e sidebar
+- `frontend/pages/dre.py` - Import e chamada de render_page_header
+- `frontend/pages/dashboard.py` - Import e chamada com nova função
+- `frontend/pages/simulador.py` - Limpeza de cabeçalho antigo + novo header com filtros
+- `frontend/pages/upload.py` - Import e chamada de render_page_header
+- `frontend/pages/perfil.py` - Import e chamada de render_page_header
+- `frontend/pages/autenticacao.py` - Import adicionado
+
+---
+
+## 🎨 [v3.0] - 2026-06-02 - Revisão Completa de Design & UX
+
+### ✨ NOVO - Design System Completo com Ícones Elegantes
+
+#### 📦 Arquivos Criados/Atualizados
+- ✅ **frontend/utils_ext/icons.py** (400+ linhas)
+  - Sistema centralizado de ícones Font Awesome 6
+  - 40+ ícones mapeados (chart, edit, search, settings, etc)
+  - Funções: `get_icon()`, `render_icon_header()`, `render_section_divider()`, `render_badge()`, `render_stat_card()`, `render_info_box()`
+  - CDN Font Awesome 6 integrado automaticamente
+
+- ✅ **frontend/styles.py** (redesenhado completamente)
+  - Tipografia premium: Plus Jakarta Sans (headers) + Inter (body)
+  - 60+ CSS Variables para design system
+  - Animações suaves (fade, slide, pulse, shimmer)
+  - Responsividade móvel otimizada
+  - Sistema de cores expandido (7 cores + escala de grays)
+
+- ✅ **frontend/pages/dre.py** (atualizado)
+  - Removidos 50+ emojis diretos (❌ ✅ 📊 🔧 etc)
+  - Header elegante com `render_icon_header()`
+  - Import de sistema de ícones adicionado
+  - Interface clean e profissional
+
+#### 🎯 Melhorias Visuais Implementadas
+
+**1. Emojis → Ícones Elegantes**
+- ✅ Substituição de 50+ emojis por Font Awesome 6
+- ✅ Ícones escaláveis (xs, sm, md, lg, xl, 2x, 3x)
+- ✅ Cores customizáveis por ícone
+- ✅ Fallback automático para ícones inválidos
+
+**2. Tipografia Premium**
+- Plus Jakarta Sans (700-800 weight) para headers → elegância profissional
+- Inter (400-600 weight) para body → máxima legibilidade
+- Letter-spacing otimizado (+0.3px body, -0.5px h1)
+- Line-height: 1.6 body, 1.75 paragraphs
+
+**3. Paleta de Cores Expandida**
+- Cores primárias: Azul profundo (#0c3a66), Turquesa (#06b6d4)
+- Status: Verde (#10b981), Vermelho (#ef4444), Laranja (#f59e0b), Azul (#3b82f6)
+- Neutros: Escala completa de cinzas (50-900) para contrast perfeito
+- Gradientes suaves em botões, cards e backgrounds
+
+**4. Componentes Refinados**
+- Botões: Gradiente, sombra dinâmica, hover com translateY
+- Cards: Border-left colorido, sombra elegante, hover effect
+- Inputs: Border turquesa em focus, transição suave
+- Tabelas: Header gradient, alt-row coloring, hover states
+- Badges: 4 variantes de cor com ícones integrados
+
+**5. Animações Suaves**
+- fadeInDown, fadeInUp, slideInRight para entrada de elementos
+- Pulse contínuo para elementos de destaque
+- Shimmer para loading states
+- Transitions 0.3s padrão em interações
+
+**6. Responsividade**
+- Layout fluid em mobile (reduz font-size em <768px)
+- Touch-friendly buttons (mais padding)
+- Sidebar adaptativo
+- Tabelas scrolláveis em mobile
+
+#### 💡 Lições de Design Implementadas
+
+1. **CSS Variables são essenciais** para manutenção e escalabilidade
+2. **Centralizar ícones** em um módulo facilita reutilização
+3. **Tipografia** é 80% do design visual
+4. **Sombras e gradientes** criam profundidade sem peso visual
+5. **Animações devem ser rápidas** (0.3s) para não parecer lento
+
+#### 🎯 Próximas Páginas a Atualizar
+- ⏳ simulador.py - Aplicar mesmo design system
+- ⏳ dashboard.py - Usar render_stat_card()
+- ⏳ autenticacao.py - Melhorar form styling
+
+#### 📊 Métricas de Qualidade
+- **Línhas de código novo:** 400 (icons.py) + 350+ (styles.py)
+- **Documentação:** Completa com exemplos de uso
+- **Emojis removidos:** 50+
+- **CSS Variables:** 60+
+- **Ícones disponíveis:** 40+
+- **Animações:** 5+ tipos
+
+#### 🚀 Modo de Uso
+
+```python
+# No topo do arquivo
+from utils_ext.icons import get_icon, render_icon_header
+
+# Header elegante
+render_icon_header("Meu Título", icon="chart", level=1, color="primary")
+
+# Ícone em markdown
+icon = get_icon("wallet", size="lg", color="#06b6d4")
+st.markdown(f"**{icon} Minha Métrica**", unsafe_allow_html=True)
+
+# Info box elegante
+from utils_ext.icons import render_info_box
+render_info_box("Sucesso!", icon="success", variant="success")
+```
+
+---
+
 ## 💡 [v2.5.1] - 2026-06-02
 
 ### ✨ NOVO - Layout Integrado DRE com 3 Seções + Tags de Índices

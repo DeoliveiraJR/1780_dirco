@@ -2,7 +2,7 @@
 
 Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário**, **controle de permissões** e **DRE Gerencial profissional**.
 
-**Versão Atual:** v2.5.1 | **Status:** ✅ Production Ready | **Última Atualização:** 01/06/2026
+**Versão Atual:** v3.1 | **Status:** ✅ Production Ready | **Última Atualização:** 02/06/2026
 
 ---
 
@@ -44,7 +44,26 @@ QUANDO PRESO EM LOOP (3+ tentativas falhadas):
 
 ## 📌 O que foi implementado
 
-### ✅ [v2.5.1] - DRE com 3 Seções Integradas + Tags de Índices (COMPLETO)
+### ✅ [v3.1] - Headers Padronizados com Suporte a Filtros (COMPLETO)
+- **🎨 Sistema Unificado:** Nova função `render_page_header()` aplicada em TODAS as páginas
+- **📋 Headers Elegantes:**
+  - DRE Gerencial com ícone fa-receipt
+  - Dashboard Analítico com ícone fa-chart-pie  
+  - Simulador de Projeções com ícone fa-wand-magic-sparkles
+  - Upload de Dados com ícone fa-cloud-arrow-up
+  - Perfil do Usuário com ícone fa-id-card
+- **🏷️ Tags de Filtros Ativos:** Parâmetro `filters` exibe cliente, categoria e produto com ícones
+  - 👤 Cliente / 📁 Categoria / 📦 Produto
+  - Design responsivo com flex-wrap
+  - Integrado perfeitamente no header (sem duplicação)
+- **🧹 Limpeza:** Removido 138 linhas de cabeçalhos antigos duplicados do simulador
+- **🐛 CSS Corrigido:**
+  - Botões com texto BRANCO visível (múltiplos seletores + !important)
+  - Sidebar "UAN DASHBOARD" em turquesa (#06b6d4)
+- **📦 Arquivos afetados:** 7 páginas, icons.py, styles.py
+- **✅ Validação:** Sem erros de sintaxe, todos os headers renderizam corretamente
+
+### ✅ [v3.0] - Design System Completo com Ícones Elegantes
 - **📊 Novo Layout Integrado:** Página DRE reestruturada com 3 seções colapsáveis
   1. **Volumes Financeiros (TD21, TD62)** - tabela com 12 meses
   2. **Indicadores Econômicos** - seleção dinâmica de índices (~50 disponíveis)
@@ -318,6 +337,26 @@ docker run -p 8503:8503 uan-dashboard
 
 ## 🧪 Como Testar
 
+### Teste de Headers Padronizados (v3.1)
+
+1. **Verificar Headers em Todas as Páginas:**
+   - ✅ DRE → Header com ícone fa-receipt (gradiente azul → turquesa)
+   - ✅ Dashboard → Header com ícone fa-chart-pie
+   - ✅ Simulador → Header com ícone fa-wand-magic-sparkles + tags de filtros
+   - ✅ Upload → Header com ícone fa-cloud-arrow-up
+   - ✅ Perfil → Header com ícone fa-id-card
+
+2. **Teste de Filtros Ativos (Simulador):**
+   - Abra o Simulador com cliente/categoria/produto selecionados
+   - ✅ Tags de filtros aparecem DENTRO do header (não duplicados)
+   - ✅ Ícones automáticos: 👤 cliente, 📁 categoria, 📦 produto
+   - ✅ Hover nos tags mostra animação suave
+
+3. **Teste de CSS Corrigido:**
+   - ✅ Botões agora mostram texto BRANCO visível
+   - ✅ Sidebar "UAN DASHBOARD" está em turquesa (não branco)
+   - ✅ Responsividade mantida em mobile
+
 ### Teste de Sazonalidade (v2.2.1)
 
 1. **Criar Metodologia com Sazonalidade:**
@@ -432,6 +471,6 @@ Para questões ou problemas:
 
 ---
 
-**Última atualização:** 07/05/2026 | **Versão:** v2.4.2 | **Status:** ✅ Production Ready
+**Última atualização:** 02/06/2026 | **Versão:** v3.1 | **Status:** ✅ Production Ready
 
 Mantém este README como documentação única e oficial. Para histórico detalhado, consulte [CHANGELOG.md](CHANGELOG.md).

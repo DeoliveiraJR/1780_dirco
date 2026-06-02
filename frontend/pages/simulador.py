@@ -16,7 +16,7 @@ from bokeh.layouts import column, row
 from bokeh.transform import dodge
 from streamlit_bokeh import streamlit_bokeh
 from components.bokeh_editable import (
-    bokeh_editable, get_bokeh_updates, limpar_localStorage
+    bokeh_editable, get_bokeh_update_packet, limpar_localStorage
 )
 
 from utils_ext.css import make_stylesheet
@@ -24,6 +24,7 @@ from utils_ext.formatters import fmt_br
 from utils_ext.series import (
     _norm_txt, _mes_to_num, _variacao_mensal, _ensure_cli_n, _mask_trailing_zeros
 )
+from utils_ext.icons import render_page_header
 from utils_ext.constants import (
     MESES_FULL, MESES_NUM, MESES_ABR, MESES_ABR_LIST,
     COR_ANALITICA, COR_MERCADO, COR_AJUSTADA, COR_RLZD_BASE,
@@ -133,42 +134,18 @@ def renderizar():
     else:
         produto_label = sim_produto if sim_produto else "Selecione um produto"
 
-    st.markdown(
-        f"""
-        <div style="background: linear-gradient(135deg, #0c3a66 0%, #06b6d4 100%);
-                    padding: 24px; border-radius: 12px; margin-bottom: 14px;
-                    box-shadow: 0 8px 16px rgba(0,0,0,0.10);">
-            <div style="margin: 0; font-size: 42px; line-height: 1; font-weight: 800;
-                        color: #ffffff !important; -webkit-text-fill-color: #ffffff !important;
-                        text-shadow: 0 1px 2px rgba(0,0,0,0.25); letter-spacing: 0.2px;">
-                🎯 Simulador de Projeções
-            </div>
-            <p style="color: rgba(255,255,255,0.92); margin: 8px 0 0 0; font-size: 13px;">
-                Ajuste cenários, simule curvas e acompanhe impactos por categoria e produto.
-            </p>
-            <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px;">
-                <span style="background: rgba(255,255,255,0.18); color: #ffffff; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;">👤 {cliente_label}</span>
-                <span style="background: rgba(255,255,255,0.18); color: #ffffff; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;">📁 {categoria_label}</span>
-                <span style="background: rgba(255,255,255,0.18); color: #ffffff; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;">📦 {produto_label}</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # Faixa compacta com contexto do filtro atual
-    st.markdown(
-        f"""
-        <div style="background:#eff6ff;border-left:4px solid #06b6d4;border-radius:8px;padding:8px 12px;margin-bottom:12px;">
-            <p style="margin:0;font-size:0.84rem;color:#0c3a66;font-weight:600;">
-                ✓ Contexto ativo: {cliente_label} • {categoria_label} • {produto_label}
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    # ==================== HEADER ELEGANTE COM FILTROS ====================
+    render_page_header(
+        "Simulador de Projeções",
+        "fa-wand-magic-sparkles",
+        "Projete cenários e simule variações nos componentes de resultado com flexibilidade",
+        filters={
+            'cliente': cliente_label,
+            'categoria': categoria_label,
+            'produto': produto_label
+        }
     )
     
-    st.markdown("---")
     # ==================== LÓGICA DO SIMULADOR ====================
     # Usa filtros da sidebar sincronizados em st.session_state["filtros"]
     cliente  = sim_cliente
@@ -242,43 +219,94 @@ def renderizar():
         st.session_state["sync_fetch_retry"] = 0
     if "_last_auto_bokeh_vals" not in st.session_state:
         st.session_state["_last_auto_bokeh_vals"] = None
+    if "_last_bokeh_sync_ts" not in st.session_state:
+        st.session_state["_last_bokeh_sync_ts"] = {}
 
     sync_counter = st.session_state.get("sync_counter", 0)
 
-    # ==================== LEITURA AUTOMÁTICA DO LOCALSTORAGE ====================
-    # SEMPRE tenta ler localStorage para manter session_state["ajustada"] sincronizado
-    # Não depende do botão "Sincronizar" - isso é automático a cada renderização
     print(f"[DEBUG] Ciclo de render: combo={combo}, combo_mudou={combo_mudou}")
-    
-    # Usa chave variável por render para evitar cache de None no streamlit_js_eval
-    auto_sync_counter = int(st.session_state.get("_auto_sync_counter", 0)) + 1
-    st.session_state["_auto_sync_counter"] = auto_sync_counter
-    valores_localStorage_auto = get_bokeh_updates(
-        key=f"sim_bokeh_{combo}",
-        sync_counter=auto_sync_counter
-    )
-    
-    if valores_localStorage_auto is not None and len(valores_localStorage_auto) == 12:
-        print(f"[DEBUG] ✓ localStorage auto-sync: {[f'{v:.0f}' for v in valores_localStorage_auto[:3]]}...")
-        st.session_state["_pending_sync_ajustada12"] = [float(v) for v in valores_localStorage_auto]
-    else:
-        print(f"[DEBUG] ✗ localStorage read returned None")
-    
-    # ==================== LEITURA DO LOCALSTORAGE (BOTÃO SINCRONIZAR - LEGADO) ====================
-    if sync_counter > 0 and not combo_mudou:
-        retry = int(st.session_state.get("sync_fetch_retry", 0))
-        # Chave fixa para este ciclo — não muda no retry para que o 2º render retorne valor
-        sync_key_cycle = sync_counter * 100
-        valores_localStorage = get_bokeh_updates(key=f"sim_bokeh_{combo}", sync_counter=sync_key_cycle)
 
-        if valores_localStorage is not None and len(valores_localStorage) == 12:
-            st.session_state["_pending_sync_ajustada12"] = [float(v) for v in valores_localStorage]
-            st.session_state["_last_auto_bokeh_vals"]    = [float(v) for v in valores_localStorage]
+    # ==================== LEITURA DO LOCALSTORAGE (sempre no combo atual) ====================
+    # O Enter já provoca rerender neste fluxo. Então lemos o browser em todo render do combo
+    # para aplicar a edição sem depender de clique no botão Sincronizar.
+    MAX_SYNC_RENDERS = 4
+    if not combo_mudou:
+        packet_localStorage = get_bokeh_update_packet(
+            key=f"sim_bokeh_{combo}",
+            sync_counter=sync_counter,
+        )
+        if packet_localStorage:
+            valores_localStorage = packet_localStorage.get("values")
+            ts_localStorage = int(packet_localStorage.get("timestamp") or 0)
+            probe_localStorage = packet_localStorage.get("probe") if isinstance(packet_localStorage.get("probe"), dict) else None
+            sync_probe_localStorage = packet_localStorage.get("sync_probe") if isinstance(packet_localStorage.get("sync_probe"), dict) else None
+            last_ts_map = st.session_state.get("_last_bokeh_sync_ts", {})
+            last_ts_combo = int(last_ts_map.get(combo, 0))
+            last_vals = st.session_state.get("_last_auto_bokeh_vals")
+
+            try:
+                if isinstance(valores_localStorage, list) and len(valores_localStorage) == 12:
+                    print(
+                        f"[SYNC-TRACE] combo={combo} ts={ts_localStorage} last_ts={last_ts_combo} "
+                        f"vals_head={[round(float(v), 2) for v in valores_localStorage[:3]]} "
+                        f"vals_jul_idx6={round(float(valores_localStorage[6]), 2)} "
+                        f"probe={probe_localStorage} sync_probe={sync_probe_localStorage}"
+                    )
+                else:
+                    print(
+                        f"[SYNC-TRACE] combo={combo} ts={ts_localStorage} last_ts={last_ts_combo} "
+                        f"sem_vals probe={probe_localStorage} sync_probe={sync_probe_localStorage}"
+                    )
+            except Exception:
+                pass
+
+            is_new_revision = ts_localStorage > last_ts_combo
+            same_as_last = (
+                isinstance(last_vals, list)
+                and len(last_vals) == 12
+                and isinstance(valores_localStorage, list)
+                and len(valores_localStorage) == 12
+                and all(abs(float(a) - float(b)) <= 1e-9 for a, b in zip(last_vals, valores_localStorage))
+            )
+
+            # Aceita revisão por timestamp NOVO ou por diferença real de valores.
+            # Isso evita perda de edição quando houver colisão de timestamp ou atraso de atualização do ts.
+            if isinstance(valores_localStorage, list) and len(valores_localStorage) == 12 and (is_new_revision or not same_as_last):
+                st.session_state["_pending_sync_ajustada12"] = [float(v) for v in valores_localStorage]
+                st.session_state["_last_auto_bokeh_vals"] = [float(v) for v in valores_localStorage]
+                if ts_localStorage > 0:
+                    last_ts_map[combo] = ts_localStorage
+                    st.session_state["_last_bokeh_sync_ts"] = last_ts_map
+                print(f"[SYNC] ✓ localStorage novo (ts={ts_localStorage}): {[f'{v:.0f}' for v in valores_localStorage[:3]]}...")
+            elif isinstance(valores_localStorage, list) and len(valores_localStorage) == 12:
+                print(f"[SYNC] • localStorage ignorado (stale ts={ts_localStorage}, last_ts={last_ts_combo})")
+        else:
+            print(f"[SYNC-TRACE] combo={combo} sem_packet_localStorage")
+
+        # Mantém o mecanismo de retry somente quando o usuário dispara ciclo manual.
+        if sync_counter > 0:
+            sync_fetch_retry = int(st.session_state.get("sync_fetch_retry", 0)) + 1
+            st.session_state["sync_fetch_retry"] = sync_fetch_retry
+
+            tem_pending_sync = isinstance(st.session_state.get("_pending_sync_ajustada12"), list)
+            if tem_pending_sync:
+                print(f"[SYNC] pending_sync já disponível no render {sync_fetch_retry}")
+                st.session_state["sync_counter"] = 0
+                st.session_state["sync_fetch_retry"] = 0
+            elif sync_fetch_retry < MAX_SYNC_RENDERS:
+                print(f"[SYNC] retry {sync_fetch_retry}/{MAX_SYNC_RENDERS} aguardando leitura do browser")
+                st.session_state["sync_counter"] = sync_counter or 1
+                st.rerun()
+            else:
+                print(f"[SYNC] esgotou retries ({MAX_SYNC_RENDERS}) sem obter valores")
+                st.session_state["sync_counter"] = 0
+                st.session_state["sync_fetch_retry"] = 0
+        else:
             st.session_state["sync_fetch_retry"] = 0
-        elif retry < 2:
-            # 1ª renderização da chave retorna None → rerun com MESMA chave → 2ª renderização retorna valor
-            st.session_state["sync_fetch_retry"] = retry + 1
-            st.rerun()
+    else:
+        print(f"[SYNC-TRACE] polling inativo (combo_mudou={combo_mudou})")
+        st.session_state["sync_counter"] = 0
+        st.session_state["sync_fetch_retry"] = 0
     
     # Carrega os valores dos estados (FONTE DE VERDADE) - SERÁ REDEFINIDO DEPOIS COM OS DADOS CORRETOS
     
@@ -421,13 +449,17 @@ def renderizar():
             mes_idx = mes_abs % 12  # Wrap para 0-11
         indices_proximo_12m.append(mes_idx)
 
-    # Aplica sincronização pendente (salva ANTES de combo_mudou para evitar perda)
-    if pending_sync_pre is not None and len(pending_sync_pre) == 12:
-        print(f"[SYNC-DEBUG] Aplicando pending_sync_pre: {[f'{v:.0f}' for v in pending_sync_pre[:3]]}...")
+    # Aplica sincronização pendente (suporta pré-sync e sync do ciclo atual)
+    def _aplicar_pending_sync(pending_vals, tag):
+        if pending_vals is None or len(pending_vals) != 12:
+            print(f"[SYNC-DEBUG] Nenhum pending_sync para aplicar ({tag})")
+            return None
+
+        print(f"[SYNC-DEBUG] Aplicando pending_sync ({tag}): {[f'{v:.0f}' for v in pending_vals[:3]]}...")
         cur = st.session_state.get("ajustada", ajustada_base[:])
         if len(cur) != len(ajustada_base):
             cur = ajustada_base[:]
-        for i, v in enumerate(pending_sync_pre):
+        for i, v in enumerate(pending_vals):
             idx = indices_proximo_12m[i]
             try:
                 print(f"[SYNC-DEBUG]   [{i}] pending_sync[{i}]={v:.0f} -> ajustada[{idx}]")
@@ -436,9 +468,25 @@ def renderizar():
                 pass
         print(f"[SYNC-DEBUG] Após aplicação: ajustada={[f'{x:.0f}' for x in cur]}")
         st.session_state["ajustada"] = cur
-        ajustada = cur
-    else:
-        print(f"[SYNC-DEBUG] Nenhum pending_sync para aplicar")
+        return cur
+
+    ajustada_sync = _aplicar_pending_sync(pending_sync_pre, "pre")
+    if ajustada_sync is not None:
+        ajustada = ajustada_sync
+
+    # Aplica também o sync capturado NESTE ciclo de render
+    pending_sync_now = st.session_state.pop("_pending_sync_ajustada12", None)
+    if isinstance(pending_sync_now, list) and len(pending_sync_now) == 12:
+        try:
+            print(
+                f"[SYNC-TRACE] pending_now recebido head={[round(float(v), 2) for v in pending_sync_now[:3]]} "
+                f"jul_idx6={round(float(pending_sync_now[6]), 2)}"
+            )
+        except Exception:
+            pass
+    ajustada_sync_now = _aplicar_pending_sync(pending_sync_now, "now")
+    if ajustada_sync_now is not None:
+        ajustada = ajustada_sync_now
     
     # st.write(f"[DEBUG] indices_proximo_12m: {indices_proximo_12m}")
     # st.write(f"[DEBUG] len(ajustada): {len(ajustada)}, max(indices_proximo_12m): {max(indices_proximo_12m)}")
@@ -450,6 +498,21 @@ def renderizar():
     
     # Calcula o incremento líquido para o painel
     incremento_liquido = [ajustada[indices_proximo_12m[i]] - analitica[indices_proximo_12m[i]] for i in range(12)]
+
+    # **SERÁ ATUALIZADO APÓS CRIAR src_ajs** com estes dados
+
+    def _fmt_delta_resumido(valor):
+        try:
+            vv = float(valor)
+        except Exception:
+            return "—"
+        sinal = "+" if vv > 0 else ""
+        abs_val = abs(vv)
+        if abs_val >= 1e9:
+            return f"{sinal}{vv / 1e9:.1f}B"
+        if abs_val >= 1e6:
+            return f"{sinal}{vv / 1e6:.1f}M"
+        return f"{sinal}{vv:,.0f}".replace(",", ".")
 
     # ==================== HANDLER DO BOTÃO SALVAR ====================
     # Executado AQUI (após pending_sync aplicado e ajustada atualizado)
@@ -464,10 +527,25 @@ def renderizar():
         # Força leitura do localStorage no instante do save para capturar a última edição da tabela
         save_sync_counter = int(st.session_state.get("_save_sync_counter", 0)) + 1
         st.session_state["_save_sync_counter"] = save_sync_counter
-        valores_save = get_bokeh_updates(
+        packet_save = get_bokeh_update_packet(
             key=f"sim_bokeh_{combo}",
             sync_counter=1_000_000 + save_sync_counter
         )
+        valores_save = packet_save.get("values") if packet_save else None
+        ts_save = int(packet_save.get("timestamp") or 0) if packet_save else 0
+        probe_save = packet_save.get("probe") if packet_save and isinstance(packet_save.get("probe"), dict) else None
+
+        try:
+            if isinstance(valores_save, list) and len(valores_save) == 12:
+                print(
+                    f"[SAVE-TRACE] combo={combo} ts={ts_save} "
+                    f"vals_head={[round(float(v), 2) for v in valores_save[:3]]} "
+                    f"jul_idx6={round(float(valores_save[6]), 2)} probe={probe_save}"
+                )
+            else:
+                print(f"[SAVE-TRACE] combo={combo} sem_vals ts={ts_save} probe={probe_save}")
+        except Exception:
+            pass
 
         if valores_save is not None and len(valores_save) == 12:
             cur_save = st.session_state.get("ajustada", ajustada_base[:])
@@ -662,8 +740,7 @@ def renderizar():
                     delta_html = ""
                     if abs(inc) > 0:
                         delta_class = "pos" if inc > 0 else "neg"
-                        sinal = "+" if inc > 0 else ""
-                        delta_html = f'<span class="mes-delta {delta_class}">{sinal}{inc/1e6:.1f}M</span>'
+                        delta_html = f'<span class="mes-delta {delta_class}">{_fmt_delta_resumido(inc)}</span>'
                     
                     # Layout: botão(-) - card - botão(+) - botão(⬇️ replicar)
                     c1, c2, c3, c4 = st.columns([1, 5, 1, 1])
@@ -717,14 +794,22 @@ def renderizar():
 
     # -------------------- GRÁFICO PRINCIPAL ----------------------------------
     # O gráfico usa dados dos PRÓXIMOS 12 MESES, extraídos de analitica/mercado/ajustada (Jan-Dez)
-    src_ana = ColumnDataSource(dict(x=meses_numeros, y=analitica_proximos12))
-    src_mer = ColumnDataSource(dict(x=meses_numeros, y=mercado_proximos12))
+    src_ana = ColumnDataSource(dict(x=meses_numeros, y=analitica_proximos12), name="src_ana_main")
+    src_mer = ColumnDataSource(dict(x=meses_numeros, y=mercado_proximos12), name="src_mer_main")
     src_ajs = ColumnDataSource(dict(
         x=meses_numeros,
         xm=meses_rotulos,  # Usa rótulos dos próximos 12 meses
         y=ajustada_proximos12,  # Extrai dados dos próximos 12 meses
         y_br=[fmt_br(v, 0) for v in ajustada_proximos12]
-    ))
+    ), name="src_ajs_main")
+
+    # Sempre atualizar src_ajs após recalcular ajustada_proximos12 (em caso de sincronização)
+    src_ajs.data = dict(
+        x=meses_numeros,
+        xm=meses_rotulos,
+        y=ajustada_proximos12,
+        y_br=[fmt_br(v, 0) for v in ajustada_proximos12]
+    )
 
     p = figure(
         height=400, sizing_mode="stretch_width",
@@ -1261,8 +1346,8 @@ def renderizar():
                                 help="Aplicar alterações do drag-and-drop",
                                 use_container_width=True)
         if sync_clicked:
-            st.session_state["sync_fetch_retry"] = 0
             st.session_state["sync_counter"] = sync_counter + 1
+            st.session_state["sync_fetch_retry"] = 0
             st.rerun()
     
     with col_reset:
@@ -1626,7 +1711,19 @@ def renderizar():
         TableColumn(field=f"Var_Mer_{ano_atual_str}_Disp", title="VAR % MERC", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
         TableColumn(field=f"Ajustada_{ano_atual_str}_Disp", title="AJUSTADA", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
         TableColumn(field=f"Var_Ajs_{ano_atual_str}_Disp", title="VAR % AJS", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Ajuste_{ano_atual_str}", title="✨ AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template='<span style="background:<%= value >= 0 ? "#ecfdf5" : "#fef2f2" %>;border:1px solid <%= value >= 0 ? "#86efac" : "#fca5a5" %>;padding:2px 6px;border-radius:4px;color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:700;"><%= (value == null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + value.toLocaleString("pt-BR", {maximumFractionDigits:0})) %></span>'), editor=NumberEditor(step=1))
+        TableColumn(field=f"Ajuste_{ano_atual_str}", title="✨ AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template='\
+            <%\
+            function fmtShortSigned(val){\
+                if (val == null || isNaN(val)) return "—";\
+                const n = Number(val);\
+                const s = n >= 0 ? "+" : "";\
+                const a = Math.abs(n);\
+                if (a >= 1e9) return s + (n/1e9).toFixed(1) + "B";\
+                if (a >= 1e6) return s + (n/1e6).toFixed(1) + "M";\
+                return s + n.toLocaleString("pt-BR", {maximumFractionDigits:0});\
+            }\
+            %>\
+            <span style="background:<%= value >= 0 ? "#ecfdf5" : "#fef2f2" %>;border:1px solid <%= value >= 0 ? "#86efac" : "#fca5a5" %>;padding:2px 6px;border-radius:4px;color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:700;"><%= fmtShortSigned(value) %></span>'), editor=NumberEditor(step=1))
     ])
     
     # ============ PROJEÇÕES 2027 ============
@@ -1641,7 +1738,19 @@ def renderizar():
         TableColumn(field=f"Var_Mer_{ano_prox_str}_Disp", title="VAR % MERC", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
         TableColumn(field=f"Ajustada_{ano_prox_str}_Disp", title="AJUSTADA", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
         TableColumn(field=f"Var_Ajs_{ano_prox_str}_Disp", title="VAR % AJS", formatter=HTMLTemplateFormatter(template=SIMPLE_HTML_TMPL)),
-        TableColumn(field=f"Ajuste_{ano_prox_str}", title="✨ AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template='<span style="background:<%= value >= 0 ? "#ecfdf5" : "#fef2f2" %>;border:1px solid <%= value >= 0 ? "#86efac" : "#fca5a5" %>;padding:2px 6px;border-radius:4px;color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:700;"><%= (value == null || isNaN(value)) ? "—" : ((value >= 0 ? "+" : "") + value.toLocaleString("pt-BR", {maximumFractionDigits:0})) %></span>'), editor=NumberEditor(step=1))
+        TableColumn(field=f"Ajuste_{ano_prox_str}", title="✨ AJUSTE (+/-)", formatter=HTMLTemplateFormatter(template='\
+            <%\
+            function fmtShortSigned(val){\
+                if (val == null || isNaN(val)) return "—";\
+                const n = Number(val);\
+                const s = n >= 0 ? "+" : "";\
+                const a = Math.abs(n);\
+                if (a >= 1e9) return s + (n/1e9).toFixed(1) + "B";\
+                if (a >= 1e6) return s + (n/1e6).toFixed(1) + "M";\
+                return s + n.toLocaleString("pt-BR", {maximumFractionDigits:0});\
+            }\
+            %>\
+            <span style="background:<%= value >= 0 ? "#ecfdf5" : "#fef2f2" %>;border:1px solid <%= value >= 0 ? "#86efac" : "#fca5a5" %>;padding:2px 6px;border-radius:4px;color:<%= value >= 0 ? "#059669" : "#dc2626" %>;font-weight:700;"><%= fmtShortSigned(value) %></span>'), editor=NumberEditor(step=1))
     ])
 
     tbl_hist = DataTable(
@@ -1665,9 +1774,89 @@ def renderizar():
             ano_atual=ano_atual,
             ano_prox=ano_projecao_proxima,
             protected_cols=protected_non_ajuste_cols,
+            storage_key=f"bokeh_update_sim_bokeh_{combo}",
         ),
         code="""
         const d = tbl.data;
+
+        function triggerSafeSync() {
+            try {
+                const parentWindow = window.parent;
+                parentWindow.clearInterval(parentWindow.__uanHistSyncTimer);
+                let attempts = 0;
+                const maxAttempts = 25;
+
+                const tryClick = () => {
+                    attempts += 1;
+                    try {
+                        const buttons = Array.from(parentWindow.document.querySelectorAll('button'));
+                        const syncBtn = buttons.find((btn) => {
+                            const label = (btn.textContent || '').replace(/\\s+/g, ' ').trim();
+                            return label.includes('Sincronizar');
+                        });
+
+                        if (syncBtn) {
+                            try {
+                                parentWindow.localStorage.setItem(storage_key + '_sync_probe', JSON.stringify({
+                                    ts: Date.now(),
+                                    status: 'found_and_click',
+                                    attempt: attempts,
+                                    label: (syncBtn.textContent || '').trim()
+                                }));
+                            } catch (_e) {}
+
+                            try {
+                                syncBtn.dispatchEvent(new MouseEvent('click', {
+                                    bubbles: true,
+                                    cancelable: true,
+                                    view: parentWindow
+                                }));
+                                syncBtn.click();
+                            } catch (_clickErr) {
+                                try {
+                                    syncBtn.click();
+                                } catch (_e) {}
+                            }
+
+                            parentWindow.clearInterval(parentWindow.__uanHistSyncTimer);
+                            console.log('[HIST->SYNC] Botão Sincronizar acionado automaticamente');
+                            return;
+                        }
+
+                        try {
+                            parentWindow.localStorage.setItem(storage_key + '_sync_probe', JSON.stringify({
+                                ts: Date.now(),
+                                status: 'not_found',
+                                attempt: attempts
+                            }));
+                        } catch (_e) {}
+
+                        if (attempts >= maxAttempts) {
+                            parentWindow.clearInterval(parentWindow.__uanHistSyncTimer);
+                            console.warn('[HIST->SYNC] Botão Sincronizar não encontrado após várias tentativas');
+                        }
+                    } catch (err) {
+                        try {
+                            parentWindow.localStorage.setItem(storage_key + '_sync_probe', JSON.stringify({
+                                ts: Date.now(),
+                                status: 'query_error',
+                                attempt: attempts,
+                                error: String(err)
+                            }));
+                        } catch (_e) {}
+                        if (attempts >= maxAttempts) {
+                            parentWindow.clearInterval(parentWindow.__uanHistSyncTimer);
+                        }
+                        console.warn('[HIST->SYNC] Falha ao acionar sincronização automática:', err);
+                    }
+                };
+
+                tryClick();
+                parentWindow.__uanHistSyncTimer = parentWindow.setInterval(tryClick, 120);
+            } catch (err) {
+                console.warn('[HIST->SYNC] Não foi possível agendar sincronização automática:', err);
+            }
+        }
 
         const allowedCols = new Set([`Ajuste_${String(ano_atual)}`, `Ajuste_${String(ano_prox)}`]);
         const protectedCols = protected_cols || [];
@@ -1776,19 +1965,42 @@ def renderizar():
                 d[kAjsDisp][i] = valueDisp(d[kAjs][i], configs[y].color, configs[y].bg, isReal);
                 d[kVarAjsDisp][i] = varDisp(d[kVarAjs][i], i);
                 const aj = safe(d[kAjt][i]);
-                d[kAjtDisp][i] = `<span style="background:${aj >= 0 ? '#ecfdf5' : '#fef2f2'};border:1px solid ${aj >= 0 ? '#86efac' : '#fca5a5'};padding:2px 6px;border-radius:4px;color:${aj >= 0 ? '#059669' : '#dc2626'};font-weight:700;">${aj >= 0 ? '+' : ''}${aj.toLocaleString('pt-BR', {maximumFractionDigits:0})}</span>`;
+                d[kAjtDisp][i] = `<span style="background:${aj >= 0 ? '#ecfdf5' : '#fef2f2'};border:1px solid ${aj >= 0 ? '#86efac' : '#fca5a5'};padding:2px 6px;border-radius:4px;color:${aj >= 0 ? '#059669' : '#dc2626'};font-weight:700;">${aj >= 0 ? '+' : ''}${fmtShort(aj)}</span>`;
             }
         }
 
         // Atribui novos arrays → Bokeh detecta mudança de referência → re-renderiza
-        // Também dispara js_on_change("data") na Série Histórica e properties.data.change no localStorage
         if (srcChanged) {
             src.data = Object.assign({}, src.data, { y: newY, y_br: newYBr });
+            src.change.emit();
+        }
+        
+        // SEMPRE escrever localStorage com novo timestamp para cada edição (patching event)
+        // Mesmo que srcChanged=false, o timestamp precisa ser atualizado para Python detectar a mudança
+        try {
+            const now = Date.now();
+            window.parent.localStorage.setItem(storage_key, JSON.stringify(newY));
+            window.parent.localStorage.setItem(storage_key + '_timestamp', now.toString());
+            window.parent.localStorage.setItem(storage_key + '_probe', JSON.stringify({
+                ts: now,
+                srcChanged: srcChanged,
+                y0: newY[0],
+                y6: newY[6],
+                y11: newY[11],
+                ajuste_2026: d['Ajuste_2026'],
+                ajuste_2027: d['Ajuste_2027']
+            }));
+            triggerSafeSync();
+            console.log('[HIST->SYNC] localStorage persistido com timestamp novo (srcChanged=' + srcChanged + ')');
+        } catch(e) {
+            console.warn('[HIST->SYNC] Falha ao gravar localStorage:', e);
         }
         tbl.change.emit();
     """
     )
     tbl_hist_src.js_on_change("patching", cb_hist_sync)
+    # NOTA: NÃO registrar js_on_change("data") aqui — causaria loop:
+    # cb_hist_sync modifica tbl.data → emite "data" → cb_hist_sync dispara novamente.
     
     # CSS apenas para estabilidade visual da barra horizontal
     st.markdown("""
@@ -1830,7 +2042,8 @@ def renderizar():
     bokeh_editable(
         layout_principal,
         height=1500,
-        key=f"sim_bokeh_{combo}"
+        key=f"sim_bokeh_{combo}",
+        enable_storage_monitor=False,
     )
 
     st.markdown("<h2 class='uan-sec' style='margin:8px 0 4px 0;padding:4px 0;font-size:1.2rem;border-top:1px solid #e2e8f0;'>🗂️ Análises por Categoria</h2>", unsafe_allow_html=True)
