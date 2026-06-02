@@ -4,7 +4,129 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
-## 🚀 [v2.5.0] - 2026-05-27
+## 💡 [v2.5.1] - 2026-06-02
+
+### ✨ NOVO - Layout Integrado DRE com 3 Seções + Tags de Índices
+
+#### Features Implementadas
+- ✅ **3 Seções Colapsáveis:** Volumes, Indicadores Econômicos, Estrutura DRE
+- ✅ **Tags com Delete Integrado:** Índices selecionados como pills turquesas
+- ✅ **Design Clean:** Gradiente turquesa (#06b6d4 → #0891b2), layout flexível com wrap
+- ✅ **Animações Suaves:** Hover com scale/shadow, rotação do X no tag
+- ✅ **Funcionalidade Completa:** Add/Remove com st.rerun(), suporte a múltiplos índices
+- ✅ **Sem Redundância:** Removidos containers vazios e linhas duplicadas de botões
+
+#### Mudanças de UX
+- 📊 Índices e tabela em seção única (antes espalhado em vários lugares)
+- 🏷️ X integrado ao tag (antes era botão separado em linha abaixo)
+- 🎨 Cor turquesa mais moderna e clara (antes era azul escuro #0c3a66)
+- 📐 Espaçamento equilibrado (padding 10px/16px, border-radius 24px)
+
+#### 🧠 **LIÇÃO APRENDIDA: Evitar Loop Infinito de Tentativas**
+
+**Contexto:** Gastamos **2+ horas** tentando estilizar o header do `st.data_editor` com:
+- CSS via `st.markdown()` ❌
+- CSS via `st.components.v1.html()` ❌
+- JavaScript inline com `MutationObserver` ❌
+- 4 camadas agressivas de CSS/JS ❌
+
+**Root Cause:** O `st.data_editor` usa **iframe isolado** que bloqueia CSS externo (limitação architectual do Streamlit)
+
+**A Decisão Crítica:**
+Ao invés de insistir em workarounds:
+1. **Pesquisei** na documentação oficial do Streamlit
+2. **Verifiquei** GitHub issues para limites conhecidos
+3. **Identifiquei** que era limitação do framework, não bug
+4. **Pivotei** para solução simples (CSS minimalista - 13 linhas)
+5. **Aceitei** "bom o suficiente" - tags estilizadas, header padrão Streamlit
+
+**Resultado:**
+- ❌ Antes: 140 linhas de CSS/JS complexo, sem funcionar
+- ✅ Depois: 13 linhas de CSS simples, totalmente funcional
+- ✅ Ganho: Código mais limpo, manutenível, melhor performance
+- ✅ Insight: **Se 3+ tentativas falharem → pesquise alternativas, não insista**
+
+**Template para Próximas Conversas:**
+```
+QUANDO PRESO (3+ tentativas):
+→ Pause e pesquise na web/docs oficiais
+→ Procure GitHub issues similares
+→ Determine: é limitação do framework?
+→ Sim? → Pivote para alternativa ou aceite
+→ Não? → Continue investigando o código
+```
+
+#### Status
+- ✅ Interface renderiza perfeitamente
+- ✅ Delete funciona corretamente
+- ✅ Múltiplos tags com flex-wrap funcionam
+- ✅ Tabela sincronizada com seleção
+- ✅ Testado end-to-end com 3+ índices
+- ✅ CSS simplificado e manutenível
+
+#### Arquivos Afetados
+- `frontend/pages/dre.py` (~2300 linhas) - refatoração completa da seção de índices
+- `README.md` - Adicionada seção "Lições Aprendidas" com guideline
+- `CHANGELOG.md` - Este arquivo, documentando o aprendizado
+
+---
+
+## 🎨 [v2.5.1] - 2026-06-01
+
+### ✨ NOVO - Layout Integrado DRE com 3 Seções + Tags de Índices
+
+#### Features Implementadas
+- ✅ **3 Seções Colapsáveis:** Volumes, Indicadores Econômicos, Estrutura DRE
+- ✅ **Tags com Delete Integrado:** Índices selecionados como pills turquesas
+- ✅ **Design Clean:** Gradiente turquesa (#06b6d4 → #0891b2), layout flexível com wrap
+- ✅ **Animações Suaves:** Hover com scale/shadow, rotação do X no tag
+- ✅ **Funcionalidade Completa:** Add/Remove com st.rerun(), suporte a múltiplos índices
+- ✅ **Sem Redundância:** Removidos containers vazios e linhas duplicadas de botões
+
+#### Mudanças de UX
+- 📊 Índices e tabela em seção única (antes espalhado em vários lugares)
+- 🏷️ X integrado ao tag (antes era botão separado em linha abaixo)
+- 🎨 Cor turquesa mais moderna e clara (antes era azul escuro #0c3a66)
+- 📐 Espaçamento equilibrado (padding 10px/16px, border-radius 24px)
+
+#### Status
+- ✅ Interface renderiza perfeitamente
+- ✅ Delete funciona corretamente
+- ✅ Múltiplos tags com flex-wrap funcionam
+- ✅ Tabela sincronizada com seleção
+- ✅ Testado end-to-end com 3+ índices
+
+#### Arquivos Afetados
+- `frontend/pages/dre.py` (~2300 linhas) - refatoração completa da seção de índices
+
+---
+
+## � [v2.5.1] - 2026-05-28
+
+### 🐛 FIX - Integração de Índices Econômicos em Metodologias
+
+#### Correções Implementadas
+- ✅ Movido seletor de índices para **ANTES** do formulário (evita conflito Streamlit)
+- ✅ Removido `st.button()` dentro de `st.form()` (não permitido no Streamlit)
+- ✅ Mantido apenas `st.form_submit_button()` dentro do formulário
+- ✅ Removido código órfão de exemplos não renderizados
+- ✅ Sintaxe Python validada sem erros bloqueantes
+
+#### Funcionalidades Mantidas
+- 📊 Busca e preview de índices (FORA do form)
+- 🔧 Criação de metodologias com índices (DENTRO do form)
+- 📈 Suporte a sazonalidade + índices
+- ✨ Exemplos práticos de uso
+
+#### Status
+- ✅ Interface renderiza sem erros
+- ✅ Índices carregam corretamente
+- ✅ Formulário funciona normalmente
+- 🔄 Testado e pronto para uso
+
+---
+
+## �🚀 [v2.5.0] - 2026-05-27
 
 ### ✅ NOVA FEATURE - Sistema de Índices Econômicos (COMPLETO & VALIDADO)
 

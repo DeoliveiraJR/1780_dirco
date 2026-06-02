@@ -2,11 +2,70 @@
 
 Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário**, **controle de permissões** e **DRE Gerencial profissional**.
 
-**Versão Atual:** v2.5.0 | **Status:** ✅ Production Ready | **Última Atualização:** 27/05/2026
+**Versão Atual:** v2.5.1 | **Status:** ✅ Production Ready | **Última Atualização:** 01/06/2026
+
+---
+
+## 🧠 Lições Aprendidas e Boas Práticas
+
+### ⚠️ Armadilha: Loop de Tentativas Infinitas
+Durante o desenvolvimento da seção de Índices Econômicos (v2.5.1), gastamos **múltiplas horas** tentando estilizar o header do `st.data_editor` com CSS/JavaScript agressivos (4 camadas diferentes), sem sucesso.
+
+**O Aprendizado:**
+1. ✅ **Se uma solução NÃO funciona após 3-4 tentativas**: PARE e **pesquise na web/documentação oficial**
+2. ✅ **Consulte GitHub issues e StackOverflow** para limites técnicos conhecidos
+3. ✅ **Determine rapidamente se é limitação arquitectural** (ex: iframes isolados do Streamlit)
+4. ✅ **Pivote para alternativas** (ex: `streamlit-aggrid`) em vez de insistir em workarounds complexos
+5. ✅ **Aceite "bom o suficiente"** quando a limitação for do framework, não do código
+
+**Resultado Prático:**
+- ❌ **Perdido:** 2+ horas com CSS/JS complexos (gradientes, MutationObserver, st.components.v1.html())
+- ✅ **Ganho:** Aceitação de solução simples = CSS minimalista (13 linhas vs 140 linhas anteriores)
+- ✅ **Benefício:** Código mais mantível, menos propenso a bugs, melhor performance
+
+### 📋 Template para Próximas Conversas
+```
+QUANDO PRESO EM LOOP (3+ tentativas falhadas):
+1. Pause desenvolvimento
+2. Pesquise: "streamlit [componente] [problema] limitations"
+3. Procure por: GitHub issues, oficial docs, Stack Overflow
+4. Avalie: É limitação do framework ou bug do código?
+5. Decida: Continuar ou pivotar para alternativa?
+6. Comunique: "Essa é uma limitação conhecida de [framework/componente]"
+7. Avance: Aceite a solução viável ou implemente a alternativa
+```
+
+### 📚 Referências Úteis
+- [Streamlit Components Limitations](https://docs.streamlit.io/library/components/custom-components)
+- [GitHub Issues Streamlit](https://github.com/streamlit/streamlit/issues)
+- [Alternativa: streamlit-aggrid](https://github.com/PablocFonseca/streamlit-aggrid)
 
 ---
 
 ## 📌 O que foi implementado
+
+### ✅ [v2.5.1] - DRE com 3 Seções Integradas + Tags de Índices (COMPLETO)
+- **📊 Novo Layout Integrado:** Página DRE reestruturada com 3 seções colapsáveis
+  1. **Volumes Financeiros (TD21, TD62)** - tabela com 12 meses
+  2. **Indicadores Econômicos** - seleção dinâmica de índices (~50 disponíveis)
+  3. **Estrutura da DRE (Componentes de Resultado)** - visualização hierárquica da DRE
+- **🏷️ Tags com Delete Integrado:** 
+  - Índices selecionados renderizados como **pills turquesas com gradiente** (#06b6d4 → #0891b2)
+  - **X integrado diretamente no tag** (não há linha separada de botões)
+  - Flexbox com wrap para responsividade em múltiplos índices
+  - Hover com animação suave (scale, shadow, rotação do X)
+  - **Delete funcional:** Clique no tag remove o índice da seleção
+- **🎨 Design Refinado:**
+  - Cor turquesa moderna e clean (mais clara que versão anterior)
+  - Espaçamento equilibrado (10px/16px padding)
+  - Border radius suave (24px para visual arredondado)
+  - Transições cubic-bezier para animações fluidas
+- **⚡ Funcionalidade Completa:**
+  - Add/Remove índices com st.rerun()
+  - Suporte a múltiplos índices simultâneos
+  - Tabela abaixo exibe valores de 12 meses para cada índice
+  - Sem containers vazios ou elementos redundantes
+- **📦 Arquivos afetados:** `frontend/pages/dre.py` (~2300 linhas)
 
 ### ✅ [v2.5.0] - Sistema de Índices Econômicos (COMPLETO)
 - **📈 Upload Multi-Aba:** Arquivo Excel detecta automaticamente abas `DADOS` e `INDICES_TESOU` ✅
