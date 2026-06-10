@@ -4,6 +4,214 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
+## 🔧 [v3.9.3] - 2026-06-10 - Metodologias (Precisão + Contexto)
+
+### ✅ CORRIGIDO - Cálculo de metodologia por referência correta
+- **Arquivo:** `frontend/pages/dre.py`
+- Fluxo validado para cálculo mês a mês com referências explícitas da fórmula (`SOMA(TD71;TD72)`)
+- Diferenciação clara entre linhas de destino e variáveis realmente usadas na fórmula
+
+### ✅ UX - Tag de metodologia na coluna correta
+- **Arquivo:** `frontend/pages/dre.py`
+- Tag/badge de metodologia exibida apenas na coluna **Metodologia**
+- Removida exibição redundante na coluna **Descrição**
+
+### ✅ UX - Card de metodologia com contexto técnico
+- **Arquivo:** `frontend/pages/dre.py`
+- Card agora mostra separadamente:
+  - Linhas destino da aplicação
+  - Referências da fórmula (tokens DRE/índices efetivamente consumidos)
+
+### ✅ NOVO - Skill de contexto DRE e motor de cálculo
+- **Arquivo:** `.github/skills/dre-engine-context/SKILL.md`
+- Documentação operacional consolidada com arquitetura, fluxos, troubleshooting e checklist de validação
+
+### ✅ Validação Técnica
+- `python -m py_compile frontend/pages/dre.py` ✅
+
+---
+
+## 🔧 [v3.9.2] - 2026-06-10 - DRE (Responsividade + Sessão + Edição)
+
+### ✅ UX - Tabela DRE mais responsiva no modo visual
+- **Arquivo:** `frontend/pages/dre.py`
+- Render da tabela envolvido em container com rolagem horizontal (`overflow-x`) para não estourar layout em telas menores
+- Ajustes de largura mínima e `nowrap` nas colunas mensais para manter legibilidade
+
+### ✅ UX - Metodologia visível na coluna Metodologia (modo visual)
+- **Arquivo:** `frontend/pages/dre.py`
+- Exibição da tag de metodologia na coluna dedicada de metodologia
+
+### ✅ Edição - Destaque de agrupadores/totalizadores
+- **Arquivo:** `frontend/pages/dre.py`
+- Linhas totalizadoras no modo edição passam a exibir prefixo visual (`∑`) na descrição
+
+### ✅ Persistência - Reset ao reiniciar servidor
+- **Arquivo:** `frontend/pages/dre.py`
+- Persistência de linhas DRE ajustada para funcionar apenas em `session_state`
+- Removida restauração por arquivo para que, ao reiniciar o servidor, o estado retorne ao padrão
+
+### ✅ Cálculo - Formatação numérica compacta
+- **Arquivo:** `frontend/pages/dre.py`
+- Valores muito grandes agora exibem sufixos compactos (`mi`, `bi`) para melhorar leitura da grade
+
+### ✅ Validação Técnica
+- `python -m py_compile frontend/pages/dre.py frontend/utils_ext/calc_functions.py` ✅
+
+---
+
+## 🔧 [v3.9.1] - 2026-06-09 - Ajustes de Metodologias (UX + Validação)
+
+### ✅ CORRIGIDO - Aplicação sem efeito em fórmulas com índice
+- **Arquivo:** `frontend/pages/dre.py`
+- Normalização de fórmula de usuário (`0,05` → `0.05`)
+- Validação explícita de referências inválidas antes de salvar/aplicar metodologia
+- Bloqueio de aplicação silenciosa quando índice/variável não existe no contexto
+
+### ✅ NOVO - TAGs visuais no campo de fórmula
+- **Arquivo:** `frontend/pages/dre.py`
+- Exibição de tags de elementos detectados na fórmula:
+  - `fn:` função nativa
+  - `dre:` variável DRE
+  - `idx:` índice econômico
+  - `inv:` referência inválida
+
+### ✅ UX - Formulário de criação simplificado
+- **Arquivo:** `frontend/pages/dre.py`
+- Removidos os campos de **Parâmetros de Sazonalidade** e seletor/bloco de preview de **Indicadores Econômicos** da guia Criar Metodologia
+
+### ✅ LIMPEZA - Logs ruidosos
+- **Arquivos:** `frontend/utils_ext/calc_functions.py`, `backend/database.py`, `frontend/pages/dre.py`
+- Logs de cálculo/índices passam a ficar silenciosos por padrão (flags de debug)
+
+### ✅ Validação Técnica
+- `python -m py_compile frontend/pages/dre.py frontend/utils_ext/calc_functions.py backend/database.py` ✅
+
+---
+
+## 🚀 [v3.9] - 2026-06-05 - Metodologias v1 (Motor Seguro + Cenários)
+
+### ✨ NOVO - Motor de Fórmulas Mais Seguro
+- **Arquivo:** `frontend/pages/dre.py`
+- Substituído cálculo via `eval` direto por avaliador seguro com AST (`_avaliar_expressao_segura`)
+- Operações permitidas: `+`, `-`, `*`, `/`, `**`, `%` e operadores unários
+- Bloqueio de execução arbitrária de código nas fórmulas
+
+### ✨ NOVO - Função Nativa `DESVIO_PADRAO`
+- **Arquivo:** `frontend/utils_ext/calc_functions.py`
+- Nova função disponível em metodologias: `DESVIO_PADRAO(...)`
+- Suporte a janela temporal e lag:
+  - `DESVIO_PADRAO(TD90; -5)`
+  - `DESVIO_PADRAO(TD90; -5; 1)`
+- Documentação e exemplos adicionados na aba Referência da DRE
+
+### 🐛 BUG FIXADO - Índices Dentro de Funções Dinâmicas
+- **Arquivo:** `frontend/utils_ext/calc_functions.py`
+- **Causa:** loop de avaliação dinâmica verificava apenas `dre_dados` em vez de `contexto` (DRE + índices)
+- **Solução:** correção para usar o contexto completo na função `evaluar_funcao_dinamica_por_mes`
+- **Resultado:** expressões com índices e funções nativas passam a calcular corretamente mês a mês
+
+### ✨ NOVO - Persistência Mínima de Cenários (Session State)
+- **Arquivo:** `frontend/pages/dre.py`
+- Adicionado gerenciamento de cenários na aba Metodologias:
+  - Carregar cenário
+  - Salvar cenário atual
+  - Criar cenário a partir do estado atual
+- Snapshot inclui: `dre_dados`, `dre_metodologias` e `dre_dados_persistidos`
+
+### ✨ NOVO - Aplicar Metodologia por Linha e Período
+- **Arquivo:** `frontend/pages/dre.py`
+- No editor da DRE, cada linha variável agora permite:
+  - Selecionar metodologia aplicável à linha
+  - Aplicar em todos os meses ou por intervalo
+  - Registrar metadados da aplicação na própria linha (`metodologia`)
+
+### ✅ Validação Técnica
+- `python -m py_compile frontend/pages/dre.py frontend/utils_ext/calc_functions.py` ✅
+- Sem erros de sintaxe nos arquivos alterados ✅
+
+---
+
+## 🎨 [v3.8] - 2026-06-02 - DRE Completa com Todas as Linhas
+
+### ✨ NOVO - Estrutura DRE Completa
+- **Adicionadas 17 linhas faltantes** conforme documento de DRE Gerencial
+- **Total de linhas na DRE:** 37 (antes: 20)
+- **Linhas novas:**
+  - TD67: Perda Permanente
+  - RCC: Risco de Crédito Contábil (totalizador)
+  - MFL: Margem Financeira Líquida (totalizador)
+  - TD73: Tarifas
+  - TD68: Outros Componentes de Resultado Gerencial
+  - TD78: Outros Componentes de Resultado
+  - TD79: Custos Variáveis
+  - TD80: Tributos
+  - TD82: Perdas Operacionais
+  - MC: Margem de Contribuição (totalizador)
+  - TD74: Custos Identificados
+  - RGP: Resultado Gerencial de Produtos (totalizador)
+  - TD69: Despesas Administrativas Gerenciais
+  - TD75: Despesas Administrativas
+  - TD83: Custos Alocados
+  - TD84: Serviços Internos - Dependências
+  - RGU: Resultado Gerencial de Unidades (totalizador)
+
+### 🔧 ALTERAÇÕES TÉCNICAS
+- **Arquivo:** `frontend/pages/dre.py` (ESTRUTURA_DRE expandida)
+- **Fórmulas adicionadas:** 6 totalizadores com cálculos automáticos
+- **Formato:** Manter compatibilidade com st.data_editor
+- **Validação:** Todos os códigos presentes na interface confirmados
+
+---
+
+## 🎨 [v3.7] - 2026-06-02 - Ícones Font Awesome + Indicadores Econômicos Populados
+
+### ✨ NOVO - Ícones Font Awesome nos Expanders da DRE
+- **Arquivos modificados:** `frontend/app.py`, `frontend/pages/dre.py`, `frontend/utils_ext/icons.py`
+- **Injeção Global:** Script JavaScript agora em `app.py` para executar em todas as páginas
+- **Ícones Implementados:**
+  - 🌊 **VOLUMES FINANCEIROS** → `fa-water`
+  - 💼 **INDICADORES ECONÔMICOS** → `fa-money-bill-trend-up`
+  - 🧾 **ESTRUTURA DA DRE** → `fa-receipt`
+- **Cor:** #06b6d4 (turquesa) para todos os ícones
+- **Características:**
+  - MutationObserver para detectar mudanças dinâmicas
+  - SetInterval com retry logic (100ms, max 50 tentativas)
+  - Previne duplicação com verificação `querySelector('i.fas')`
+
+### 🐛 BUG FIXADO - Indicadores Econômicos Retornando 0.0000
+- **Causa:** Mismatch de case nas chaves JSON (DT_ALVO vs dt_alvo, VL_PJTD vs vl_pjtd)
+- **Arquivo afetado:** `backend/database.py` (função `agregar_indice_para_12_meses`)
+- **Solução:** Corrigidas chaves para MAIÚSCULA conforme schema JSON
+- **Resultado:** Dados dos indicadores agora sendo agregados corretamente
+
+### ⚡ OTIMIZAÇÕES - UI/UX
+- **Minimização de cabeçalhos:**
+  - Cabeçalho "Selecione os Índices Econômicos" reduzido: padding 12px (antes 16px), sem segunda linha de descrição
+  - Cabeçalho "Dados dos Índices" igualmente minimizado
+- **Remoção de dividers:** Removido `st.divider()` entre multiselect e label da seção anterior
+- **Resultado:** Interface mais clean e minimalista
+
+### 🔧 MUDANÇAS TÉCNICAS
+- **Import adicionado:** `numpy` em `backend/database.py` (necessário para `np.mean()`)
+- **Estrutura de dados verificada:**
+  - 50 índices econômicos disponíveis
+  - 1.506 registros totais
+  - Agregação por mês com interpolação de valores esparsos
+  - Dados apenas em dezembro (mês 12), interpolados para 12 meses
+
+### 📝 DOCUMENTAÇÃO
+- Criado `ICONS_IMPLEMENTATION.md` (ainda presente, contém detalhes técnicos)
+- Script JavaScript reusável via `window.applyExpanderIcons()`
+
+### 🎯 PRÓXIMAS ETAPAS
+- [ ] Forçar execução automática do script de ícones (problema de sandboxing do Streamlit)
+- [ ] Implementar seção de filtros para indicadores econômicos (similar a simulador.py)
+- [ ] Validação de valores persistidos dos indicadores
+- [ ] Testes de performance com 50 índices simultâneos
+
+---
+
 ## 🎨 [v3.1] - 2026-06-02 - Headers Padronizados em Todas as Páginas
 
 ### ✨ NOVO - Sistema Reutilizável de Headers com Suporte a Filtros

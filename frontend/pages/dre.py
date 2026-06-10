@@ -2,6 +2,8 @@
 Página de DRE Gerencial (Demonstrativo de Resultado Gerencial)
 Permite simular e editar variáveis da DRE com layout mês-a-mês
 Suporta metodologias de cálculo automáticas
+
+# v3.6.1 - 2026-06-02: Corrigido CSS headers DRE e padding sidebar
 """
 
 import streamlit as st
@@ -12,6 +14,9 @@ import sys
 import os
 import json
 import re
+import ast
+import html
+import operator as op
 from datetime import datetime
 from copy import deepcopy
 from typing import Union, Dict
@@ -27,14 +32,186 @@ from utils_ext.constants import (
     COR_AJUSTADA, COR_RLZD_BASE, CAT_COLORS
 )
 from utils_ext.calc_functions import (
-    FUNCOES_NATIVAS, DESCRICOES_FUNCOES, EXEMPLOS_FUNCOES, 
-    evaluar_funcao_em_formula, obter_documentacao_funcoes
+    FUNCOES_NATIVAS, DESCRICOES_FUNCOES, EXEMPLOS_FUNCOES,
+    evaluar_funcao_em_formula, obter_documentacao_funcoes,
+    _preparar_contexto_com_indices
 )
 from utils_ext.icons import get_icon, render_icon_header, render_section_divider, render_info_box, render_page_header
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_manager import get_dados_upload, carregar_curva_ajustada, init_data_state
 from services.aggregations import _carregar_curvas_por_ano
+
+try:
+    from st_keyup import st_keyup
+except Exception:
+    st_keyup = None
+
+
+DEBUG_DRE_LOGS = False
+
+
+def _log_dre(msg: str):
+    if DEBUG_DRE_LOGS:
+        print(msg)
+
+
+def _normalizar_formula_usuario(formula: str) -> str:
+    """Normaliza entrada da fórmula (ex: decimal com vírgula)."""
+    if not formula:
+        return ""
+    formula = formula.strip()
+    # Converte somente vírgula decimal entre dígitos: 0,05 -> 0.05
+    formula = re.sub(r"(?<=\d),(?=\d)", ".", formula)
+    return formula
+
+
+def _extrair_tokens_formula(formula: str) -> list:
+    if not formula:
+        return []
+    return list(dict.fromkeys(re.findall(r"\b([A-Z][A-Z0-9_]*)\b", formula.upper())))
+
+
+def _obter_contexto_formula(dre_dados: Dict[str, dict] = None) -> Dict[str, dict]:
+    """Combina DRE principal com volumes (TD21/TD62) para validação e cálculo."""
+    base_dre = dre_dados if dre_dados is not None else st.session_state.get("dre_dados", {})
+    contexto = deepcopy(base_dre)
+
+    for codigo, dados in st.session_state.get("dre_volumes_dados", {}).items():
+        if codigo not in contexto:
+            contexto[codigo] = {
+                "descricao": dados.get("descricao", codigo),
+                "tipo": dados.get("tipo", "variavel"),
+                "formula": dados.get("formula"),
+                "valores": (dados.get("valores") or [0.0] * 12),
+                "eh_negrito": dados.get("eh_negrito", False),
+                "metodologia": None,
+            }
+
+    return contexto
+
+
+def _classificar_tokens_formula(formula: str, dre_dados: dict):
+    """Classifica tokens em funções, variáveis DRE, índices e desconhecidos."""
+    tokens = _extrair_tokens_formula(formula)
+    funcoes = {"SOMA", "MEDIA", "MINIMO", "MAXIMO", "DESVIO_PADRAO"}
+    contexto_formula = _obter_contexto_formula(dre_dados)
+    contexto = _preparar_contexto_com_indices(contexto_formula)
+    vars_dre = set(contexto_formula.keys())
+
+    tokens_funcoes = []
+    tokens_dre = []
+    tokens_indices = []
+    tokens_invalidos = []
+
+    for t in tokens:
+        if t in funcoes:
+            tokens_funcoes.append(t)
+        elif t in vars_dre:
+            tokens_dre.append(t)
+        elif t in contexto:
+            tokens_indices.append(t)
+        else:
+            tokens_invalidos.append(t)
+
+    return {
+        "funcoes": tokens_funcoes,
+        "dre": tokens_dre,
+        "indices": tokens_indices,
+        "invalidos": tokens_invalidos,
+    }
+
+
+def _renderizar_tags_formula(classificacao: dict):
+    """Renderiza tags visuais dos elementos encontrados na fórmula."""
+    blocos = []
+    for tok in classificacao.get("funcoes", []):
+        blocos.append(f'<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:999px;background:#dbeafe;color:#1e3a8a;font-size:11px;font-weight:600;">fn:{tok}</span>')
+    for tok in classificacao.get("dre", []):
+        blocos.append(f'<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:999px;background:#dcfce7;color:#166534;font-size:11px;font-weight:600;">dre:{tok}</span>')
+    for tok in classificacao.get("indices", []):
+        blocos.append(f'<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:999px;background:#cffafe;color:#0e7490;font-size:11px;font-weight:600;">idx:{tok}</span>')
+    for tok in classificacao.get("invalidos", []):
+        blocos.append(f'<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:999px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700;">inv:{tok}</span>')
+
+    if blocos:
+        st.markdown("**Tags da fórmula:**", unsafe_allow_html=True)
+        st.markdown("".join(blocos), unsafe_allow_html=True)
+
+
+def _renderizar_formula_inline(formula: str, classificacao: dict):
+    """Mostra preview inline da fórmula destacando tokens reconhecidos."""
+    if not formula:
+        return
+
+    estilo = {
+        "funcoes": "background:#dbeafe;color:#1e3a8a;",
+        "dre": "background:#dcfce7;color:#166534;",
+        "indices": "background:#cffafe;color:#0e7490;",
+        "invalidos": "background:#fee2e2;color:#991b1b;",
+    }
+
+    tipos = {}
+    for k in ["funcoes", "dre", "indices", "invalidos"]:
+        for tok in classificacao.get(k, []):
+            tipos[tok.upper()] = k
+
+    formula_safe = html.escape(formula)
+
+    def _sub_token(match):
+        token_original = match.group(1)
+        tipo = tipos.get(token_original.upper())
+        token_safe = html.escape(token_original)
+        if not tipo:
+            return token_safe
+        return (
+            f'<span style="display:inline-block;padding:1px 5px;border-radius:6px;'
+            f'font-weight:600;{estilo[tipo]}">{token_safe}</span>'
+        )
+
+    formula_destacada = re.sub(r"\b([A-Za-z_][A-Za-z0-9_]*)\b", _sub_token, formula_safe)
+    st.markdown("**Preview inline da fórmula:**", unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;'
+        f'background:#f8fafc;font-family:monospace;font-size:14px;">{formula_destacada}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _aplicar_sugestao_formula_criar():
+    """Completa o último token da fórmula com a sugestão selecionada."""
+    escolhida = st.session_state.get("met_criar_sugestao", "")
+    if not escolhida:
+        return
+    formula_atual = st.session_state.get("met_criar_formula", "")
+    st.session_state["met_criar_formula"] = re.sub(
+        r"([A-Za-z_][A-Za-z0-9_]*)$",
+        escolhida,
+        formula_atual or ""
+    )
+    st.session_state["met_formula_pending_keyup"] = st.session_state["met_criar_formula"]
+    st.session_state["met_formula_widget_rev"] = st.session_state.get("met_formula_widget_rev", 0) + 1
+    st.session_state["met_skip_keyup_sync"] = True
+
+
+def _inserir_token_formula_criar(token: str):
+    """Insere rapidamente um token na fórmula atual (modo autocomplete rápido)."""
+    formula_atual = st.session_state.get("met_criar_formula", "")
+    if not token:
+        return
+
+    if re.search(r"([A-Za-z_][A-Za-z0-9_]*)$", formula_atual or ""):
+        nova_formula = re.sub(r"([A-Za-z_][A-Za-z0-9_]*)$", token, formula_atual or "")
+    else:
+        separador = ""
+        if formula_atual and not formula_atual.endswith(("=", "(", "+", "-", "*", "/", ";", " ")):
+            separador = " "
+        nova_formula = f"{formula_atual}{separador}{token}"
+
+    st.session_state["met_criar_formula"] = nova_formula
+    st.session_state["met_formula_pending_keyup"] = nova_formula
+    st.session_state["met_formula_widget_rev"] = st.session_state.get("met_formula_widget_rev", 0) + 1
+    st.session_state["met_skip_keyup_sync"] = True
 
 
 # ============================================================================
@@ -264,6 +441,45 @@ ESTRUTURA_DRE = [
     EstruturaLinehaDRE("TD16", "Provisão Perda Esperada - Crédito Liberar", tipo="variavel"),
     EstruturaLinehaDRE("TD92", "Recuperação de Perdas", tipo="variavel"),
     EstruturaLinehaDRE("TD81", "Abatimento Negocial", tipo="variavel"),
+    EstruturaLinehaDRE("TD67", "Perda Permanente", tipo="variavel"),
+    
+    # ===== RISCO DE CRÉDITO E MARGEM LÍQUIDA =====
+    EstruturaLinehaDRE("RCC", "Risco de Crédito Contábil", tipo="totalizador",
+                       formula="=TD76+TD16+TD92+TD81+TD67",
+                       eh_negrito=True),
+    EstruturaLinehaDRE("MFL", "Margem Financeira Líquida", tipo="totalizador",
+                       formula="=MFBE-RCC",
+                       eh_negrito=True),
+    
+    # ===== RECEITAS/DESPESAS OPERACIONAIS =====
+    EstruturaLinehaDRE("TD73", "Tarifas", tipo="variavel"),
+    EstruturaLinehaDRE("TD68", "Outros Componentes de Resultado Gerencial", tipo="variavel"),
+    EstruturaLinehaDRE("TD78", "Outros Componentes de Resultado", tipo="variavel"),
+    EstruturaLinehaDRE("TD79", "Custos Variáveis", tipo="variavel"),
+    EstruturaLinehaDRE("TD80", "Tributos", tipo="variavel"),
+    EstruturaLinehaDRE("TD82", "Perdas Operacionais", tipo="variavel"),
+    
+    # ===== MARGEM DE CONTRIBUIÇÃO =====
+    EstruturaLinehaDRE("MC", "Margem de Contribuição", tipo="totalizador",
+                       formula="=MFL+TD73+TD68+TD78+TD79+TD80+TD82",
+                       eh_negrito=True),
+    
+    # ===== RESULTADO GERENCIAL =====
+    EstruturaLinehaDRE("TD74", "Custos Identificados", tipo="variavel"),
+    EstruturaLinehaDRE("RGP", "Resultado Gerencial de Produtos", tipo="totalizador",
+                       formula="=MC-TD74",
+                       eh_negrito=True),
+    
+    # ===== DESPESAS ADMINISTRATIVAS =====
+    EstruturaLinehaDRE("TD69", "Despesas Administrativas Gerenciais", tipo="variavel"),
+    EstruturaLinehaDRE("TD75", "Despesas Administrativas", tipo="variavel"),
+    EstruturaLinehaDRE("TD83", "Custos Alocados", tipo="variavel"),
+    EstruturaLinehaDRE("TD84", "Serviços Internos - Dependências", tipo="variavel"),
+    
+    # ===== RESULTADO GERENCIAL DE UNIDADES =====
+    EstruturaLinehaDRE("RGU", "Resultado Gerencial de Unidades", tipo="totalizador",
+                       formula="=RGP-TD69-TD75-TD83-TD84",
+                       eh_negrito=True),
 ]
 
 
@@ -333,6 +549,83 @@ def _init_dre_state():
     
     if "dre_dias_corridos" not in st.session_state:
         st.session_state.dre_dias_corridos = [0] * 12
+
+    # Persistência mínima de cenários para testes de simulação
+    if "dre_cenarios" not in st.session_state:
+        st.session_state.dre_cenarios = {
+            "Base": {
+                "dre_dados": deepcopy(st.session_state.dre_dados),
+                "dre_metodologias": deepcopy(st.session_state.dre_metodologias),
+                "dre_dados_persistidos": deepcopy(st.session_state.dre_dados_persistidos),
+                "data_salvo": datetime.now().isoformat(),
+            }
+        }
+
+    if "dre_cenario_ativo" not in st.session_state:
+        st.session_state.dre_cenario_ativo = "Base"
+
+
+def _salvar_snapshot_cenario(nome_cenario: str):
+    """Salva snapshot do cenário atual no session_state."""
+    st.session_state.dre_cenarios[nome_cenario] = {
+        "dre_dados": deepcopy(st.session_state.get("dre_dados", {})),
+        "dre_metodologias": deepcopy(st.session_state.get("dre_metodologias", {})),
+        "dre_dados_persistidos": deepcopy(st.session_state.get("dre_dados_persistidos", {})),
+        "data_salvo": datetime.now().isoformat(),
+    }
+
+
+def _carregar_snapshot_cenario(nome_cenario: str) -> bool:
+    """Carrega snapshot de um cenário para o estado atual."""
+    snapshot = st.session_state.get("dre_cenarios", {}).get(nome_cenario)
+    if not snapshot:
+        return False
+
+    st.session_state.dre_dados = deepcopy(snapshot.get("dre_dados", {}))
+    st.session_state.dre_metodologias = deepcopy(snapshot.get("dre_metodologias", {}))
+    st.session_state.dre_dados_persistidos = deepcopy(snapshot.get("dre_dados_persistidos", {}))
+    st.session_state.dre_cenario_ativo = nome_cenario
+    return True
+
+
+_SAFE_OPS = {
+    ast.Add: op.add,
+    ast.Sub: op.sub,
+    ast.Mult: op.mul,
+    ast.Div: op.truediv,
+    ast.Pow: op.pow,
+    ast.Mod: op.mod,
+    ast.USub: op.neg,
+    ast.UAdd: op.pos,
+}
+
+
+def _avaliar_expressao_segura(expr: str, variaveis: Dict[str, float]) -> float:
+    """Avalia expressão aritmética com AST sem permitir execução arbitrária."""
+    def _eval(node):
+        if isinstance(node, ast.Expression):
+            return _eval(node.body)
+
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, (int, float)):
+                return float(node.value)
+            raise ValueError("Constante inválida")
+
+        if isinstance(node, ast.Name):
+            if node.id in variaveis:
+                return float(variaveis[node.id])
+            raise ValueError(f"Variável não encontrada: {node.id}")
+
+        if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_OPS:
+            return _SAFE_OPS[type(node.op)](_eval(node.left), _eval(node.right))
+
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_OPS:
+            return _SAFE_OPS[type(node.op)](_eval(node.operand))
+
+        raise ValueError("Expressão não permitida")
+
+    arvore = ast.parse(expr, mode="eval")
+    return float(_eval(arvore))
 
 
 def _carregar_td21_volumes(cliente: str = "Todos", categoria: str = "", produto: str = "", ano: int = 2026):
@@ -455,19 +748,21 @@ def _avaliar_formula(formula: str, dre_dados: dict, sazonalidade: Union[Dict, in
     
     formula_limpa = formula[1:]  # Remove '='
     
-    # Preparar contexto simplificado para substituição de variáveis: {codigo: [12 valores]}
+    # Preparar contexto completo (DRE + volumes + índices)
+    contexto_formula = _obter_contexto_formula(dre_dados)
+    contexto_completo = _preparar_contexto_com_indices(contexto_formula)
     contexto_simples = {}
-    for codigo, dados in dre_dados.items():
+    for codigo, dados in contexto_completo.items():
         valores = dados.get("valores", [0.0] * 12)
         contexto_simples[codigo] = valores
     
-    print(f"[DRE] Processando fórmula: {formula}")
-    print(f"[DRE] Sazonalidade: {sazonalidade}")
-    print(f"[DRE] Variáveis disponíveis: {list(dre_dados.keys())}")
+    _log_dre(f"[DRE] Processando fórmula: {formula}")
+    _log_dre(f"[DRE] Sazonalidade: {sazonalidade}")
+    _log_dre(f"[DRE] Variáveis disponíveis: {list(contexto_formula.keys())}")
     
     # ===== PROCESSAR FUNÇÕES NATIVAS =====
     # Padrão regex para encontrar funções: SOMA(ARGS), MEDIA(ARGS), etc
-    padrao_funcoes = r'(SOMA|MEDIA|MINIMO|MAXIMO)\((.*?)\)'
+    padrao_funcoes = r'(DESVIO_PADRAO|SOMA|MEDIA|MINIMO|MAXIMO)\((.*?)\)'
     
     # Mapeamento de placeholders para resultados das funções
     # ex: __FUNC_0__ → [valores dos 12 meses]
@@ -480,7 +775,7 @@ def _avaliar_formula(formula: str, dre_dados: dict, sazonalidade: Union[Dict, in
         nome_funcao = match.group(1).upper()
         argumentos = match.group(2)
         
-        print(f"[DRE] Encontrada função nativa: {nome_funcao}({argumentos})")
+        _log_dre(f"[DRE] Encontrada função nativa: {nome_funcao}({argumentos})")
         
         # 🔑 NOVO: Chamar função dinâmica por mês
         from utils_ext.calc_functions import evaluar_funcao_dinamica_por_mes
@@ -488,7 +783,7 @@ def _avaliar_formula(formula: str, dre_dados: dict, sazonalidade: Union[Dict, in
         valores_dinamicos = evaluar_funcao_dinamica_por_mes(
             nome_funcao, 
             argumentos, 
-            dre_dados,
+            contexto_formula,
             saz=sazonalidade
         )
         
@@ -500,9 +795,9 @@ def _avaliar_formula(formula: str, dre_dados: dict, sazonalidade: Union[Dict, in
         funcao_str = f"{nome_funcao}({argumentos})"
         formula_processada = formula_processada.replace(funcao_str, placeholder)
         
-        print(f"[DRE] → Resultado (12 meses): {valores_dinamicos[:3]}...")
+        _log_dre(f"[DRE] → Resultado (12 meses): {valores_dinamicos[:3]}...")
     
-    print(f"[DRE] Fórmula final (antes do mês-a-mês): {formula_processada}")
+    _log_dre(f"[DRE] Fórmula final (antes do mês-a-mês): {formula_processada}")
     
     # ===== AVALIAR FÓRMULA PARA CADA MÊS =====
     valores_resultado = []
@@ -511,33 +806,94 @@ def _avaliar_formula(formula: str, dre_dados: dict, sazonalidade: Union[Dict, in
         # Construir expressão para este mês específico
         expr = formula_processada
         
-        # Substituir placeholders de funções com valores do mês
+        variaveis_mes = {}
+
         for placeholder, valores_12 in funcoes_dinamicas.items():
             valor_mes = valores_12[mes_idx] if mes_idx < len(valores_12) else 0.0
-            expr = expr.replace(placeholder, f"float({valor_mes})")
-        
-        # Ordenar por comprimento decrescente para evitar conflitos
-        # Ex: TD70 não seja substituído quando fazemos replace em TD701
-        codigos_ordenados = sorted(contexto_simples.keys(), key=len, reverse=True)
-        
-        for codigo in codigos_ordenados:
-            if codigo in contexto_simples:
-                valor_mes_var = contexto_simples[codigo][mes_idx]
-                # Envolver em float() para garantir operações matemáticas
-                expr = expr.replace(codigo, f"float({valor_mes_var})")
+            variaveis_mes[placeholder] = float(valor_mes)
+
+        for codigo, valores in contexto_simples.items():
+            valor_mes_var = valores[mes_idx] if mes_idx < len(valores) else 0.0
+            variaveis_mes[codigo] = float(valor_mes_var)
         
         try:
-            resultado = eval(expr)
+            resultado = _avaliar_expressao_segura(expr, variaveis_mes)
             valores_resultado.append(float(resultado))
             if mes_idx == 0:  # Log apenas do primeiro mês para não poluir
-                print(f"[DRE] Mês 0 resultado: {resultado}")
+                _log_dre(f"[DRE] Mês 0 resultado: {resultado}")
         except Exception as e:
-            print(f"[DRE] ❌ Erro ao avaliar fórmula '{formula}' mês {mes_idx}: {e}")
-            print(f"[DRE] Expressão era: {expr}")
+            _log_dre(f"[DRE] ❌ Erro ao avaliar fórmula '{formula}' mês {mes_idx}: {e}")
+            _log_dre(f"[DRE] Expressão era: {expr}")
             valores_resultado.append(0.0)
-    
-    print(f"[DRE] Resultado final (12 meses): {valores_resultado[:3]}... (primeiros 3)")
+
+    _log_dre(f"[DRE] Resultado final (12 meses): {valores_resultado[:3]}... (primeiros 3)")
     return valores_resultado
+
+
+def _aplicar_metodologia_em_linha(
+    dre_dados: dict,
+    codigo: str,
+    met_nome: str,
+    met_dados: dict,
+    modo_periodo: str = "Todos",
+    mes_inicio: int = 1,
+    mes_fim: int = 12,
+) -> tuple[bool, str, bool]:
+    """Aplica metodologia em uma linha e retorna (ok, mensagem, alterou_valor)."""
+    if codigo not in dre_dados:
+        return False, f"Linha {codigo} não encontrada.", False
+
+    formula_aplicar = _normalizar_formula_usuario(met_dados.get("formula", ""))
+    classif = _classificar_tokens_formula(formula_aplicar, dre_dados)
+    if classif.get("invalidos"):
+        return False, f"Referências inválidas: {', '.join(classif['invalidos'])}", False
+
+    valores_antes = list(dre_dados[codigo].get("valores", [0.0] * 12))
+    serie_calc = _avaliar_formula(
+        formula_aplicar,
+        dre_dados,
+        sazonalidade=met_dados.get("sazonalidade")
+    )
+
+    if modo_periodo == "Todos":
+        dre_dados[codigo]["valores"] = list(serie_calc)
+    else:
+        inicio_idx = min(mes_inicio, mes_fim) - 1
+        fim_idx = max(mes_inicio, mes_fim) - 1
+        for i in range(inicio_idx, fim_idx + 1):
+            dre_dados[codigo]["valores"][i] = serie_calc[i]
+
+    dre_dados[codigo]["metodologia"] = {
+        "nome": met_nome,
+        "periodo": modo_periodo,
+        "mes_inicio": mes_inicio,
+        "mes_fim": mes_fim,
+        "data_aplicacao": datetime.now().isoformat(),
+    }
+
+    alterou = not np.allclose(
+        np.array(valores_antes, dtype=float),
+        np.array(dre_dados[codigo].get("valores", [0.0] * 12), dtype=float)
+    )
+    return True, f"Metodologia aplicada em {codigo}.", alterou
+
+
+def _fmt_dre_valor(v: float) -> str:
+    """Evita mascarar valores pequenos na tabela da DRE."""
+    try:
+        val = float(v)
+    except Exception:
+        return "-"
+
+    if val == 0:
+        return "0"
+    if abs(val) >= 1_000_000_000:
+        return f"{val/1_000_000_000:.2f} bi"
+    if abs(val) >= 1_000_000:
+        return f"{val/1_000_000:.2f} mi"
+    if abs(val) < 1:
+        return fmt_br(val, casas=3)
+    return fmt_br(val, casas=2)
 
 
 # ============================================================================
@@ -574,7 +930,7 @@ def salvar_dre_usuario():
         "data_salvo": datetime.now().isoformat(),
     }
     
-    print(f"[DRE] Salva para usuário {usuario}: {combo_key}")
+    _log_dre(f"[DRE] Salva para usuário {usuario}: {combo_key}")
     st.success(f" DRE salva com sucesso para {filtros.get('produto', 'Sem produto')}!")
 
 
@@ -596,20 +952,110 @@ def carregar_dre_usuario(cliente: str, categoria: str, produto: str):
         dre_salva = dre_salvas.get(combo_key, None)
         
         if dre_salva:
-            print(f"[DRE] Carregada para usuário {usuario}: {combo_key}")
+            _log_dre(f"[DRE] Carregada para usuário {usuario}: {combo_key}")
             return dre_salva
         else:
-            print(f"[DRE] Nenhuma DRE salva para: {combo_key}")
+            _log_dre(f"[DRE] Nenhuma DRE salva para: {combo_key}")
             return None
     except Exception as e:
-        print(f"[DRE] Erro ao carregar: {e}")
+        _log_dre(f"[DRE] Erro ao carregar: {e}")
         return None
+
+
+def _dre_linhas_store_path() -> str:
+    """Retorna caminho do arquivo de persistência das linhas da DRE."""
+    base_dir = os.path.join(os.path.dirname(__file__), "..", "..", "backend", "database")
+    os.makedirs(base_dir, exist_ok=True)
+    return os.path.join(base_dir, "dre_linhas_store.json")
+
+
+def _persistir_linhas_dre(combo_key: str = "") -> bool:
+    """Persiste linhas da DRE apenas na sessão atual (reset ao reiniciar servidor)."""
+    try:
+        filtros = st.session_state.get("dre_filtros", {})
+        ano = st.session_state.get("dre_ano_filter", 2026)
+        if not combo_key:
+            combo_key = f"{filtros.get('cliente', 'Todos')}::{filtros.get('categoria', '')}::{filtros.get('produto', '')}::{ano}"
+
+        st.session_state.setdefault("dre_dados_persistidos", {})
+        st.session_state["dre_dados_persistidos"][combo_key] = {
+            "dre_dados": deepcopy(st.session_state.get("dre_dados", {})),
+            "dre_metodologias": deepcopy(st.session_state.get("dre_metodologias", {})),
+            "salvo_em": datetime.now().isoformat(),
+        }
+        return True
+    except Exception as e:
+        _log_dre(f"[DRE] Falha ao persistir linhas: {e}")
+        return False
+
+
+def _restaurar_linhas_dre(combo_key: str) -> bool:
+    """Restaura linhas da DRE persistidas na sessão atual para usuário + escopo."""
+    try:
+        registro = st.session_state.get("dre_dados_persistidos", {}).get(combo_key)
+        if not registro:
+            return False
+
+        st.session_state.dre_dados = deepcopy(registro.get("dre_dados", st.session_state.get("dre_dados", {})))
+        if registro.get("dre_metodologias"):
+            st.session_state.dre_metodologias = deepcopy(registro.get("dre_metodologias", {}))
+        return True
+    except Exception as e:
+        _log_dre(f"[DRE] Falha ao restaurar linhas: {e}")
+        return False
 
 
 
 # ============================================================================
 # RENDERIZAÇÃO - SEÇÕES DO NOVO LAYOUT (v2.5.1)
 # ============================================================================
+
+# ============================================================================
+# UTILITÁRIOS - CÁLCULOS DE DIAS ÚTEIS E CORRIDOS
+# ============================================================================
+
+def _calcular_dias_uteis_e_corridos(ano: int = 2026) -> Dict[str, List[int]]:
+    """
+    Calcula dias úteis (seg-sex) e dias corridos para cada mês do ano.
+    
+    Dias úteis: segundas a sextas (desconsiderando fins de semana)
+    Dias corridos: total de dias do mês
+    
+    Args:
+        ano: Ano para o cálculo (default: 2026)
+        
+    Returns:
+        Dict com estrutura:
+        {
+            "dias_uteis": [22, 20, 22, 21, 22, 21, 23, 22, 21, 23, 21, 22],
+            "dias_corridos": [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        }
+    """
+    import calendar
+    
+    dias_uteis = []
+    dias_corridos = []
+    
+    for mes in range(1, 13):
+        # Obter número de dias do mês
+        _, num_dias = calendar.monthrange(ano, mes)
+        dias_corridos.append(num_dias)
+        
+        # Contar dias úteis (seg-sex = 0-4, sab-dom = 5-6)
+        dias_uteis_mes = 0
+        for dia in range(1, num_dias + 1):
+            # weekday() retorna: 0=seg, 1=ter, 2=qua, 3=qui, 4=sex, 5=sab, 6=dom
+            dia_semana = pd.Timestamp(ano, mes, dia).weekday()
+            if dia_semana < 5:  # Segunda a sexta
+                dias_uteis_mes += 1
+        
+        dias_uteis.append(dias_uteis_mes)
+    
+    return {
+        "dias_uteis": dias_uteis,
+        "dias_corridos": dias_corridos
+    }
+
 
 def _renderizar_secao_indices_economicos():
     """Renderiza a segunda seção: Índices Econômicos em tabela tipo-DRE com st.data_editor"""
@@ -635,7 +1081,19 @@ def _renderizar_secao_indices_economicos():
         return
     
     # ===== MULTISELECT PARA ADICIONAR ÍNDICES =====
-    st.markdown('<h3 style="color: #0c3a66; font-family: Plus Jakarta Sans, sans-serif;"><i class="fas fa-magnifying-glass" style="color: #06b6d4; margin-right: 8px;"></i>Selecione os Índices Econômicos</h3>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="
+        background: linear-gradient(90deg, #f0fef4 0%, rgba(6, 182, 212, 0.05) 100%);
+        border-left: 4px solid #10b981;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 12px;
+    ">
+        <p style="color: #0c3a66; font-family: Plus Jakarta Sans, sans-serif; margin: 0; font-weight: 600; font-size: 0.95em;">
+            <i class="fas fa-magnifying-glass" style="color: #10b981; margin-right: 8px;"></i>Selecione os Índices Econômicos
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     
     indices_selecionados = st.multiselect(
         "Escolha um ou mais índices",
@@ -650,13 +1108,23 @@ def _renderizar_secao_indices_economicos():
         st.session_state.dre_indices_selecionados = indices_selecionados
         st.rerun()
     
-    st.divider()
-    
     # ===== RENDERIZAR COM st.data_editor =====
     if st.session_state.dre_indices_selecionados:
-        st.markdown('<h3 style="color: #0c3a66; font-family: Plus Jakarta Sans, sans-serif;"><i class="fas fa-chart-bar" style="color: #06b6d4; margin-right: 8px;"></i>Dados dos Índices</h3>', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="
+            background: linear-gradient(90deg, #ecf5fc 0%, rgba(6, 182, 212, 0.03) 100%);
+            border-left: 4px solid #06b6d4;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin: 16px 0 12px 0;
+        ">
+            <p style="color: #0c3a66; font-family: Plus Jakarta Sans, sans-serif; margin: 0; font-weight: 600; font-size: 0.95em;">
+                <i class="fas fa-chart-bar" style="color: #06b6d4; margin-right: 8px;"></i>Dados dos Índices (12 meses agregados)
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # Preparar DataFrame
+        # Preparar DataFrame com índices selecionados
         dados = []
         for nome_indice in st.session_state.dre_indices_selecionados:
             try:
@@ -668,6 +1136,19 @@ def _renderizar_secao_indices_economicos():
                     dados.append(linha)
             except Exception as e:
                 print(f"[UI] Erro ao processar índice {nome_indice}: {e}")
+        
+        # Adicionar linhas de dias úteis e dias corridos
+        dias_info = _calcular_dias_uteis_e_corridos(ano=2026)
+        
+        linha_dias_uteis = {"Índice": "Dias úteis"}
+        for i, mes in enumerate(MESES_ABR_LIST):
+            linha_dias_uteis[mes] = dias_info["dias_uteis"][i]
+        dados.append(linha_dias_uteis)
+        
+        linha_dias_corridos = {"Índice": "Dias corridos"}
+        for i, mes in enumerate(MESES_ABR_LIST):
+            linha_dias_corridos[mes] = dias_info["dias_corridos"][i]
+        dados.append(linha_dias_corridos)
         
         if dados:
             df = pd.DataFrame(dados)
@@ -827,7 +1308,7 @@ def _renderizar_secao_volumes_financeiros():
         
         for mes_idx in range(12):
             valor = valores[mes_idx]
-            valor_formatado = fmt_br(valor) if valor != 0 else "0"
+            valor_formatado = _fmt_dre_valor(valor)
             html_table += f'<td class="mes-col">{valor_formatado}</td>'
         
         html_table += '</tr>'
@@ -863,9 +1344,17 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
     <style>
     .dre-tabela {
         width: 100%;
+        min-width: 1320px;
         border-collapse: collapse;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         font-size: 13px;
+    }
+    .dre-table-wrap {
+        width: 100%;
+        overflow-x: auto;
+        border-radius: 10px;
+        border: 1px solid #dbe7f4;
+        background: #fff;
     }
     .dre-tabela th {
         background: linear-gradient(135deg, #0c3a66 0%, #06b6d4 100%);
@@ -877,6 +1366,7 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
     }
     .dre-tabela th.codigo-col { text-align: left; width: 60px; }
     .dre-tabela th.desc-col { text-align: left; width: 240px; }
+    .dre-tabela th.met-col { text-align: left; width: 150px; }
     .dre-tabela th.mes-col { width: 45px; }
     
     .dre-tabela td {
@@ -890,9 +1380,15 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
     .dre-tabela td.desc-col {
         color: #334155;
     }
+    .dre-tabela td.met-col {
+        color: #0c3a66;
+        font-size: 12px;
+        font-weight: 600;
+    }
     .dre-tabela td.mes-col {
         text-align: right;
         padding-right: 12px;
+        white-space: nowrap;
     }
     
     .dre-tabela tbody tr {
@@ -924,13 +1420,44 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
         text-align: right;
         font-weight: 500;
     }
+    .dre-cell-editable {
+        cursor: cell;
+    }
+    .dre-met-tag {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 600;
+        color: #0c3a66;
+        background: rgba(6, 182, 212, 0.15);
+        border: 1px solid rgba(6, 182, 212, 0.35);
+    }
+    [data-testid="stDataFrame"] div[role="columnheader"] {
+        background: linear-gradient(135deg, #0c3a66 0%, #06b6d4 100%) !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+    }
     </style>
+    <script>
+    function dreSelectCell(codigo, mes) {
+        try {
+            const u = new URL(window.location.href);
+            u.searchParams.set('dre_cell', `${codigo}_${mes}`);
+            window.location.href = u.toString();
+        } catch (e) {
+            console.log(e);
+        }
+    }
+    </script>
     """, unsafe_allow_html=True)
     
     # ===== CRIAR ESTRUTURA DA TABELA =====
     html_table = '<table class="dre-tabela"><thead><tr>'
     html_table += '<th class="codigo-col">TD</th>'
     html_table += '<th class="desc-col">Descrição</th>'
+    html_table += '<th class="met-col">Metodologia</th>'
     
     for mes in MESES_ABR_LIST:
         html_table += f'<th class="mes-col">{mes}</th>'
@@ -944,6 +1471,7 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
         eh_negrito = linha_data["eh_negrito"]
         tipo = linha_data["tipo"]
         valores = linha_data["valores"]
+        met_aplicada = dre_dados.get(codigo, {}).get("metodologia")
         
         classe_linha = "negrito" if eh_negrito else ""
         html_table += f'<tr class="{classe_linha}">'
@@ -953,56 +1481,250 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
         
         # Descrição
         html_table += f'<td class="desc-col">{descricao}</td>'
+
+        nome_met_col = "-"
+        if met_aplicada and isinstance(met_aplicada, dict):
+            nome_met_col = met_aplicada.get("nome", "-")
+        met_col_html = nome_met_col if nome_met_col == "-" else f'<span class="dre-met-tag">{nome_met_col}</span>'
+        html_table += f'<td class="met-col">{met_col_html}</td>'
         
         # Valores dos meses
         for mes_idx in range(12):
             valor = valores[mes_idx]
-            
+            valor_formatado = _fmt_dre_valor(valor)
             if tipo == "variavel" and not modo_viz:
-                # Input editável (usar st.number_input dentro de coluna)
-                html_table += f'<td class="mes-col" id="cell_{codigo}_{mes_idx}"></td>'
+                html_table += (
+                    f'<td class="mes-col dre-cell-editable" '
+                    f'ondblclick="dreSelectCell(\'{codigo}\',{mes_idx+1})" '
+                    f'title="Duplo clique para aplicar metodologia nesta célula">{valor_formatado}</td>'
+                )
             else:
-                # Apenas visualização
-                valor_formatado = fmt_br(valor) if valor != 0 else "0"
                 html_table += f'<td class="mes-col">{valor_formatado}</td>'
         
         html_table += '</tr>'
     
     html_table += '</tbody></table>'
-    st.markdown(html_table, unsafe_allow_html=True)
+
+    colunas_meses = list(MESES_ABR_LIST)
+    dados_editor = []
+    for linha in ESTRUTURA_DRE:
+        codigo = linha.codigo
+        dados = dre_dados.get(codigo, {})
+        met_aplicada = dados.get("metodologia") or {}
+        linha_editor = {
+            "TD": codigo,
+            "Descrição": ("∑ " + dados.get("descricao", "")) if dados.get("tipo") == "totalizador" else dados.get("descricao", ""),
+            "Metodologia": met_aplicada.get("nome", "-"),
+        }
+        for mes_idx, mes in enumerate(MESES_ABR_LIST):
+            linha_editor[mes] = float((dados.get("valores") or [0.0] * 12)[mes_idx])
+        dados_editor.append(linha_editor)
+
+    if modo_viz:
+        st.markdown(f'<div class="dre-table-wrap">{html_table}</div>', unsafe_allow_html=True)
+    else:
+        df_dre_editor = pd.DataFrame(dados_editor)
+        column_config_editor = {
+            "TD": st.column_config.TextColumn("TD", width="small", disabled=True),
+            "Descrição": st.column_config.TextColumn("Descrição", width="medium", disabled=True),
+            "Metodologia": st.column_config.TextColumn("Metodologia", width="small", disabled=True),
+        }
+        for mes in colunas_meses:
+            column_config_editor[mes] = st.column_config.NumberColumn(
+                mes,
+                width="small",
+                format="%.2f",
+            )
+
+        df_editado = st.data_editor(
+            df_dre_editor,
+            key="dre_grade_editavel",
+            hide_index=True,
+            width="stretch",
+            height="content",
+            disabled=["TD", "Descrição", "Metodologia"],
+            column_config=column_config_editor,
+            num_rows="fixed",
+        )
+
+        for _, linha_df in df_editado.iterrows():
+            codigo = linha_df["TD"]
+            if dre_dados.get(codigo, {}).get("tipo") == "variavel":
+                dre_dados[codigo]["valores"] = [float(linha_df[mes]) for mes in colunas_meses]
     
-    # ===== INPUTS EDITÁVEIS (renderizar após a tabela para melhor UX) =====
     if not modo_viz:
+        dre_cell_qs = st.query_params.get("dre_cell", "")
+        if dre_cell_qs and isinstance(dre_cell_qs, str) and "_" in dre_cell_qs:
+            try:
+                cod_qs, mes_qs = dre_cell_qs.split("_", 1)
+                mes_int = int(mes_qs)
+                if 1 <= mes_int <= 12:
+                    st.session_state["met_cell_linha"] = cod_qs
+                    st.session_state["met_cell_mes"] = mes_int
+            except Exception:
+                pass
+
         st.markdown("---")
-        st.markdown('<h3 style="color: #0c3a66; font-family: Plus Jakarta Sans, sans-serif;"><i class="fas fa-pen-to-square" style="color: #06b6d4; margin-right: 8px;"></i>Editar Valores</h3>', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="
+            background: linear-gradient(90deg, #fffbeb 0%, rgba(245, 158, 11, 0.05) 100%);
+            border-left: 4px solid #f59e0b;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        ">
+            <h3 style="color: #0c3a66; font-family: Plus Jakarta Sans, sans-serif; margin: 0 0 4px 0;">
+                <i class="fas fa-pen-to-square" style="color: #f59e0b; margin-right: 10px;"></i>Editar Valores
+            </h3>
+            <p style="color: #666; margin: 4px 0 0 28px; font-size: 0.9em;">Atualize os valores variáveis das linhas da DRE</p>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption("A própria grade acima fica editável no modo edição. Totalizadores continuam calculados automaticamente.")
+
+        st.caption("No Streamlit, o componente de edição não expõe evento de duplo clique por célula. Use o painel abaixo para aplicar metodologia por TD/mês com o mesmo efeito operacional.")
+
+        with st.expander("⚡ Aplicação rápida de metodologia (estilo planilha)", expanded=False):
+            variaveis_editaveis = [ln.codigo for ln in ESTRUTURA_DRE if ln.tipo == "variavel"]
+            col_q1, col_q2 = st.columns([1.2, 1.8])
+            with col_q1:
+                linha_origem = st.selectbox("Linha base", variaveis_editaveis, key="met_quick_linha")
+            with col_q2:
+                metodologias_linha = {
+                    nome: dados for nome, dados in st.session_state.get("dre_metodologias", {}).items()
+                    if linha_origem in dados.get("aplicavel_a", [])
+                }
+                met_quick = st.selectbox(
+                    "Metodologia",
+                    ["Nenhuma"] + list(metodologias_linha.keys()),
+                    key="met_quick_nome"
+                )
+
+            col_q3, col_q4 = st.columns([1.5, 1])
+            with col_q3:
+                linhas_destino = st.multiselect(
+                    "Linhas destino (equivalente ao arrastar)",
+                    variaveis_editaveis,
+                    default=[linha_origem],
+                    key="met_quick_destinos"
+                )
+            with col_q4:
+                modo_quick = st.selectbox("Período", ["Todos", "Intervalo"], key="met_quick_periodo")
+
+            col_q5, col_q6 = st.columns(2)
+            with col_q5:
+                met_quick_ini = st.selectbox("Mês inicial", options=list(range(1, 13)), format_func=lambda m: MESES_ABR_LIST[m-1], key="met_quick_ini")
+            with col_q6:
+                met_quick_fim = st.selectbox("Mês final", options=list(range(1, 13)), format_func=lambda m: MESES_ABR_LIST[m-1], key="met_quick_fim")
+
+            if st.button("Aplicar nas linhas selecionadas", key="btn_met_quick_apply", use_container_width=True, type="primary"):
+                if met_quick == "Nenhuma":
+                    st.error("Selecione uma metodologia.")
+                elif not linhas_destino:
+                    st.error("Selecione ao menos uma linha destino.")
+                else:
+                    alteradas = []
+                    sem_efeito = []
+                    erros = []
+                    for cod_dest in linhas_destino:
+                        if cod_dest not in metodologias_linha[met_quick].get("aplicavel_a", []):
+                            erros.append(f"{cod_dest}: metodologia não aplicável")
+                            continue
+                        ok, msg, alterou = _aplicar_metodologia_em_linha(
+                            dre_dados,
+                            cod_dest,
+                            met_quick,
+                            metodologias_linha[met_quick],
+                            modo_periodo=modo_quick,
+                            mes_inicio=met_quick_ini,
+                            mes_fim=met_quick_fim,
+                        )
+                        if ok:
+                            alteradas.append(cod_dest)
+                            if not alterou:
+                                sem_efeito.append(cod_dest)
+                        else:
+                            erros.append(f"{cod_dest}: {msg}")
+
+                    if alteradas:
+                        st.success(f"Aplicada em: {', '.join(alteradas)}")
+                        if sem_efeito:
+                            st.warning(f"Sem mudança de valores em: {', '.join(sem_efeito)}")
+                        st.rerun()
+                    if erros:
+                        st.error(" | ".join(erros))
+
+        with st.expander("🧩 Aplicar por célula (modo edição)", expanded=False):
+            st.caption("Fluxo equivalente ao duplo clique: selecione célula alvo e aplique a metodologia para célula/faixa.")
+            variaveis_editaveis = [ln.codigo for ln in ESTRUTURA_DRE if ln.tipo == "variavel"]
+            col_c1, col_c2, col_c3 = st.columns([1.2, 1, 1.4])
+            with col_c1:
+                cel_linha = st.selectbox("Linha (TD)", variaveis_editaveis, key="met_cell_linha")
+            with col_c2:
+                cel_mes = st.selectbox("Mês base", options=list(range(1, 13)), format_func=lambda m: MESES_ABR_LIST[m-1], key="met_cell_mes")
+            with col_c3:
+                mets_celula = {
+                    nome: dados for nome, dados in st.session_state.get("dre_metodologias", {}).items()
+                    if cel_linha in dados.get("aplicavel_a", [])
+                }
+                met_celula = st.selectbox("Metodologia", ["Nenhuma"] + list(mets_celula.keys()), key="met_cell_nome")
+
+            col_c4, col_c5, col_c6 = st.columns([1.2, 1, 1])
+            with col_c4:
+                modo_cell = st.selectbox("Aplicação", ["Somente célula", "Da célula até Dez", "Intervalo"], key="met_cell_modo")
+            with col_c5:
+                cell_ini = st.selectbox("Início", options=list(range(1, 13)), format_func=lambda m: MESES_ABR_LIST[m-1], key="met_cell_ini")
+            with col_c6:
+                cell_fim = st.selectbox("Fim", options=list(range(1, 13)), format_func=lambda m: MESES_ABR_LIST[m-1], key="met_cell_fim")
+
+            if st.button("Aplicar na célula/faixa", key="btn_met_cell_apply", use_container_width=True):
+                if met_celula == "Nenhuma":
+                    st.error("Selecione uma metodologia para aplicar.")
+                else:
+                    if modo_cell == "Somente célula":
+                        ini, fim = cel_mes, cel_mes
+                    elif modo_cell == "Da célula até Dez":
+                        ini, fim = cel_mes, 12
+                    else:
+                        ini, fim = cell_ini, cell_fim
+
+                    ok, msg, alterou = _aplicar_metodologia_em_linha(
+                        dre_dados,
+                        cel_linha,
+                        met_celula,
+                        mets_celula[met_celula],
+                        modo_periodo="Intervalo" if ini != 1 or fim != 12 else "Todos",
+                        mes_inicio=ini,
+                        mes_fim=fim,
+                    )
+                    if ok:
+                        if alterou:
+                            st.success(f"{msg} Faixa aplicada: {MESES_ABR_LIST[ini-1]} a {MESES_ABR_LIST[fim-1]}.")
+                        else:
+                            st.warning("Aplicação concluída, porém sem mudança visível de valores na faixa.")
+                        st.rerun()
+                    else:
+                        st.error(msg)
         
-        for linha_data in dados_tabela:
-            codigo = linha_data["codigo"]
-            tipo = linha_data["tipo"]
-            
-            if tipo == "variavel":
-                with st.expander(f"📝 {codigo} - {linha_data['descricao']}", expanded=False):
-                    valores_atual = dre_dados[codigo]["valores"]
-                    
-                    cols = st.columns(12)
-                    for mes_idx, mes in enumerate(MESES_ABR_LIST):
-                        with cols[mes_idx]:
-                            novo_valor = st.number_input(
-                                mes,
-                                value=float(valores_atual[mes_idx]),
-                                format="%.2f",
-                                key=f"input_{codigo}_{mes_idx}",
-                                label_visibility="collapsed",
-                                step=100.0
-                            )
-                            dre_dados[codigo]["valores"][mes_idx] = novo_valor
-    
     st.session_state.dre_dados = dre_dados
     _calcular_totalizadores()
+    _persistir_linhas_dre()
     
     # ===== RESUMO EM CARDS =====
     st.markdown("---")
-    st.markdown('<h2 style="color: #0c3a66; font-family: Plus Jakarta Sans, sans-serif;"><i class="fas fa-chart-pie" style="color: #06b6d4; margin-right: 10px;"></i>Resumo de Resultado</h2>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="
+        background: linear-gradient(90deg, #fef2f2 0%, rgba(239, 68, 68, 0.05) 100%);
+        border-left: 4px solid #ef4444;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+    ">
+        <h2 style="color: #0c3a66; font-family: Plus Jakarta Sans, sans-serif; margin: 0 0 4px 0;">
+            <i class="fas fa-chart-pie" style="color: #ef4444; margin-right: 10px;"></i>Resumo de Resultado
+        </h2>
+        <p style="color: #666; margin: 4px 0 0 28px; font-size: 0.9em;">Principais indicadores financeiros da DRE</p>
+    </div>
+    """, unsafe_allow_html=True)
     
     dre_dados = st.session_state.dre_dados
     total_mfb = sum(dre_dados.get("MFB", {}).get("valores", []))
@@ -1129,12 +1851,13 @@ def renderizar():
     
     # Modo Visualização
     with col_modo:
-        modo_viz = st.toggle(
-            " Viz",
-            value=False,
-            key="dre_modo_visualizacao",
-            label_visibility="collapsed"
+        modo_edicao = st.toggle(
+            "Modo edição",
+            value=st.session_state.get("dre_modo_edicao", False),
+            key="dre_modo_edicao"
         )
+        modo_viz = not modo_edicao
+        st.session_state["dre_modo_visualizacao"] = modo_viz
     
     # Botão Salvar
     with col_btn:
@@ -1152,9 +1875,12 @@ def renderizar():
         # ===== ETAPA 1: SALVAR DADOS DO FILTRO ANTERIOR =====
         if combo_filtro_anterior:  # Se não é a primeira inicialização
             st.session_state.dre_dados_persistidos[combo_filtro_anterior] = deepcopy(st.session_state.dre_dados)
+            _persistir_linhas_dre(combo_filtro_anterior)
         
         # ===== ETAPA 2: CARREGAR OU INICIALIZAR DADOS DO NOVO FILTRO =====
-        if combo_filtro_atual in st.session_state.dre_dados_persistidos:
+        if _restaurar_linhas_dre(combo_filtro_atual):
+            pass
+        elif combo_filtro_atual in st.session_state.dre_dados_persistidos:
             # Já existe dados salvos para este filtro - RESTAURAR
             st.session_state.dre_dados = deepcopy(st.session_state.dre_dados_persistidos[combo_filtro_atual])
         else:
@@ -1204,7 +1930,7 @@ def _renderizar_editor_dre():
     # ========================================================================
     # SEÇÃO 1: VOLUMES FINANCEIROS (EXPANDER) - AGORA PRIMEIRO
     # ========================================================================
-    with st.expander("1. VOLUMES FINANCEIROS", expanded=False):
+    with st.expander("VOLUMES FINANCEIROS - TD21 e TD62", expanded=False):
         _renderizar_secao_volumes_financeiros()
     
     st.divider()
@@ -1212,7 +1938,7 @@ def _renderizar_editor_dre():
     # ========================================================================
     # SEÇÃO 2: INDICADORES ECONÔMICOS (EXPANDER) - AGORA SEGUNDO
     # ========================================================================
-    with st.expander("2. INDICADORES ECONÔMICOS", expanded=False):
+    with st.expander("INDICADORES ECONÔMICOS - Índices Compartilhados", expanded=False):
         _renderizar_secao_indices_economicos()
     
     st.divider()
@@ -1220,7 +1946,7 @@ def _renderizar_editor_dre():
     # ========================================================================
     # SEÇÃO 3: ESTRUTURA DA DRE (EXPANDER) - AGORA TERCEIRO
     # ========================================================================
-    with st.expander("3. ESTRUTURA DA DRE - PROJEÇÃO MENSAL (2026)", expanded=True):
+    with st.expander("ESTRUTURA DA DRE - Projeção Mensal (2026)", expanded=True):
         _renderizar_secao_dre_linhas(dre_dados, modo_viz)
 
 
@@ -1236,6 +1962,39 @@ def _renderizar_metodologias():
     - Funções nativas: `=SOMA(TD71)`, `=MEDIA(TD71;TD72)`, `=MINIMO(TD71:TD90)`
     - Histórico de aplicações com filtros e contexto
     """)
+
+    st.markdown("#### Cenários")
+    cenarios = st.session_state.get("dre_cenarios", {})
+    nomes_cenarios = list(cenarios.keys())
+    ativo = st.session_state.get("dre_cenario_ativo", "Base")
+    idx_ativo = nomes_cenarios.index(ativo) if ativo in nomes_cenarios else 0
+
+    col_c1, col_c2, col_c3 = st.columns([1.4, 1, 1])
+    with col_c1:
+        cenario_sel = st.selectbox("Cenário ativo", nomes_cenarios, index=idx_ativo, key="dre_cenario_selector")
+    with col_c2:
+        if st.button("Carregar cenário", use_container_width=True, key="btn_carregar_cenario"):
+            if _carregar_snapshot_cenario(cenario_sel):
+                st.success(f"Cenário '{cenario_sel}' carregado.")
+                st.rerun()
+            st.error("Não foi possível carregar o cenário selecionado.")
+    with col_c3:
+        if st.button("Salvar cenário atual", use_container_width=True, key="btn_salvar_cenario"):
+            _salvar_snapshot_cenario(cenario_sel)
+            st.success(f"Cenário '{cenario_sel}' salvo.")
+
+    novo_cenario = st.text_input("Novo cenário", placeholder="Ex: Estresse Selic + IPCA", key="dre_novo_cenario")
+    if st.button("Criar cenário a partir do atual", use_container_width=True, key="btn_criar_cenario"):
+        nome = (novo_cenario or "").strip()
+        if not nome:
+            st.error("Informe um nome para o cenário.")
+        elif nome in st.session_state.dre_cenarios:
+            st.error("Já existe um cenário com esse nome.")
+        else:
+            _salvar_snapshot_cenario(nome)
+            st.session_state.dre_cenario_ativo = nome
+            st.success(f"Cenário '{nome}' criado.")
+            st.rerun()
     
     # ===== ABAS INTERNAS =====
     tab_criar, tab_aplicar, tab_refs = st.tabs([
@@ -1248,155 +2007,232 @@ def _renderizar_metodologias():
     with tab_criar:
         st.markdown("####  Criar Nova Metodologia")
         
-        # 🔑 PARÂMETROS DE SAZONALIDADE (FORA do form para ser dinâmico)
-        with st.expander("⚙️ Parâmetros de Sazonalidade (opcional)", expanded=False):
-            sazonalidade = criar_interface_sazonalidade(rotulo_prefix="criar")
-        
-        # ✨ Seletor de Índices Econômicos com busca (ANTES do form)
-        st.markdown("#####  Índices Econômicos Disponíveis")
-        
-        # Importar função para obter índices
+        # Importar função para obter índices (somente para validação e tags)
         try:
             import sys
             import os
             backend_path = os.path.join(os.path.dirname(__file__), "..", "..", "backend")
             if backend_path not in sys.path:
                 sys.path.insert(0, backend_path)
-            from database import obter_lista_indices_disponiveis, agregar_indice_para_12_meses
+            from database import obter_lista_indices_disponiveis
             
             indices_disponiveis = obter_lista_indices_disponiveis()
         except Exception as e:
-            print(f"[UI] Erro ao carregar índices: {e}")
+            _log_dre(f"[UI] Erro ao carregar índices: {e}")
             indices_disponiveis = []
+
+        if st.session_state.pop("met_criar_limpar_pendente", False):
+            st.session_state["met_criar_nome"] = ""
+            st.session_state["met_criar_descricao"] = ""
+            st.session_state["met_criar_formula"] = ""
+            st.session_state["met_criar_aplicavel"] = []
+            st.session_state["met_criar_sugestao"] = ""
+
+        msg_sucesso = st.session_state.pop("met_criar_msg_sucesso", "")
+        if msg_sucesso:
+            st.success(msg_sucesso)
         
-        # Layout do seletor de índices (FORA do form)
-        if indices_disponiveis:
-            col_busca, col_preview = st.columns([1.5, 1])
-            
-            with col_busca:
-                busca_indice = st.text_input(
-                    " Buscar índices:",
-                    placeholder="Digite para filtrar (ex: IPCA, SELIC, DOLAR)",
-                    key="busca_indices_criar"
-                )
-                
-                indices_filtrados = [ind for ind in indices_disponiveis 
-                                    if busca_indice.lower() in ind.lower()] if busca_indice else indices_disponiveis
-                
-                if indices_filtrados:
-                    indice_selecionado = st.selectbox(
-                        "Selecione um índice:",
-                        indices_filtrados,
-                        key="selectbox_indices_criar",
-                        format_func=lambda x: f"📊 {x}"
-                    )
-                else:
-                    indice_selecionado = None
-                    st.warning("Nenhum índice encontrado")
-            
-            with col_preview:
-                if indice_selecionado:
-                    try:
-                        valores_indice = agregar_indice_para_12_meses(indice_selecionado)
-                        if valores_indice:
-                            st.markdown(f"**{indice_selecionado}**")
-                            st.metric(label="Valor Médio", value=f"{np.mean(valores_indice):.4f}")
-                            st.metric(label="Min-Max", value=f"{min(valores_indice):.4f} - {max(valores_indice):.4f}")
-                    except Exception as e:
-                        st.error(f"Erro: {e}")
+        st.session_state.setdefault("met_criar_nome", "")
+        st.session_state.setdefault("met_criar_descricao", "")
+        st.session_state.setdefault("met_criar_formula", "")
+        st.session_state.setdefault("met_criar_aplicavel", [])
+        st.session_state.setdefault("met_criar_sugestao", "")
+        st.session_state.setdefault("met_skip_keyup_sync", False)
+        st.session_state.setdefault("met_formula_widget_rev", 0)
+
+        pending_formula = st.session_state.pop("met_formula_pending_keyup", None)
+        if pending_formula is not None:
+            st.session_state["met_criar_formula"] = pending_formula
+            keyup_key = f"met_criar_formula_keyup_{st.session_state.get('met_formula_widget_rev', 0)}"
+            st.session_state[keyup_key] = pending_formula
+
+        nome_metodologia = st.text_input(
+            "Nome da Metodologia",
+            placeholder="ex: Despesa com Inflação (IPCA)",
+            label_visibility="collapsed",
+            key="met_criar_nome"
+        )
+
+        descricao_met = st.text_area(
+            "Descrição (opcional)",
+            placeholder="Descreva o propósito desta metodologia",
+            height=60,
+            label_visibility="collapsed",
+            key="met_criar_descricao"
+        )
+
+        if st_keyup is not None:
+            keyup_key = f"met_criar_formula_keyup_{st.session_state.get('met_formula_widget_rev', 0)}"
+            formula_keyup = st_keyup(
+                "Fórmula de Cálculo",
+                value=st.session_state.get("met_criar_formula", ""),
+                placeholder="ex: =0.60*TD71 ou =TD71*(1+IPCA/100)",
+                key=keyup_key,
+                debounce=120,
+            )
+            if formula_keyup is not None and not st.session_state.pop("met_skip_keyup_sync", False):
+                st.session_state["met_criar_formula"] = formula_keyup
+            formula_metodologia = st.session_state.get("met_criar_formula", "")
         else:
-            st.info("Nenhum índice importado. Use a aba Upload para adicionar.")
-        
-        st.divider()
-        
-        # FORMULÁRIO (sem botões st.button() dentro)
-        with st.form("form_nova_metodologia", clear_on_submit=True):
-            nome_metodologia = st.text_input(
-                "Nome da Metodologia",
-                placeholder="ex: Despesa com Inflação (IPCA)",
-                label_visibility="collapsed"
-            )
-            
-            descricao_met = st.text_area(
-                "Descrição (opcional)",
-                placeholder="Descreva o propósito desta metodologia",
-                height=60,
-                label_visibility="collapsed"
-            )
-            
             formula_metodologia = st.text_input(
                 "Fórmula de Cálculo",
                 placeholder="ex: =0.60*TD71 ou =TD71*(1+IPCA/100)",
                 label_visibility="collapsed",
-                key="formula_input_criar",
+                key="met_criar_formula",
                 help="Use '=' no início. Exemplos: =0.60*TD71, =MEDIA(TD71), =TD71*(1+IPCA/100)"
             )
-            
-            # Info profissional
-            col_info1, col_info2, col_info3 = st.columns(3)
-            
-            with col_info1:
-                st.markdown("""
-                **📝 Variáveis DRE:**
-                - `TD71` - Receita Financeira
-                - `TD72` - Despesa Financeira
-                - `TD87` - Spread Câmbio
-                - `MFB` - Margem Bruta
-                """)
-            
-            with col_info2:
-                st.markdown("""
-                ** Funções Nativas:**
-                - `SOMA(TD71)`
-                - `MEDIA(TD71;TD72)`
-                - `MINIMO(TD71:TD90)`
-                - `MAXIMO(TD71)`
-                """)
-            
-            with col_info3:
-                st.markdown("""
-                ** Índices Disponíveis:**
-                """ + "".join([f"- `{ind}`\n" for ind in indices_disponiveis[:5]]) + 
-                (f"- ... (+{len(indices_disponiveis)-5} mais)" if len(indices_disponiveis) > 5 else "")
-                )
-            
-            aplicavel_a = st.multiselect(
-                "Aplicável às variáveis (selecione pelo menos 1):",
-                [linha.codigo for linha in ESTRUTURA_DRE if linha.tipo == "variavel"],
-                help="Escolha quais variáveis receberão o cálculo desta fórmula"
+
+        contexto_formula = _obter_contexto_formula(st.session_state.dre_dados)
+        tokens_base = ["SOMA", "MEDIA", "MINIMO", "MAXIMO", "DESVIO_PADRAO"] + list(contexto_formula.keys()) + list(_preparar_contexto_com_indices(contexto_formula).keys())
+        tokens_unicos = sorted(set(t for t in tokens_base if isinstance(t, str) and t))
+
+        formula_normalizada = _normalizar_formula_usuario(formula_metodologia)
+        if formula_normalizada and formula_normalizada != formula_metodologia:
+            st.caption(f"Fórmula normalizada automaticamente: {formula_normalizada}")
+
+        classificacao = _classificar_tokens_formula(formula_normalizada, st.session_state.dre_dados)
+        texto_autocomplete = (formula_metodologia or "")
+        match_prefixo = re.search(r"([A-Za-z_][A-Za-z0-9_]*)$", texto_autocomplete.rstrip())
+        caps_trigger = bool(re.search(r"[A-Z]$", texto_autocomplete or ""))
+        sugestoes = []
+        if match_prefixo:
+            prefixo = match_prefixo.group(1).upper()
+            sugestoes = [tok for tok in tokens_unicos if tok.startswith(prefixo) and tok != prefixo][:10]
+            if not sugestoes and caps_trigger:
+                sugestoes = tokens_unicos[:10]
+        elif texto_autocomplete and texto_autocomplete.rstrip().endswith(("=", "+", "-", "*", "/", "(", ";")):
+            sugestoes = tokens_unicos[:10]
+
+        st.markdown("**Autocomplete e Sugestões**")
+        if sugestoes:
+            st.caption("Selecione uma sugestão para completar o token atual")
+            opcoes_sugestoes = [""] + sugestoes
+            if st.session_state.get("met_criar_sugestao", "") not in opcoes_sugestoes:
+                st.session_state["met_criar_sugestao"] = ""
+            st.selectbox(
+                "Sugestões da fórmula",
+                options=opcoes_sugestoes,
+                key="met_criar_sugestao",
+                help="Ao selecionar, a sugestão é aplicada automaticamente na fórmula",
+                on_change=_aplicar_sugestao_formula_criar
             )
-            
-            # Botão de submit (DENTRO do form - único lugar permitido)
-            submitted = st.form_submit_button(" Criar Metodologia", use_container_width=True, type="primary")
-            
-            if submitted:
-                if nome_metodologia and formula_metodologia and aplicavel_a:
-                    if not formula_metodologia.startswith("="):
-                        st.error("⚠️ A fórmula deve começar com '='")
-                    else:
-                        # Validar fórmula
-                        try:
-                            _avaliar_formula(formula_metodologia, st.session_state.dre_dados, sazonalidade)
-                            
-                            # Salvar metodologia
-                            nova_met = {
-                                "nome": nome_metodologia,
-                                "descricao": descricao_met,
-                                "formula": formula_metodologia,
-                                "aplicavel_a": aplicavel_a,
-                                "sazonalidade": sazonalidade,
-                                "data_criacao": datetime.now().isoformat(),
-                                "data_atualizacao": datetime.now().isoformat(),
-                                "aplicacoes": [],
-                                "usa_indices": any(ind in formula_metodologia for ind in indices_disponiveis)
-                            }
-                            st.session_state.dre_metodologias[nome_metodologia] = nova_met
-                            st.success(f" Metodologia '{nome_metodologia}' criada!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Erro na fórmula: {str(e)}")
+
+            st.caption("Sugestões rápidas")
+            if hasattr(st, "pills"):
+                st.markdown("""
+                <style>
+                [data-testid="stPills"] [role="radiogroup"] {
+                    gap: 8px;
+                    align-items: flex-start;
+                }
+                [data-testid="stPills"] [role="radio"] {
+                    min-width: 110px;
+                    justify-content: center;
+                    border-radius: 999px;
+                    padding: 4px 10px;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+                pill_key = f"met_criar_pills_{abs(hash((formula_metodologia or '')[-12:]))}"
+                escolhido_pill = st.pills(
+                    "Tokens sugeridos",
+                    options=sugestoes[:12],
+                    selection_mode="single",
+                    label_visibility="collapsed",
+                    key=pill_key,
+                )
+                if escolhido_pill:
+                    _inserir_token_formula_criar(escolhido_pill)
+                    st.rerun()
+            else:
+                sugestoes_rapidas = sugestoes[:6]
+                colunas_rapidas = st.columns(6)
+                for idx, tok in enumerate(sugestoes_rapidas):
+                    with colunas_rapidas[idx]:
+                        st.button(
+                            tok,
+                            key=f"btn_sugestao_rapida_{idx}_{tok}",
+                            use_container_width=True,
+                            on_click=_inserir_token_formula_criar,
+                            args=(tok,)
+                        )
+        elif texto_autocomplete:
+            st.caption("Autocomplete: digite o início de um token (ex.: TD, IPC, SOMA) para ver sugestões.")
+
+        if st_keyup is None:
+            st.caption("Dica: para autocomplete em tempo real de cada tecla, instale o pacote streamlit-keyup.")
+
+        _renderizar_formula_inline(formula_normalizada, classificacao)
+        _renderizar_tags_formula(classificacao)
+        if classificacao.get("invalidos"):
+            st.warning(f"Referências não reconhecidas: {', '.join(classificacao['invalidos'])}")
+
+        # Info profissional
+        col_info1, col_info2, col_info3 = st.columns(3)
+
+        with col_info1:
+            st.markdown("""
+            **📝 Variáveis DRE:**
+            - `TD71` - Receita Financeira
+            - `TD72` - Despesa Financeira
+            - `TD21` - MSD - Curva Ajustada (Volumes)
+            - `TD62` - Componente TD62 (Volumes)
+            """)
+
+        with col_info2:
+            st.markdown("""
+            ** Funções Nativas:**
+            - `SOMA(TD71)`
+            - `MEDIA(TD71;TD72)`
+            - `MINIMO(TD71:TD90)`
+            - `MAXIMO(TD71)`
+            - `DESVIO_PADRAO(TD90; -5; 1)`
+            """)
+
+        with col_info3:
+            st.markdown("""
+            ** Índices econômicos:**
+            - Use diretamente na fórmula quando existir na base
+            - Ex.: `IPCA`, `TAXA_SELIC`, `DOLAR_PTAX`
+            """)
+
+        aplicavel_a = st.multiselect(
+            "Aplicar em (linhas destino da DRE):",
+            [linha.codigo for linha in ESTRUTURA_DRE if linha.tipo == "variavel"],
+            key="met_criar_aplicavel",
+            help="Escolha quais variáveis receberão o cálculo desta fórmula"
+        )
+
+        if st.button(" Criar Metodologia", use_container_width=True, type="primary", key="btn_criar_metodologia"):
+            if nome_metodologia and formula_metodologia and aplicavel_a:
+                if not formula_normalizada.startswith("="):
+                    st.error("⚠️ A fórmula deve começar com '='")
+                elif classificacao.get("invalidos"):
+                    st.error(f"⚠️ Referências inválidas: {', '.join(classificacao['invalidos'])}")
                 else:
-                    st.error("⚠️ Preencha: Nome, Fórmula e selecione variáveis")
+                    try:
+                        _avaliar_formula(formula_normalizada, st.session_state.dre_dados, None)
+
+                        nova_met = {
+                            "nome": nome_metodologia,
+                            "descricao": descricao_met,
+                            "formula": formula_normalizada,
+                            "aplicavel_a": aplicavel_a,
+                            "sazonalidade": {"tipo": "NENHUM"},
+                            "data_criacao": datetime.now().isoformat(),
+                            "data_atualizacao": datetime.now().isoformat(),
+                            "aplicacoes": [],
+                            "usa_indices": any(ind in formula_normalizada.upper() for ind in [i.upper() for i in indices_disponiveis])
+                        }
+                        st.session_state.dre_metodologias[nome_metodologia] = nova_met
+
+                        st.session_state["met_criar_limpar_pendente"] = True
+                        st.session_state["met_criar_msg_sucesso"] = f" Metodologia '{nome_metodologia}' criada!"
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Erro na fórmula: {str(e)}")
+            else:
+                st.error("⚠️ Preencha: Nome, Fórmula e selecione variáveis")
         
         # ===== EXEMPLOS PRÁTICOS =====
         st.markdown("---")
@@ -1439,6 +2275,12 @@ def _renderizar_metodologias():
             =0.5*SOMA(TD71) * IPCA + 0.05*TAXA_SELIC
             ```
             Aplicar a: TD90, TD91, TD95
+
+            **📉 Volatilidade Recente com Lag**
+            ```
+            =TD90 + 0.2*DESVIO_PADRAO(TD90; -5; 1)
+            ```
+            Aplicar a: TD90
             
             ** Receita Mínima + Proteção**
             ```
@@ -1453,6 +2295,7 @@ def _renderizar_metodologias():
         - Use **sazonalidade** para periodos específicos
         - **Funções** funcionam com índices também: `SOMA(IPCA)`, `MEDIA(TAXA_SELIC)`
         - **Formulas complexas**: `=0.05*TD71 + 0.03*MEDIA(IPCA) + DOLAR_PTAX`
+        - **Janela + lag**: `DESVIO_PADRAO(TD90; -5; 1)` usa últimos 5 meses excluindo o mês atual
         """)
 
     # ===== ABA 2: APLICAR METODOLOGIAS =====
@@ -1505,11 +2348,14 @@ def _renderizar_metodologias():
                         if met_dados.get('descricao'):
                             st.markdown(f"**Descrição:** {met_dados['descricao']}")
                         
-                        st.markdown(f"**Variáveis:** {', '.join([f'`{v}`' for v in met_dados['aplicavel_a']])}")
-                        
-                        saz = met_dados.get('sazonalidade', 0)
-                        if saz != 0:
-                            st.markdown(f"**Sazonalidade:** {saz} meses")
+                        st.markdown(f"**Linhas destino:** {', '.join([f'`{v}`' for v in met_dados['aplicavel_a']])}")
+                        classif_met = _classificar_tokens_formula(
+                            _normalizar_formula_usuario(met_dados['formula']),
+                            st.session_state.get("dre_dados", {})
+                        )
+                        refs_formula = classif_met.get("dre", []) + classif_met.get("indices", [])
+                        if refs_formula:
+                            st.markdown(f"**Referências da fórmula:** {', '.join([f'`{v}`' for v in refs_formula])}")
                         
                         st.caption(f"Criada em: {met_dados['data_criacao'][:10]}")
                         st.caption(f"Atualizada em: {met_dados.get('data_atualizacao', 'N/A')[:10] if met_dados.get('data_atualizacao') else 'N/A'}")
@@ -1524,38 +2370,43 @@ def _renderizar_metodologias():
                 with col_apply:
                     if st.button(" Aplicar", key=f"btn_app_{met_nome}", use_container_width=True, type="primary"):
                         try:
-                            print(f"\n{'='*60}")
-                            print(f"[APLICACAO] Iniciando: {met_nome}")
-                            print(f"[APLICACAO] Escopo: {escopo_texto}")
-                            print(f"{'='*60}")
+                            _log_dre(f"\n{'='*60}")
+                            _log_dre(f"[APLICACAO] Iniciando: {met_nome}")
+                            _log_dre(f"[APLICACAO] Escopo: {escopo_texto}")
+                            _log_dre(f"{'='*60}")
                             
                             # ===== APLICAR METODOLOGIA =====
                             dre_dados = deepcopy(st.session_state.dre_dados)
+                            formula_aplicar = _normalizar_formula_usuario(met_dados.get('formula', ''))
+                            classif = _classificar_tokens_formula(formula_aplicar, dre_dados)
+                            if classif.get("invalidos"):
+                                st.error(f"⚠️ Referências inválidas na metodologia '{met_nome}': {', '.join(classif['invalidos'])}")
+                                continue
                             
                             aplicadas_a = []
+                            sem_efeito = []
                             for var_codigo in met_dados['aplicavel_a']:
                                 if var_codigo in dre_dados:
-                                    # Calcular nova série
-                                    valores_calc = _avaliar_formula(
-                                        met_dados['formula'], 
+                                    ok, msg, alterou = _aplicar_metodologia_em_linha(
                                         dre_dados,
-                                        sazonalidade=met_dados.get('sazonalidade', None)  #  Passar sazonalidade
+                                        var_codigo,
+                                        met_nome,
+                                        met_dados,
+                                        modo_periodo="Todos",
+                                        mes_inicio=1,
+                                        mes_fim=12,
                                     )
-                                    
-                                    # Log
-                                    v_antes = dre_dados[var_codigo]["valores"][:3]
-                                    dre_dados[var_codigo]["valores"] = valores_calc
-                                    v_depois = valores_calc[:3]
-                                    
-                                    print(f"[APLICACAO] {var_codigo}")
-                                    print(f"  ANTES:  {v_antes}...")
-                                    print(f"  DEPOIS: {v_depois}...")
-                                    
-                                    aplicadas_a.append(var_codigo)
+                                    if ok:
+                                        aplicadas_a.append(var_codigo)
+                                        if not alterou:
+                                            sem_efeito.append(var_codigo)
+                                    else:
+                                        st.error(f"{var_codigo}: {msg}")
                             
                             # ===== SALVAR E RECALCULAR =====
                             st.session_state.dre_dados = dre_dados
                             _calcular_totalizadores()
+                            _persistir_linhas_dre()
                             
                             # ===== REGISTRAR APLICAÇÃO =====
                             novo_registro = {
@@ -1574,8 +2425,8 @@ def _renderizar_metodologias():
                             
                             st.session_state.dre_metodologias[met_nome]["aplicacoes"].append(novo_registro)
                             
-                            print(f"[APLICACAO]  SUCESSO")
-                            print(f"{'='*60}\n")
+                            _log_dre(f"[APLICACAO]  SUCESSO")
+                            _log_dre(f"{'='*60}\n")
                             
                             st.success(f"""
                              **Aplicado com Sucesso!**
@@ -1584,13 +2435,13 @@ def _renderizar_metodologias():
                             • Escopo: {escopo_texto}
                             • Timestamp: {novo_registro['data'][:19].replace('T', ' ')}
                             """)
+                            if sem_efeito:
+                                st.warning(f"Sem alteração de valores em: {', '.join(sem_efeito)}. Verifique se a fórmula está resultando em zero no contexto atual.")
                             st.rerun()
                             
                         except Exception as e:
                             st.error(f"❌ Erro: {str(e)}")
-                            print(f"[APLICACAO] ❌ ERRO: {e}")
-                            import traceback
-                            traceback.print_exc()
+                            _log_dre(f"[APLICACAO] ❌ ERRO: {e}")
                 
                 # ===== BOTÃO EDITAR =====
                 with col_edit:
@@ -1636,7 +2487,7 @@ def _renderizar_metodologias():
                         )
                         
                         nova_aplicavel = st.multiselect(
-                            "Variáveis",
+                            "Linhas destino",
                             [linha.codigo for linha in ESTRUTURA_DRE if linha.tipo == "variavel"],
                             default=met_dados['aplicavel_a'],
                             key=f"vars_edit_{met_nome}"
@@ -1682,7 +2533,7 @@ def _renderizar_metodologias():
         """)
         
         # ===== CARDS COM CADA FUNÇÃO =====
-        for idx, nome_func in enumerate(["SOMA", "MEDIA", "MINIMO", "MAXIMO"]):
+        for idx, nome_func in enumerate(["SOMA", "MEDIA", "MINIMO", "MAXIMO", "DESVIO_PADRAO"]):
             col1, col2 = st.columns([1, 1])
             
             with col1:
@@ -1731,6 +2582,15 @@ def _renderizar_metodologias():
                         =MAXIMO(TD71;TD72;TD87)
                         =MAXIMO(TD71:TD90)
                         =MAXIMO(TD71)*0.05
+                        ```
+                        """)
+                    elif nome_func == "DESVIO_PADRAO":
+                        st.markdown("""
+                        ```
+                        =DESVIO_PADRAO(TD90)
+                        =DESVIO_PADRAO(TD90; -5)
+                        =DESVIO_PADRAO(TD90; -5; 1)
+                        =TD90 + 0.1*DESVIO_PADRAO(TD90; -3)
                         ```
                         """)
         

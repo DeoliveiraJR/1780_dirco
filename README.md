@@ -1,8 +1,8 @@
-# 🏦 UAN Dashboard - Sistema de Projeções Financeiras
+   # 🏦 UAN Dashboard - Sistema de Projeções Financeiras
 
 Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário**, **controle de permissões** e **DRE Gerencial profissional**.
 
-**Versão Atual:** v3.1 | **Status:** ✅ Production Ready | **Última Atualização:** 02/06/2026
+**Versão Atual:** v3.9.3 | **Status:** ✅ Production Ready | **Última Atualização:** 10/06/2026
 
 ---
 
@@ -43,6 +43,33 @@ QUANDO PRESO EM LOOP (3+ tentativas falhadas):
 ---
 
 ## 📌 O que foi implementado
+
+### ✅ [v3.9.3] - Metodologias (Precisão de Fórmula + UX de Contexto)
+- Confirmação e validação do cálculo mês a mês para metodologia de soma (`SOMA(TD71;TD72)`) aplicada na linha destino
+- Correção visual: tag da metodologia exibida somente na coluna Metodologia (removida da coluna Descrição)
+- Transparência no card da metodologia: separação entre linhas destino e referências reais usadas na fórmula
+- Melhor orientação operacional para evitar confusão entre "onde aplicar" e "quais variáveis a fórmula consome"
+
+### ✅ [v3.9.2] - DRE (Responsividade + Sessão + Edição)
+- Tabela da DRE no modo visual com container responsivo e rolagem horizontal, evitando estouro em telas menores
+- Tag de metodologia em formato badge na coluna Metodologia no modo visual
+- Destaque de totalizadores no modo edição com prefixo visual (`∑`) na descrição
+- Persistência da DRE limitada à sessão atual (reset automático após reinício do servidor)
+- Formatação numérica compacta para valores altos (`mi`/`bi`) na visualização
+
+### ✅ [v3.9.1] - Ajustes de Metodologias (UX + Validação)
+- Normalização de fórmula com vírgula decimal (ex.: `0,05` → `0.05`)
+- Validação de referências inválidas antes de salvar/aplicar metodologia
+- TAGs visuais da fórmula (`fn`, `dre`, `idx`, `inv`) para feedback imediato
+- Remoção dos campos de sazonalidade e seletor/preview de indicadores da guia Criar Metodologia
+- Redução de logs ruidosos de cálculo/índices no terminal (modo silencioso por padrão)
+
+### ✅ [v3.9] - Metodologias v1 (Motor Seguro + Cenários)
+- **🔒 Motor de Fórmulas Seguro (DRE):** avaliação de expressão via AST no lugar de `eval` aberto
+- **📉 Nova Função Nativa:** `DESVIO_PADRAO(...)` com suporte a janela e lag (ex: `DESVIO_PADRAO(TD90; -5; 1)`)
+- **📊 Índices + Funções Dinâmicas:** correção para usar contexto completo (linhas DRE + índices econômicos)
+- **🗂️ Cenários (persistência mínima):** carregar, salvar e criar cenário a partir do estado atual
+- **🧩 Aplicação por linha/período:** escolha de metodologia diretamente na linha variável e aplicação por intervalo de meses
 
 ### ✅ [v3.1] - Headers Padronizados com Suporte a Filtros (COMPLETO)
 - **🎨 Sistema Unificado:** Nova função `render_page_header()` aplicada em TODAS as páginas
@@ -204,9 +231,12 @@ QUANDO PRESO EM LOOP (3+ tentativas falhadas):
 
 #### **Sistema de Metodologias**
 - Crie fórmulas personalizadas: `=0.05*TD71`, `=TD71+TD72`
+- Funções nativas disponíveis: `SOMA`, `MEDIA`, `MAXIMO`, `MINIMO`, `DESVIO_PADRAO`
 - Valide antes de salvar
 - Aplique a múltiplas variáveis
+- Aplique por linha com período completo ou intervalo de meses
 - Edite/delete metodologias salvas
+- Gerencie cenários de simulação (carregar, salvar e criar)
 
 #### **Análise e Relatórios**
 - Métricas consolidadas (Receita, Despesa, Margens)
