@@ -763,7 +763,7 @@ def carregar_base_dados_compartilhada():
         return None
 
 
-def salvar_upload_admin(arquivo_bytes: bytes, nome_arquivo: str) -> Tuple[bool, str]:
+def salvar_upload_admin(arquivo_bytes: bytes, nome_arquivo: str, usuario_id: str = None) -> Tuple[bool, str]:
     """
     Salva um arquivo de upload do admin na base de dados compartilhada.
     Quando admin faz upload, INVALIDA as bases personalizadas dos usuários
@@ -772,6 +772,7 @@ def salvar_upload_admin(arquivo_bytes: bytes, nome_arquivo: str) -> Tuple[bool, 
     Args:
         arquivo_bytes: Bytes do arquivo Excel
         nome_arquivo: Nome do arquivo original
+        usuario_id: ID do usuário (opcional, obtém de session_state se não fornecido)
         
     Returns:
         (sucesso, mensagem)
@@ -782,7 +783,8 @@ def salvar_upload_admin(arquivo_bytes: bytes, nome_arquivo: str) -> Tuple[bool, 
         from database import salvar_upload_admin as db_salvar, eh_admin, obter_usuario_por_email
         
         usuario_email = st.session_state.get("usuario_email", "")
-        usuario_id = st.session_state.get("usuario_id", "")
+        if usuario_id is None:
+            usuario_id = st.session_state.get("usuario_id", "")
         
         if not usuario_email or not usuario_id:
             return False, "Usuário não autenticado"
@@ -793,21 +795,29 @@ def salvar_upload_admin(arquivo_bytes: bytes, nome_arquivo: str) -> Tuple[bool, 
             return False, "Apenas administradores podem fazer upload"
         
         # Salva no database
-        sucesso, msg = db_salvar(arquivo_bytes, nome_arquivo, usuario_id)
-        
-        if sucesso:
-            # Invalida cache do session_state
-            st.session_state.dados_upload = None
-            st.session_state.dados_upload_original = None
-            st.session_state._curvas_aplicadas_sessao = False
+        try:
+            sucesso, msg = db_salvar(arquivo_bytes, nome_arquivo, usuario_id)
             
-            # NOVO: Flag para invalidar bases personalizadas dos usuários
-            # Próximo login recarregará e criará nova base se tiver edições
-            st.session_state._novo_upload_realizado = True
+            if sucesso:
+                # Invalida cache do session_state
+                st.session_state.dados_upload = None
+                st.session_state.dados_upload_original = None
+                st.session_state._curvas_aplicadas_sessao = False
+                
+                # NOVO: Flag para invalidar bases personalizadas dos usuarios
+                # Proximo login recarregara e criara nova base se tiver edicoes
+                st.session_state._novo_upload_realizado = True
+                
+                print(f"[DATA_MANAGER] Upload salvo. Cache invalidado.")
             
-            print(f"[DATA_MANAGER] Upload salvo. Cache invalidado.")
+            return sucesso, msg
         
-        return sucesso, msg
+        except Exception as e_db:
+            print(f"[DATA_MANAGER] Erro ao chamar backend: {e_db}")
+            import traceback
+            traceback.print_exc()
+            # Retorna erro claro
+            return False, f"Erro ao conectar com backend: {str(e_db)}"
         
     except Exception as e:
         return False, f"Erro ao salvar upload: {str(e)}"

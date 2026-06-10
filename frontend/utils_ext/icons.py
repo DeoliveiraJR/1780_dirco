@@ -545,5 +545,10 @@ def render_page_header(
     st.markdown(html, unsafe_allow_html=True)
 
 
+# render_section_header_dre() foi removido em v3.6.2
+# Era uma solução muito elaborada que o usuário preferiu não usar.
+# Mantém-se apenas os emojis simples nos labels dos expanders
+
+
 # Inicializar Font Awesome quando módulo é carregado
 inject_font_awesome()

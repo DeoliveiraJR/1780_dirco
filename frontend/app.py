@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
 import pandas as pd
+import streamlit.components.v1 as components
 from styles import CORES, CSS_CUSTOM, aplicar_tema
 from pages import autenticacao, dashboard, simulador, perfil, upload, dre
 from data_manager import (
@@ -28,6 +29,40 @@ st.set_page_config(
 )
 
 aplicar_tema()
+
+# ========================================================================
+# INJETAR SCRIPT DE ÍCONES GLOBALMENTE (executa em todas as páginas)
+# ========================================================================
+st.markdown("""
+<script>
+window.applyExpanderIcons = function() {
+  const summaries = document.querySelectorAll('summary');
+  let applied = 0;
+  summaries.forEach(summary => {
+    if (summary.querySelector('i.fas')) return;
+    const text = summary.textContent;
+    let iconClass = '';
+    if (text.includes('VOLUMES')) iconClass = 'fa-water';
+    else if (text.includes('INDICADORES')) iconClass = 'fa-money-bill-trend-up';
+    else if (text.includes('ESTRUTURA')) iconClass = 'fa-receipt';
+    if (iconClass) {
+      const icon = document.createElement('i');
+      icon.className = 'fas ' + iconClass;
+      icon.style.color = '#06b6d4';
+      icon.style.marginRight = '10px';
+      icon.style.fontSize = '1.1em';
+      icon.style.display = 'inline-block';
+      summary.insertBefore(icon, summary.firstChild);
+      applied++;
+    }
+  });
+  return applied;
+};
+window.applyExpanderIcons();
+document.addEventListener('DOMContentLoaded', window.applyExpanderIcons);
+new MutationObserver(window.applyExpanderIcons).observe(document.body, {childList: true, subtree: true});
+</script>
+""", unsafe_allow_html=True)
 
 # ============= CARREGAMENTO DA LOGO =============
 from PIL import Image
@@ -96,7 +131,7 @@ else:
         st.markdown("""
         <style>
             [data-testid="stSidebarNav"] {display: none;}
-            section[data-testid="stSidebar"] > div {padding-top: 2rem;}
+            section[data-testid="stSidebar"] > div {padding-top: 0.2rem !important;}
         </style>
         """, unsafe_allow_html=True)
         
@@ -121,7 +156,7 @@ else:
             st.markdown('<div style="font-size: 52px; margin: 0;">🏢</div>', unsafe_allow_html=True)
         
         st.markdown("""
-            <h1 style="margin: 8px 0 0px 0; color: white; font-size: 32px; 
+            <h1 style="margin: 8px 0 0px 0; color: #06b6d4; font-size: 32px; 
                        font-weight: 800; letter-spacing: 2px; text-align: center;">
                 🌐UAN DASHBOARD
             </h1>
@@ -402,13 +437,12 @@ else:
                 value=valor_inicial_slider,
                 step=1.0,
                 help="""
-                Controla o multiplicador da inclinação da curva:
-                • -10.0x a -1.0x: Inverte/reduz significativamente a tendência
-                • 0.0x: Curva totalmente plana (sem inclinação)
-                • 1.0x: Inclinação original (sem mudança)
-                • 10.0x: 10x a inclinação original
-                • 25.0x: 25x a inclinação original
-                • 50.0x: 50x a inclinação original (impacto máximo)
+                Controla a rotação da inclinação com direção intuitiva:
+                • valor > 1.0x: gira para cima
+                • 1.0x: mantém a inclinação original
+                • 0.0x: curva plana (sem inclinação)
+                • valor < 0.0x: gira para baixo
+                Quanto maior o módulo do valor, maior o impacto visual.
                 """,
                 key="sim_rotacionar_mult"
             )
@@ -447,6 +481,9 @@ else:
                 if st.button("✅ Aplicar", use_container_width=True, key="btn_aplicar_rotacao", help="Aplica a rotação à curva ajustada"):
                     # Função para calcular curva rotacionada (SEMPRE 24 MESES: 2026 + 2027)
                     def _calcular_curva_rotacionada_sidebar(mult_rot):
+                        print(f"\n[ROTACAO-DEBUG] ===== INICIANDO CÁLCULO =====")
+                        print(f"[ROTACAO-DEBUG] mult_rot={mult_rot}, tipo={type(mult_rot)}")
+                        
                         # Monta a curva analítica atual
                         df_upload = get_dados_upload()
                         cliente_atual = st.session_state.get("filtros", {}).get("cliente", "Todos")
@@ -454,7 +491,10 @@ else:
                         produto_raw = st.session_state.get("filtros", {}).get("produto", "")
                         produto_atual = "" if produto_raw == "TODOS" else produto_raw
 
+                        print(f"[ROTACAO-DEBUG] cliente={cliente_atual}, categoria={categoria_atual}, produto={produto_atual}")
+
                         if df_upload is None or df_upload.empty or not categoria_atual:
+                            print(f"[ROTACAO-DEBUG] ❌ ERRO: df_upload vazio ou categoria_atual vazia. Retornando None")
                             return None
 
                         from datetime import datetime
@@ -477,7 +517,10 @@ else:
                         )
 
                         analitica = (ana_ano_atual[:] + ana_ano_proximo[:])[:24]
+                        print(f"[ROTACAO-DEBUG] analitica tamanho={len(analitica)}, primeiros 3: {[f'{v:.0f}' for v in analitica[:3]]}, últimos 3: {[f'{v:.0f}' for v in analitica[-3:]]}")
+                        
                         if len(analitica) < 12:
+                            print(f"[ROTACAO-DEBUG] ❌ ERRO: analitica com menos de 12 elementos. Retornando None")
                             return None
                         
                         # ==================== CALCULA PARA OS 12 PRIMEIROS MESES ====================
@@ -486,8 +529,22 @@ else:
                         ultimo = analitica[11] if analitica[11] else 0
                         incl = (ultimo - primeiro) / (qtd - 1) if qtd > 1 else 0
                         
-                        # Calcula novo ajuste de inclinação (multiplicado pelo fator)
-                        incl_novo = incl * mult_rot
+                        print(f"[ROTACAO-DEBUG] 2026 (primeiros 12 meses):")
+                        print(f"[ROTACAO-DEBUG]   primeiro={primeiro:.2f}, ultimo={ultimo:.2f}")
+                        print(f"[ROTACAO-DEBUG]   incl_original=(ultimo-primeiro)/(qtd-1)=({ultimo:.2f}-{primeiro:.2f})/11={incl:.4f}")
+                        
+                        # Regras de direção (intuitivas para o usuário):
+                        #   mult > 1  -> inclina para cima
+                        #   mult = 1  -> mantém inclinação original
+                        #   mult = 0  -> curva plana
+                        #   mult < 0  -> inclina para baixo
+                        if mult_rot == 0:
+                            incl_novo = 0.0
+                        else:
+                            incl_novo = incl + (mult_rot - 1.0) * abs(incl)
+                        print(f"[ROTACAO-DEBUG]   incl_novo=incl + (mult_rot-1)*abs(incl) = {incl:.4f} + ({mult_rot}-1)*{abs(incl):.4f} = {incl_novo:.4f}")
+                        dir_esperada = "SUBIR" if mult_rot > 1 else ("PLANA" if mult_rot == 0 else "DESCER")
+                        print(f"[ROTACAO-DEBUG]   DELTA_INCLINACAO = {incl_novo - incl:.4f} | direção esperada: {dir_esperada}")
                         
                         # Distribui a nova inclinação linearmente ao longo dos 12 meses
                         curva_rot_12m = []
@@ -496,6 +553,8 @@ else:
                             ajuste = fator * (incl_novo - incl)
                             valor = analitica[i] + ajuste
                             curva_rot_12m.append(max(0, valor))
+                            if i == 0 or i == 6 or i == 11:
+                                print(f"[ROTACAO-DEBUG]   mês[{i}]: fator={fator:.2f}, ajuste={ajuste:.2f}, analitica={analitica[i]:.2f} → rotacionada={valor:.2f}")
                         
                         # ==================== EXPANDE PARA 24 MESES ====================
                         # O simulador SEMPRE usa 24 meses (ano atual + próximo ano)
@@ -506,7 +565,14 @@ else:
                             primeiro_2027 = analitica[12] if analitica[12] else 0
                             ultimo_2027 = analitica[23] if analitica[23] else 0
                             incl_2027 = (ultimo_2027 - primeiro_2027) / (qtd - 1) if qtd > 1 else 0
-                            incl_novo_2027 = incl_2027 * mult_rot
+                            if mult_rot == 0:
+                                incl_novo_2027 = 0.0
+                            else:
+                                incl_novo_2027 = incl_2027 + (mult_rot - 1.0) * abs(incl_2027)
+                            
+                            print(f"[ROTACAO-DEBUG] 2027 (próximos 12 meses):")
+                            print(f"[ROTACAO-DEBUG]   primeiro={primeiro_2027:.2f}, ultimo={ultimo_2027:.2f}")
+                            print(f"[ROTACAO-DEBUG]   incl_original={incl_2027:.4f}, incl_novo={incl_novo_2027:.4f}")
                             
                             for i in range(qtd):
                                 fator = i / (qtd - 1)
@@ -517,26 +583,42 @@ else:
                             # Sem dados de 2027, replica os 12 primeiros (mesma curva rotacionada)
                             curva_rot_24m.extend(curva_rot_12m[:])
                         
+                        print(f"[ROTACAO-DEBUG] ✅ RESULTADO FINAL:")
+                        print(f"[ROTACAO-DEBUG]   curva_rot_24m tamanho={len(curva_rot_24m)}")
+                        print(f"[ROTACAO-DEBUG]   primeiros 3: {[f'{v:.0f}' for v in curva_rot_24m[:3]]}")
+                        print(f"[ROTACAO-DEBUG]   últimos 3: {[f'{v:.0f}' for v in curva_rot_24m[-3:]]}")
+                        print(f"[ROTACAO-DEBUG] Comparação 2026 (mês 11):")
+                        print(f"[ROTACAO-DEBUG]   analitica[11]={analitica[11]:.2f} → curva_rot[11]={curva_rot_24m[11]:.2f} (delta={curva_rot_24m[11]-analitica[11]:+.2f})")
+                        
                         return curva_rot_24m if len(curva_rot_24m) == 24 else None
                     
                     # Aplica a rotação
                     curva_rot = _calcular_curva_rotacionada_sidebar(mult_rotacao)
+                    print(f"\n[ROTACAO-DEBUG] Após calcular curva_rot:")
+                    print(f"[ROTACAO-DEBUG] curva_rot is None? {curva_rot is None}")
+                    if curva_rot is not None:
+                        print(f"[ROTACAO-DEBUG] len(curva_rot)={len(curva_rot)}")
+                        print(f"[ROTACAO-DEBUG] curva_rot[11] (último de 2026)={curva_rot[11]:.2f}")
+                    
                     if curva_rot:
                         produto_combo = "" if st.session_state.get("filtros", {}).get("produto", "") == "TODOS" else st.session_state.get("filtros", {}).get("produto", "")
                         combo_rot = f"{st.session_state.get('filtros', {}).get('cliente', 'Todos')}::{st.session_state.get('filtros', {}).get('categoria', '')}::{produto_combo}"
 
+                        print(f"[ROTACAO-DEBUG] Atribuindo curva_rot ao session_state['ajustada']")
                         st.session_state["ajustada"] = curva_rot  # Agora com 24 elementos
                         st.session_state["last_combo"] = combo_rot
                         # Persistir em chave privada (não conflita com widget key)
                         st.session_state["_sim_rotacionar_curva_aplicado"] = mult_rotacao
                         # Também salvar em chave pública para uso no simulador
                         st.session_state["sim_rotacionar_curva"] = mult_rotacao
+                        print(f"[ROTACAO-DEBUG] ✅ session_state['ajustada'] atualizado com {len(st.session_state['ajustada'])} elementos")
                         st.session_state["_rotacao_feedback"] = {
                             "tipo": "success",
                             "mensagem": f"Curva rotacionada com {mult_rotacao:+.2f}x de inclinação.",
                         }
                         st.rerun()
                     else:
+                        print(f"[ROTACAO-DEBUG] ❌ curva_rot retornou None ou False")
                         st.session_state["_rotacao_feedback"] = {
                             "tipo": "error",
                             "mensagem": "Não foi possível calcular a rotação. Verifique cliente/categoria/produto e tente novamente.",
@@ -717,6 +799,35 @@ else:
                     st.success(feedback_msg)
                 else:
                     st.warning(feedback_msg)
+
+        # Reordena visualmente os blocos para manter Filtros antes de Parâmetros.
+        components.html(
+            """
+            <script>
+            (function reorderSidebarSections(){
+                const doc = window.parent.document;
+                const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+                if (!sidebar) return;
+
+                const expanders = Array.from(sidebar.querySelectorAll('div[data-testid="stExpander"]'));
+                const findExpander = (label) => expanders.find((el) => (el.textContent || '').includes(label));
+
+                const filtros = findExpander('Filtros da Simulação');
+                const parametros = findExpander('Parâmetros da Simulação');
+                if (!filtros || !parametros) return;
+
+                const parent = parametros.parentElement;
+                if (!parent) return;
+
+                const filtrosBeforeParametros = filtros.compareDocumentPosition(parametros) & Node.DOCUMENT_POSITION_FOLLOWING;
+                if (!filtrosBeforeParametros) {
+                    parent.insertBefore(filtros, parametros);
+                }
+            })();
+            </script>
+            """,
+            height=0,
+        )
 
         st.markdown("---")
         

@@ -7,12 +7,22 @@ import streamlit.components.v1 as components
 from bokeh.embed import file_html
 from bokeh.resources import CDN
 import json
+import sys
+import importlib.util
+
+
+print(
+    "[BokehEditable][BOOT] "
+    f"python={sys.executable} "
+    f"streamlit_js_eval={importlib.util.find_spec('streamlit_js_eval')}"
+)
 
 
 def bokeh_editable(
     bokeh_figure,
     height: int = 1780,
-    key: str = None
+    key: str = None,
+    enable_storage_monitor: bool = True,
 ) -> list:
     """
     Renderiza um gráfico Bokeh com monitoramento de mudanças nos DataSources.
@@ -23,6 +33,9 @@ def bokeh_editable(
         bokeh_figure: O objeto Bokeh (figure ou layout) a ser renderizado
         height: Altura do componente em pixels
         key: Chave única do Streamlit para este componente
+        enable_storage_monitor: Se True, monitora DataSources e escreve no localStorage.
+            Em telas que já escrevem localStorage via callbacks próprios, use False para
+            evitar concorrência de escrita (single-writer).
     
     Returns:
         None (valores são lidos via get_bokeh_updates())
@@ -53,6 +66,7 @@ def bokeh_editable(
     <script>
     (function() {
         const STORAGE_KEY = ''' + json.dumps(storage_key) + ''';
+        const ENABLE_STORAGE_MONITOR = ''' + json.dumps(enable_storage_monitor) + ''';
         const statusDiv = document.getElementById('bokeh-status');
         
         function showStatus(msg) {
@@ -84,6 +98,7 @@ def bokeh_editable(
             let lastSentData = null;
             
             function saveToStorage(yValues) {
+                if (!ENABLE_STORAGE_MONITOR) return;
                 const dataStr = JSON.stringify(yValues);
                 if (dataStr === lastSentData) return;
                 lastSentData = dataStr;
@@ -102,14 +117,27 @@ def bokeh_editable(
             // Encontra o ColumnDataSource do gráfico (src_ajs - com 12 valores de y)
             let graphSource = null;
             let tableSource = null;
+
+            function extractGraphY() {
+                if (graphSource && graphSource.data && graphSource.data.y && graphSource.data.y.length === 12) {
+                    return Array.from(graphSource.data.y).map(v =>
+                        Number.isFinite(v) ? parseFloat(v.toFixed(2)) : 0
+                    );
+                }
+                return null;
+            }
             
             allModels.forEach((model, id) => {
                 if (model.type === 'ColumnDataSource') {
+                    const isAjustadaPrincipal = (model.name === 'src_ajs_main') || (model.data && model.data.y_br && model.data.y && model.data.y.length === 12);
                     if (model.data && model.data.y && model.data.y.length === 12) {
-                        graphSource = model;
+                        if (isAjustadaPrincipal) {
+                            graphSource = model;
+                        }
                         console.log('[BokehEditable] Monitorando gráfico:', model.name || model.id);
                         
                         model.connect(model.properties.data.change, () => {
+                            if (!ENABLE_STORAGE_MONITOR) return;
                             const data = model.data;
                             if (data && data.y && data.y.length === 12) {
                                 const yValues = Array.from(data.y).map(v => 
@@ -124,25 +152,24 @@ def bokeh_editable(
                             }
                         });
                     }
-                    // Identifica a tabela (tem campo "Ajustada" e mais de 12 linhas - inclui média e crescimento)
-                    if (model.data && model.data.Ajustada && model.data.Ajustada.length >= 12) {
+                    // Identifica fontes de tabela histórica (campos Ajuste_/Ajustada_ por ano)
+                    const keys = model.data ? Object.keys(model.data) : [];
+                    const isHistorica = keys.some(k => k.startsWith('Ajuste_') || k.startsWith('Ajustada_'));
+                    if (model.data && (isHistorica || (model.data.Ajustada && model.data.Ajustada.length >= 12))) {
                         tableSource = model;
                         console.log('[BokehEditable] Monitorando tabela:', model.name || model.id);
                         
                         // Monitora mudanças na tabela também
                         model.connect(model.properties.data.change, () => {
-                            const ajustada = model.data.Ajustada;
-                            if (ajustada && ajustada.length >= 12) {
-                                const yValues = ajustada.slice(0, 12).map(v => 
-                                    Number.isFinite(v) ? parseFloat(v.toFixed(2)) : 0
-                                );
-                                
-                                if (debounceTimer) clearTimeout(debounceTimer);
-                                debounceTimer = setTimeout(() => {
-                                    saveToStorage(yValues);
-                                    console.log('[BokehEditable] Tabela editada:', yValues.slice(0,3));
-                                }, 300);
-                            }
+                            if (!ENABLE_STORAGE_MONITOR) return;
+                            const yValues = extractGraphY();
+                            if (!yValues) return;
+
+                            if (debounceTimer) clearTimeout(debounceTimer);
+                            debounceTimer = setTimeout(() => {
+                                saveToStorage(yValues);
+                                console.log('[BokehEditable] Tabela histórica editada, sync via gráfico:', yValues.slice(0,3));
+                            }, 300);
                         });
                     }
                 }
@@ -165,49 +192,113 @@ def bokeh_editable(
 
 def get_bokeh_updates(key: str = None, sync_counter: int = 0) -> list:
     """
-    Lê os valores atualizados do localStorage usando streamlit_js_eval.
-    Retorna None se não houver atualizações.
-    
+    Lê os valores do localStorage usando streamlit_js_eval com KEY FIXA por combo.
+    Key fixa = o componente não precisa de um segundo rerun para avaliar o JS.
+    O Streamlit cacheia o resultado de streamlit_js_eval por key; uma key que não muda
+    entre reruns retorna o último valor avaliado imediatamente.
+
     Args:
         key: Chave do componente bokeh_editable
-        sync_counter: Contador de sincronização (incrementar para forçar nova leitura)
-    
+        sync_counter: Ignorado — mantido por compatibilidade de assinatura.
+
     Returns:
         Lista de 12 valores ou None
     """
+    packet = get_bokeh_update_packet(key=key, sync_counter=sync_counter)
+    if not packet:
+        return None
+
+    values = packet.get("values")
+    if isinstance(values, list) and len(values) == 12:
+        return values
+    return None
+
+
+def get_bokeh_update_packet(key: str = None, sync_counter: int = 0) -> dict:
+    """
+    Lê valores + timestamp do localStorage via streamlit_js_eval.
+    A chave de avaliação varia por ciclo de sincronização para evitar cache estático
+    e permitir capturar novas edições sucessivas.
+
+    Args:
+        key: Chave do componente bokeh_editable
+        sync_counter: Ignorado — mantido por compatibilidade de assinatura.
+
+    Returns:
+        Dict {'values': list|None, 'timestamp': int, 'probe': dict|None, 'sync_probe': dict|None} ou None.
+    """
     try:
         from streamlit_js_eval import streamlit_js_eval
-        
-        storage_key = f"bokeh_update_{key or 'default'}"
-        
-        # Usa o sync_counter na key para forçar nova leitura quando necessário
-        eval_key = f"_get_bokeh_{key}_{sync_counter}"
-        
-        # Lê o valor do localStorage
-        result = streamlit_js_eval(
-            js_expressions=f"localStorage.getItem('{storage_key}')",
-            key=eval_key
+        print(
+            "[get_bokeh_update_packet][RUNTIME] "
+            f"python={sys.executable} "
+            f"streamlit_js_eval_ok=True "
+            f"key={key}"
         )
-        
-        if result:
-            values = json.loads(result)
-            if isinstance(values, list) and len(values) == 12:
-                print(f"[get_bokeh_updates] ✓ Valores lidos: {[f'{v:.0f}' for v in values[:3]]}...")
-                return values
-        else:
-            print(f"[get_bokeh_updates] localStorage.getItem('{storage_key}') retornou None")
-            # Debug: imprime o que está no localStorage
-            try:
-                all_keys = streamlit_js_eval(
-                    js_expressions="Object.keys(localStorage).filter(k => k.includes('bokeh')).join(',')",
-                    key=f"_bokeh_keys_{sync_counter}"
-                )
-                print(f"[get_bokeh_updates] Chaves bokeh no localStorage: {all_keys}")
-            except:
-                pass
+
+        storage_key = f"bokeh_update_{key or 'default'}"
+        eval_key = f"_get_bokeh_packet_{key}_{int(sync_counter or 0)}"
+        js_expr = (
+            f"(function(){{"
+            f"let store=localStorage;"
+            f"try{{if(window.parent&&window.parent!==window&&window.parent.localStorage){{store=window.parent.localStorage;}}}}catch(_e){{store=localStorage;}}"
+            f"const raw=store.getItem('{storage_key}');"
+            f"const ts=store.getItem('{storage_key}_timestamp');"
+            f"const probeRaw=store.getItem('{storage_key}_probe');"
+            f"const syncProbeRaw=store.getItem('{storage_key}_sync_probe');"
+            f"let values=null;"
+            f"let probe=null;"
+            f"let syncProbe=null;"
+            f"try{{values=raw?JSON.parse(raw):null;}}catch(_e){{values=null;}}"
+            f"try{{probe=probeRaw?JSON.parse(probeRaw):null;}}catch(_e){{probe=null;}}"
+            f"try{{syncProbe=syncProbeRaw?JSON.parse(syncProbeRaw):null;}}catch(_e){{syncProbe=null;}}"
+            f"return JSON.stringify({{values:values,timestamp:ts?Number(ts):0,probe:probe,sync_probe:syncProbe}});"
+            f"}})()"
+        )
+
+        result = streamlit_js_eval(js_expressions=js_expr, key=eval_key)
+        if not result:
+            print(f"[get_bokeh_update_packet] sem_result key={eval_key}")
+            return None
+
+        packet = json.loads(result)
+        if not isinstance(packet, dict):
+            return None
+
+        values = packet.get("values")
+        timestamp = packet.get("timestamp", 0)
+        probe = packet.get("probe") if isinstance(packet.get("probe"), dict) else None
+        sync_probe = packet.get("sync_probe") if isinstance(packet.get("sync_probe"), dict) else None
+        try:
+            timestamp = int(timestamp or 0)
+        except Exception:
+            timestamp = 0
+
+        if isinstance(values, list) and len(values) == 12:
+            print(
+                f"[get_bokeh_update_packet] ✓ Valores lidos (ts={timestamp}): "
+                f"{[f'{v:.0f}' for v in values[:3]]}..."
+            )
+            return {
+                "values": values,
+                "timestamp": timestamp,
+                "probe": probe,
+                "sync_probe": sync_probe,
+            }
+
+        if timestamp > 0:
+            return {
+                "values": None,
+                "timestamp": timestamp,
+                "probe": probe,
+                "sync_probe": sync_probe,
+            }
     except Exception as e:
-        print(f"[get_bokeh_updates] Erro: {e}")
-    
+        print(
+            "[get_bokeh_update_packet] Erro: "
+            f"{e} | python={sys.executable} | spec={importlib.util.find_spec('streamlit_js_eval')}"
+        )
+
     return None
 
 

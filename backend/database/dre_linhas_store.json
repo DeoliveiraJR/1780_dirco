@@ -1,0 +1,4678 @@
+{
+  "admin@uan.com.br": {
+    "Todos::::::2026": {
+      "dre_dados": {
+        "TD71": {
+          "descricao": "Receita Financeira",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": {
+            "nome": "teste",
+            "periodo": "Todos",
+            "mes_inicio": 1,
+            "mes_fim": 12,
+            "data_aplicacao": "2026-06-09T23:19:53.785956"
+          }
+        },
+        "TD72": {
+          "descricao": "Despesa Financeira",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD90": {
+          "descricao": "Receita de Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD91": {
+          "descricao": "Despesa de Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD70": {
+          "descricao": "Variação Cambial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD87": {
+          "descricao": "Spread Contrato Câmbio",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD88": {
+          "descricao": "Alienação Ativos Financeiros",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD95": {
+          "descricao": "Resultado Descasamentos",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD96": {
+          "descricao": "Ajuste Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD97": {
+          "descricao": "Valor Justo",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MFB": {
+          "descricao": "Margem Financeira Bruta",
+          "tipo": "totalizador",
+          "formula": "=TD71+TD72+TD90+TD91+TD70+TD87+TD88+TD95+TD96+TD97",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD11": {
+          "descricao": "Receita Diferida",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD12": {
+          "descricao": "Custo Diferido",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MFBE": {
+          "descricao": "Margem Financeira Bruta Efetiva",
+          "tipo": "totalizador",
+          "formula": "=MFB+TD11+TD12",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD76": {
+          "descricao": "Provisão Perda Esperada",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD16": {
+          "descricao": "Provisão Perda Esperada - Crédito Liberar",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD92": {
+          "descricao": "Recuperação de Perdas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD81": {
+          "descricao": "Abatimento Negocial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD67": {
+          "descricao": "Perda Permanente",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RCC": {
+          "descricao": "Risco de Crédito Contábil",
+          "tipo": "totalizador",
+          "formula": "=TD76+TD16+TD92+TD81+TD67",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "MFL": {
+          "descricao": "Margem Financeira Líquida",
+          "tipo": "totalizador",
+          "formula": "=MFBE-RCC",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD73": {
+          "descricao": "Tarifas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD68": {
+          "descricao": "Outros Componentes de Resultado Gerencial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD78": {
+          "descricao": "Outros Componentes de Resultado",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD79": {
+          "descricao": "Custos Variáveis",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD80": {
+          "descricao": "Tributos",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD82": {
+          "descricao": "Perdas Operacionais",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MC": {
+          "descricao": "Margem de Contribuição",
+          "tipo": "totalizador",
+          "formula": "=MFL+TD73+TD68+TD78+TD79+TD80+TD82",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD74": {
+          "descricao": "Custos Identificados",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RGP": {
+          "descricao": "Resultado Gerencial de Produtos",
+          "tipo": "totalizador",
+          "formula": "=MC-TD74",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD69": {
+          "descricao": "Despesas Administrativas Gerenciais",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD75": {
+          "descricao": "Despesas Administrativas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD83": {
+          "descricao": "Custos Alocados",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD84": {
+          "descricao": "Serviços Internos - Dependências",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RGU": {
+          "descricao": "Resultado Gerencial de Unidades",
+          "tipo": "totalizador",
+          "formula": "=RGP-TD69-TD75-TD83-TD84",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        }
+      },
+      "dre_metodologias": {
+        "teste": {
+          "nome": "teste",
+          "descricao": "test",
+          "formula": "=SOMA(TD21;TD72)",
+          "aplicavel_a": [
+            "TD71"
+          ],
+          "sazonalidade": {
+            "tipo": "NENHUM"
+          },
+          "data_criacao": "2026-06-09T23:19:45.974437",
+          "data_atualizacao": "2026-06-09T23:19:45.974451",
+          "aplicacoes": [
+            {
+              "data": "2026-06-09T23:19:53.822229",
+              "escopo": "Sem filtro específico",
+              "variáveis": [
+                "TD71"
+              ],
+              "filtros": {
+                "cliente": "Todos",
+                "categoria": "",
+                "produto": ""
+              }
+            }
+          ],
+          "usa_indices": false
+        }
+      },
+      "salvo_em": "2026-06-10T00:08:50.305950"
+    },
+    "CLIENTE PF VAREJO::::::2026": {
+      "dre_dados": {
+        "TD71": {
+          "descricao": "Receita Financeira",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD72": {
+          "descricao": "Despesa Financeira",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD90": {
+          "descricao": "Receita de Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD91": {
+          "descricao": "Despesa de Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD70": {
+          "descricao": "Variação Cambial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD87": {
+          "descricao": "Spread Contrato Câmbio",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD88": {
+          "descricao": "Alienação Ativos Financeiros",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD95": {
+          "descricao": "Resultado Descasamentos",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD96": {
+          "descricao": "Ajuste Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD97": {
+          "descricao": "Valor Justo",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MFB": {
+          "descricao": "Margem Financeira Bruta",
+          "tipo": "totalizador",
+          "formula": "=TD71+TD72+TD90+TD91+TD70+TD87+TD88+TD95+TD96+TD97",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD11": {
+          "descricao": "Receita Diferida",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD12": {
+          "descricao": "Custo Diferido",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MFBE": {
+          "descricao": "Margem Financeira Bruta Efetiva",
+          "tipo": "totalizador",
+          "formula": "=MFB+TD11+TD12",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD76": {
+          "descricao": "Provisão Perda Esperada",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD16": {
+          "descricao": "Provisão Perda Esperada - Crédito Liberar",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD92": {
+          "descricao": "Recuperação de Perdas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD81": {
+          "descricao": "Abatimento Negocial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD67": {
+          "descricao": "Perda Permanente",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RCC": {
+          "descricao": "Risco de Crédito Contábil",
+          "tipo": "totalizador",
+          "formula": "=TD76+TD16+TD92+TD81+TD67",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "MFL": {
+          "descricao": "Margem Financeira Líquida",
+          "tipo": "totalizador",
+          "formula": "=MFBE-RCC",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD73": {
+          "descricao": "Tarifas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD68": {
+          "descricao": "Outros Componentes de Resultado Gerencial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD78": {
+          "descricao": "Outros Componentes de Resultado",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD79": {
+          "descricao": "Custos Variáveis",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD80": {
+          "descricao": "Tributos",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD82": {
+          "descricao": "Perdas Operacionais",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MC": {
+          "descricao": "Margem de Contribuição",
+          "tipo": "totalizador",
+          "formula": "=MFL+TD73+TD68+TD78+TD79+TD80+TD82",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD74": {
+          "descricao": "Custos Identificados",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RGP": {
+          "descricao": "Resultado Gerencial de Produtos",
+          "tipo": "totalizador",
+          "formula": "=MC-TD74",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD69": {
+          "descricao": "Despesas Administrativas Gerenciais",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD75": {
+          "descricao": "Despesas Administrativas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD83": {
+          "descricao": "Custos Alocados",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD84": {
+          "descricao": "Serviços Internos - Dependências",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RGU": {
+          "descricao": "Resultado Gerencial de Unidades",
+          "tipo": "totalizador",
+          "formula": "=RGP-TD69-TD75-TD83-TD84",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        }
+      },
+      "dre_metodologias": {
+        "teste": {
+          "nome": "teste",
+          "descricao": "test",
+          "formula": "=SOMA(TD21;TD72)",
+          "aplicavel_a": [
+            "TD71"
+          ],
+          "sazonalidade": {
+            "tipo": "NENHUM"
+          },
+          "data_criacao": "2026-06-09T23:19:45.974437",
+          "data_atualizacao": "2026-06-09T23:19:45.974451",
+          "aplicacoes": [
+            {
+              "data": "2026-06-09T23:19:53.822229",
+              "escopo": "Sem filtro específico",
+              "variáveis": [
+                "TD71"
+              ],
+              "filtros": {
+                "cliente": "Todos",
+                "categoria": "",
+                "produto": ""
+              }
+            }
+          ],
+          "usa_indices": false
+        }
+      },
+      "salvo_em": "2026-06-10T00:08:51.558990"
+    },
+    "CLIENTE PF VAREJO:: CAPTAÇÕES::::2026": {
+      "dre_dados": {
+        "TD71": {
+          "descricao": "Receita Financeira",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD72": {
+          "descricao": "Despesa Financeira",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD90": {
+          "descricao": "Receita de Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD91": {
+          "descricao": "Despesa de Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD70": {
+          "descricao": "Variação Cambial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD87": {
+          "descricao": "Spread Contrato Câmbio",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD88": {
+          "descricao": "Alienação Ativos Financeiros",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD95": {
+          "descricao": "Resultado Descasamentos",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD96": {
+          "descricao": "Ajuste Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD97": {
+          "descricao": "Valor Justo",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MFB": {
+          "descricao": "Margem Financeira Bruta",
+          "tipo": "totalizador",
+          "formula": "=TD71+TD72+TD90+TD91+TD70+TD87+TD88+TD95+TD96+TD97",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD11": {
+          "descricao": "Receita Diferida",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD12": {
+          "descricao": "Custo Diferido",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MFBE": {
+          "descricao": "Margem Financeira Bruta Efetiva",
+          "tipo": "totalizador",
+          "formula": "=MFB+TD11+TD12",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD76": {
+          "descricao": "Provisão Perda Esperada",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD16": {
+          "descricao": "Provisão Perda Esperada - Crédito Liberar",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD92": {
+          "descricao": "Recuperação de Perdas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD81": {
+          "descricao": "Abatimento Negocial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD67": {
+          "descricao": "Perda Permanente",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RCC": {
+          "descricao": "Risco de Crédito Contábil",
+          "tipo": "totalizador",
+          "formula": "=TD76+TD16+TD92+TD81+TD67",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "MFL": {
+          "descricao": "Margem Financeira Líquida",
+          "tipo": "totalizador",
+          "formula": "=MFBE-RCC",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD73": {
+          "descricao": "Tarifas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD68": {
+          "descricao": "Outros Componentes de Resultado Gerencial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD78": {
+          "descricao": "Outros Componentes de Resultado",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD79": {
+          "descricao": "Custos Variáveis",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD80": {
+          "descricao": "Tributos",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD82": {
+          "descricao": "Perdas Operacionais",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MC": {
+          "descricao": "Margem de Contribuição",
+          "tipo": "totalizador",
+          "formula": "=MFL+TD73+TD68+TD78+TD79+TD80+TD82",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD74": {
+          "descricao": "Custos Identificados",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RGP": {
+          "descricao": "Resultado Gerencial de Produtos",
+          "tipo": "totalizador",
+          "formula": "=MC-TD74",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD69": {
+          "descricao": "Despesas Administrativas Gerenciais",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD75": {
+          "descricao": "Despesas Administrativas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD83": {
+          "descricao": "Custos Alocados",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD84": {
+          "descricao": "Serviços Internos - Dependências",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RGU": {
+          "descricao": "Resultado Gerencial de Unidades",
+          "tipo": "totalizador",
+          "formula": "=RGP-TD69-TD75-TD83-TD84",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        }
+      },
+      "dre_metodologias": {
+        "teste": {
+          "nome": "teste",
+          "descricao": "test",
+          "formula": "=SOMA(TD21;TD72)",
+          "aplicavel_a": [
+            "TD71"
+          ],
+          "sazonalidade": {
+            "tipo": "NENHUM"
+          },
+          "data_criacao": "2026-06-09T23:19:45.974437",
+          "data_atualizacao": "2026-06-09T23:19:45.974451",
+          "aplicacoes": [
+            {
+              "data": "2026-06-09T23:19:53.822229",
+              "escopo": "Sem filtro específico",
+              "variáveis": [
+                "TD71"
+              ],
+              "filtros": {
+                "cliente": "Todos",
+                "categoria": "",
+                "produto": ""
+              }
+            }
+          ],
+          "usa_indices": false
+        }
+      },
+      "salvo_em": "2026-06-10T00:08:53.386113"
+    },
+    "CLIENTE PF VAREJO:: CAPTAÇÕES:: DEPOSITO A PRAZO - CDB AUTOMÁTICO::2026": {
+      "dre_dados": {
+        "TD71": {
+          "descricao": "Receita Financeira",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37
+          ],
+          "eh_negrito": false,
+          "metodologia": {
+            "nome": "teste",
+            "periodo": "Todos",
+            "mes_inicio": 1,
+            "mes_fim": 1,
+            "data_aplicacao": "2026-06-09T23:34:17.939620"
+          }
+        },
+        "TD72": {
+          "descricao": "Despesa Financeira",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            6176151415262.37,
+            6176151415262.37,
+            777878432.0,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37,
+            6176151415262.37
+          ],
+          "eh_negrito": false,
+          "metodologia": {
+            "nome": "TESTE",
+            "periodo": "Todos",
+            "mes_inicio": 1,
+            "mes_fim": 12,
+            "data_aplicacao": "2026-06-09T23:27:52.592786"
+          }
+        },
+        "TD90": {
+          "descricao": "Receita de Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD91": {
+          "descricao": "Despesa de Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD70": {
+          "descricao": "Variação Cambial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": {
+            "nome": "TD90",
+            "periodo": "Todos",
+            "mes_inicio": 1,
+            "mes_fim": 12,
+            "data_aplicacao": "2026-06-09T23:32:32.147562"
+          }
+        },
+        "TD87": {
+          "descricao": "Spread Contrato Câmbio",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            6646560019018.87,
+            6651487526539.891,
+            480195461016.37,
+            6660797177371.49,
+            6667861321324.2705,
+            6676289411725.12,
+            6687359944482.78,
+            6700075712669.03,
+            6713191445425.68,
+            6727517028971.9,
+            6743376065817.641,
+            6759883747217.4
+          ],
+          "eh_negrito": false,
+          "metodologia": {
+            "nome": "teste",
+            "periodo": "Todos",
+            "mes_inicio": 1,
+            "mes_fim": 12,
+            "data_aplicacao": "2026-06-10T00:09:53.563765"
+          }
+        },
+        "TD88": {
+          "descricao": "Alienação Ativos Financeiros",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD95": {
+          "descricao": "Resultado Descasamentos",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD96": {
+          "descricao": "Ajuste Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD97": {
+          "descricao": "Valor Justo",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MFB": {
+          "descricao": "Margem Financeira Bruta",
+          "tipo": "totalizador",
+          "formula": "=TD71+TD72+TD90+TD91+TD70+TD87+TD88+TD95+TD96+TD97",
+          "valores": [
+            18998862849543.61,
+            19003790357064.633,
+            6657124754710.74,
+            19013100007896.23,
+            19020164151849.01,
+            19028592242249.86,
+            19039662775007.52,
+            19052378543193.77,
+            19065494275950.42,
+            19079819859496.64,
+            19095678896342.383,
+            19112186577742.14
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD11": {
+          "descricao": "Receita Diferida",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD12": {
+          "descricao": "Custo Diferido",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MFBE": {
+          "descricao": "Margem Financeira Bruta Efetiva",
+          "tipo": "totalizador",
+          "formula": "=MFB+TD11+TD12",
+          "valores": [
+            18998862849543.61,
+            19003790357064.633,
+            6657124754710.74,
+            19013100007896.23,
+            19020164151849.01,
+            19028592242249.86,
+            19039662775007.52,
+            19052378543193.77,
+            19065494275950.42,
+            19079819859496.64,
+            19095678896342.383,
+            19112186577742.14
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD76": {
+          "descricao": "Provisão Perda Esperada",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD16": {
+          "descricao": "Provisão Perda Esperada - Crédito Liberar",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD92": {
+          "descricao": "Recuperação de Perdas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD81": {
+          "descricao": "Abatimento Negocial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD67": {
+          "descricao": "Perda Permanente",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RCC": {
+          "descricao": "Risco de Crédito Contábil",
+          "tipo": "totalizador",
+          "formula": "=TD76+TD16+TD92+TD81+TD67",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "MFL": {
+          "descricao": "Margem Financeira Líquida",
+          "tipo": "totalizador",
+          "formula": "=MFBE-RCC",
+          "valores": [
+            18998862849543.61,
+            19003790357064.633,
+            6657124754710.74,
+            19013100007896.23,
+            19020164151849.01,
+            19028592242249.86,
+            19039662775007.52,
+            19052378543193.77,
+            19065494275950.42,
+            19079819859496.64,
+            19095678896342.383,
+            19112186577742.14
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD73": {
+          "descricao": "Tarifas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD68": {
+          "descricao": "Outros Componentes de Resultado Gerencial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD78": {
+          "descricao": "Outros Componentes de Resultado",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD79": {
+          "descricao": "Custos Variáveis",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD80": {
+          "descricao": "Tributos",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD82": {
+          "descricao": "Perdas Operacionais",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MC": {
+          "descricao": "Margem de Contribuição",
+          "tipo": "totalizador",
+          "formula": "=MFL+TD73+TD68+TD78+TD79+TD80+TD82",
+          "valores": [
+            18998862849543.61,
+            19003790357064.633,
+            6657124754710.74,
+            19013100007896.23,
+            19020164151849.01,
+            19028592242249.86,
+            19039662775007.52,
+            19052378543193.77,
+            19065494275950.42,
+            19079819859496.64,
+            19095678896342.383,
+            19112186577742.14
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD74": {
+          "descricao": "Custos Identificados",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RGP": {
+          "descricao": "Resultado Gerencial de Produtos",
+          "tipo": "totalizador",
+          "formula": "=MC-TD74",
+          "valores": [
+            18998862849543.61,
+            19003790357064.633,
+            6657124754710.74,
+            19013100007896.23,
+            19020164151849.01,
+            19028592242249.86,
+            19039662775007.52,
+            19052378543193.77,
+            19065494275950.42,
+            19079819859496.64,
+            19095678896342.383,
+            19112186577742.14
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD69": {
+          "descricao": "Despesas Administrativas Gerenciais",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD75": {
+          "descricao": "Despesas Administrativas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD83": {
+          "descricao": "Custos Alocados",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD84": {
+          "descricao": "Serviços Internos - Dependências",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RGU": {
+          "descricao": "Resultado Gerencial de Unidades",
+          "tipo": "totalizador",
+          "formula": "=RGP-TD69-TD75-TD83-TD84",
+          "valores": [
+            18998862849543.61,
+            19003790357064.633,
+            6657124754710.74,
+            19013100007896.23,
+            19020164151849.01,
+            19028592242249.86,
+            19039662775007.52,
+            19052378543193.77,
+            19065494275950.42,
+            19079819859496.64,
+            19095678896342.383,
+            19112186577742.14
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        }
+      },
+      "dre_metodologias": {
+        "teste": {
+          "nome": "teste",
+          "descricao": "teste",
+          "formula": "=SOMA(TD21;TD72)",
+          "aplicavel_a": [
+            "TD87"
+          ],
+          "sazonalidade": {
+            "tipo": "NENHUM"
+          },
+          "data_criacao": "2026-06-10T00:09:43.471196",
+          "data_atualizacao": "2026-06-10T00:09:43.471210",
+          "aplicacoes": [
+            {
+              "data": "2026-06-10T00:09:53.627281",
+              "escopo": "👤 CLIENTE PF VAREJO • 📁  CAPTAÇÕES • 📦  DEPOSITO A PRAZO - CDB AUTOMÁTICO",
+              "variáveis": [
+                "TD87"
+              ],
+              "filtros": {
+                "cliente": "CLIENTE PF VAREJO",
+                "categoria": " CAPTAÇÕES",
+                "produto": " DEPOSITO A PRAZO - CDB AUTOMÁTICO"
+              }
+            }
+          ],
+          "usa_indices": false
+        }
+      },
+      "salvo_em": "2026-06-10T00:10:10.089831"
+    },
+    "Todos::Teste::::2026": {
+      "dre_dados": {
+        "TD71": {
+          "descricao": "Receita Financeira",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": {
+            "nome": "teste",
+            "periodo": "Todos",
+            "mes_inicio": 1,
+            "mes_fim": 12,
+            "data_aplicacao": "2026-06-09T23:19:53.785956"
+          }
+        },
+        "TD72": {
+          "descricao": "Despesa Financeira",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD90": {
+          "descricao": "Receita de Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD91": {
+          "descricao": "Despesa de Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD70": {
+          "descricao": "Variação Cambial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD87": {
+          "descricao": "Spread Contrato Câmbio",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD88": {
+          "descricao": "Alienação Ativos Financeiros",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD95": {
+          "descricao": "Resultado Descasamentos",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD96": {
+          "descricao": "Ajuste Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD97": {
+          "descricao": "Valor Justo",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MFB": {
+          "descricao": "Margem Financeira Bruta",
+          "tipo": "totalizador",
+          "formula": "=TD71+TD72+TD90+TD91+TD70+TD87+TD88+TD95+TD96+TD97",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD11": {
+          "descricao": "Receita Diferida",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD12": {
+          "descricao": "Custo Diferido",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MFBE": {
+          "descricao": "Margem Financeira Bruta Efetiva",
+          "tipo": "totalizador",
+          "formula": "=MFB+TD11+TD12",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD76": {
+          "descricao": "Provisão Perda Esperada",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD16": {
+          "descricao": "Provisão Perda Esperada - Crédito Liberar",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD92": {
+          "descricao": "Recuperação de Perdas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD81": {
+          "descricao": "Abatimento Negocial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD67": {
+          "descricao": "Perda Permanente",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RCC": {
+          "descricao": "Risco de Crédito Contábil",
+          "tipo": "totalizador",
+          "formula": "=TD76+TD16+TD92+TD81+TD67",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "MFL": {
+          "descricao": "Margem Financeira Líquida",
+          "tipo": "totalizador",
+          "formula": "=MFBE-RCC",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD73": {
+          "descricao": "Tarifas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD68": {
+          "descricao": "Outros Componentes de Resultado Gerencial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD78": {
+          "descricao": "Outros Componentes de Resultado",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD79": {
+          "descricao": "Custos Variáveis",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD80": {
+          "descricao": "Tributos",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD82": {
+          "descricao": "Perdas Operacionais",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MC": {
+          "descricao": "Margem de Contribuição",
+          "tipo": "totalizador",
+          "formula": "=MFL+TD73+TD68+TD78+TD79+TD80+TD82",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD74": {
+          "descricao": "Custos Identificados",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RGP": {
+          "descricao": "Resultado Gerencial de Produtos",
+          "tipo": "totalizador",
+          "formula": "=MC-TD74",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD69": {
+          "descricao": "Despesas Administrativas Gerenciais",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD75": {
+          "descricao": "Despesas Administrativas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD83": {
+          "descricao": "Custos Alocados",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD84": {
+          "descricao": "Serviços Internos - Dependências",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RGU": {
+          "descricao": "Resultado Gerencial de Unidades",
+          "tipo": "totalizador",
+          "formula": "=RGP-TD69-TD75-TD83-TD84",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        }
+      },
+      "dre_metodologias": {
+        "teste": {
+          "nome": "teste",
+          "descricao": "test",
+          "formula": "=SOMA(TD21;TD72)",
+          "aplicavel_a": [
+            "TD71"
+          ],
+          "sazonalidade": {
+            "tipo": "NENHUM"
+          },
+          "data_criacao": "2026-06-09T23:19:45.974437",
+          "data_atualizacao": "2026-06-09T23:19:45.974451",
+          "aplicacoes": [
+            {
+              "data": "2026-06-09T23:19:53.822229",
+              "escopo": "Sem filtro específico",
+              "variáveis": [
+                "TD71"
+              ],
+              "filtros": {
+                "cliente": "Todos",
+                "categoria": "",
+                "produto": ""
+              }
+            }
+          ],
+          "usa_indices": false
+        }
+      },
+      "salvo_em": "2026-06-09T23:20:01.994214"
+    },
+    "Todos::Teste::Produto Teste::2026": {
+      "dre_dados": {
+        "TD71": {
+          "descricao": "Receita Financeira",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": {
+            "nome": "teste",
+            "periodo": "Todos",
+            "mes_inicio": 1,
+            "mes_fim": 12,
+            "data_aplicacao": "2026-06-09T23:20:09.896136"
+          }
+        },
+        "TD72": {
+          "descricao": "Despesa Financeira",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD90": {
+          "descricao": "Receita de Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD91": {
+          "descricao": "Despesa de Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD70": {
+          "descricao": "Variação Cambial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD87": {
+          "descricao": "Spread Contrato Câmbio",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD88": {
+          "descricao": "Alienação Ativos Financeiros",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD95": {
+          "descricao": "Resultado Descasamentos",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD96": {
+          "descricao": "Ajuste Oportunidade",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD97": {
+          "descricao": "Valor Justo",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MFB": {
+          "descricao": "Margem Financeira Bruta",
+          "tipo": "totalizador",
+          "formula": "=TD71+TD72+TD90+TD91+TD70+TD87+TD88+TD95+TD96+TD97",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD11": {
+          "descricao": "Receita Diferida",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD12": {
+          "descricao": "Custo Diferido",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MFBE": {
+          "descricao": "Margem Financeira Bruta Efetiva",
+          "tipo": "totalizador",
+          "formula": "=MFB+TD11+TD12",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD76": {
+          "descricao": "Provisão Perda Esperada",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD16": {
+          "descricao": "Provisão Perda Esperada - Crédito Liberar",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD92": {
+          "descricao": "Recuperação de Perdas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD81": {
+          "descricao": "Abatimento Negocial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD67": {
+          "descricao": "Perda Permanente",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RCC": {
+          "descricao": "Risco de Crédito Contábil",
+          "tipo": "totalizador",
+          "formula": "=TD76+TD16+TD92+TD81+TD67",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "MFL": {
+          "descricao": "Margem Financeira Líquida",
+          "tipo": "totalizador",
+          "formula": "=MFBE-RCC",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD73": {
+          "descricao": "Tarifas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD68": {
+          "descricao": "Outros Componentes de Resultado Gerencial",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD78": {
+          "descricao": "Outros Componentes de Resultado",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD79": {
+          "descricao": "Custos Variáveis",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD80": {
+          "descricao": "Tributos",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD82": {
+          "descricao": "Perdas Operacionais",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "MC": {
+          "descricao": "Margem de Contribuição",
+          "tipo": "totalizador",
+          "formula": "=MFL+TD73+TD68+TD78+TD79+TD80+TD82",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD74": {
+          "descricao": "Custos Identificados",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RGP": {
+          "descricao": "Resultado Gerencial de Produtos",
+          "tipo": "totalizador",
+          "formula": "=MC-TD74",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        },
+        "TD69": {
+          "descricao": "Despesas Administrativas Gerenciais",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD75": {
+          "descricao": "Despesas Administrativas",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD83": {
+          "descricao": "Custos Alocados",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "TD84": {
+          "descricao": "Serviços Internos - Dependências",
+          "tipo": "variavel",
+          "formula": null,
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": false,
+          "metodologia": null
+        },
+        "RGU": {
+          "descricao": "Resultado Gerencial de Unidades",
+          "tipo": "totalizador",
+          "formula": "=RGP-TD69-TD75-TD83-TD84",
+          "valores": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "eh_negrito": true,
+          "metodologia": null
+        }
+      },
+      "dre_metodologias": {
+        "teste": {
+          "nome": "teste",
+          "descricao": "test",
+          "formula": "=SOMA(TD21;TD72)",
+          "aplicavel_a": [
+            "TD71"
+          ],
+          "sazonalidade": {
+            "tipo": "NENHUM"
+          },
+          "data_criacao": "2026-06-09T23:19:45.974437",
+          "data_atualizacao": "2026-06-09T23:19:45.974451",
+          "aplicacoes": [
+            {
+              "data": "2026-06-09T23:19:53.822229",
+              "escopo": "Sem filtro específico",
+              "variáveis": [
+                "TD71"
+              ],
+              "filtros": {
+                "cliente": "Todos",
+                "categoria": "",
+                "produto": ""
+              }
+            },
+            {
+              "data": "2026-06-09T23:20:09.943683",
+              "escopo": "📁 Teste • 📦 Produto Teste",
+              "variáveis": [
+                "TD71"
+              ],
+              "filtros": {
+                "cliente": "Todos",
+                "categoria": "Teste",
+                "produto": "Produto Teste"
+              }
+            }
+          ],
+          "usa_indices": false
+        }
+      },
+      "salvo_em": "2026-06-09T23:20:30.402548"
+    }
+  }
+}

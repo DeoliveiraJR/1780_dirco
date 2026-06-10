@@ -8,9 +8,11 @@ plotly==5.18.0
 streamlit==1.32.0
 bokeh==3.8.2
 streamlit-bokeh==3.8.3
+streamlit-js-eval==1.0.0
 requests==2.31.0
 python-dotenv==1.0.0
 streamlit-extras==0.3.0
+streamlit-keyup==0.2.4
 pillow==10.2.0
 setuptools==69.0.0
 wheel==0.42.0

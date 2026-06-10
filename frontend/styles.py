@@ -1,11 +1,11 @@
 # Arquivo de estilos e temas para o aplicativo
 
 CORES = {
-    "azul_profundo": "#0c3a66",
-    "azul_claro": "#1e3a8a",
-    "turquesa": "#06b6d4",
+    "azul_profundo": "#1F4A7A",
+    "azul_claro": "#06B6D4",
+    "turquesa": "#06B6D4",
     "turquesa_escuro": "#0891b2",
-    "rosa": "#ec4899",
+    "rosa": "#D96AB4",
     "rosa_escuro": "#db2777",
     "roxo": "#a855f7",
     "roxo_escuro": "#9333ea",
@@ -21,13 +21,16 @@ CORES = {
 CSS_CUSTOM = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css');
 
 /* CSS Variables - Design System */
 :root {
     /* Cores Primárias */
-    --color-primary: #0c3a66;
-    --color-primary-light: #1e3a8a;
-    --color-primary-dark: #051e34;
+    --color-primary: #06B6D4;
+    --color-primary-light: #00EBD0;
+    --color-primary-dark: #1F4A7A;
+    --color-secundary: #00EBD0;
+    --color-third: #D96AB4;
     
     /* Cores Accent */
     --color-accent: #06b6d4;
@@ -56,7 +59,7 @@ CSS_CUSTOM = """
     /* Tipografia */
     --font-header: 'Plus Jakarta Sans', sans-serif;
     --font-body: 'Inter', sans-serif;
-    --font-size-xs: 0.75rem;
+    --font-size-xs: 0.5rem;
     --font-size-sm: 0.875rem;
     --font-size-md: 1rem;
     --font-size-lg: 1.125rem;
@@ -167,12 +170,12 @@ a:hover {
 
 /* Sidebar Title - UAN DASHBOARD */
 [data-testid="stSidebar"] .css-uf99v8 {
-    color: var(--color-accent) !important;
+    color: var(--color-SECUNDARY) !important;
 }
 
 /* Botões - Garantir texto branco */
 .stButton > button {
-    background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%) !important;
+    background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-secundary) 100%) !important;
     color: #ffffff !important;
     border: none !important;
     border-radius: var(--radius-md) !important;
@@ -215,8 +218,12 @@ a:hover {
     color: #ffffff !important;
 }
 
-/* Sidebar - UAN DASHBOARD em turquesa */
+/* Sidebar - UAN DASHBOARD em turquesa - FORÇA MÁXIMA */
 [data-testid="stSidebar"] h1 {
+    color: #06B6D4 !important;
+}
+
+[data-testid="stSidebar"] h1 * {
     color: #06b6d4 !important;
 }
 
@@ -412,6 +419,7 @@ table tbody tr:nth-child(odd) {
 .animate-pulse {
     animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
 
 .animate-shimmer {
     animation: shimmer 2s infinite;

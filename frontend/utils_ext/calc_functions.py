@@ -30,6 +30,15 @@ import numpy as np
 from typing import Dict, List, Union, Tuple, Optional
 
 
+DEBUG_CALC_LOGS = False
+_INDICES_12M_CACHE: Optional[Dict[str, List[float]]] = None
+
+
+def _log_calc(msg: str):
+    if DEBUG_CALC_LOGS:
+        print(msg)
+
+
 # ============================================================================
 # FUNÇÕES NATIVAS DE CÁLCULO
 # ============================================================================
@@ -123,6 +132,26 @@ def MAXIMO(valores: List[float]) -> float:
         return 0.0
 
 
+def DESVIO_PADRAO(valores: List[float]) -> float:
+    """
+    Calcula o desvio padrão populacional dos valores.
+
+    Args:
+        valores: Lista com valores mensais ou agregados
+
+    Returns:
+        float: Desvio padrão (0 se lista vazia)
+    """
+    try:
+        valores_validos = [v for v in valores if isinstance(v, (int, float))]
+        if not valores_validos:
+            return 0.0
+        return float(np.std(valores_validos, ddof=0))
+    except Exception as e:
+        print(f"[CALC] Erro em DESVIO_PADRAO: {e}")
+        return 0.0
+
+
 # ============================================================================
 # PROCESSAMENTO DE SAZONALIDADE (INTERVALO TEMPORAL)
 # ============================================================================
@@ -158,7 +187,7 @@ def processar_intervalo_temporal(argumentos_str: str) -> Tuple[str, int]:
                 intervalo = int(partes[1].strip())
                 return codigo, intervalo
             except ValueError:
-                print(f"[CALC] ⚠️ Intervalo temporal inválido: {partes[1]}")
+                _log_calc(f"[CALC] ⚠️ Intervalo temporal inválido: {partes[1]}")
                 # Fallback: usar apenas o primeiro argumento
                 return partes[0].strip().upper(), 0
     
@@ -366,7 +395,7 @@ def aplicar_sazonalidade_por_mes(
     valores_filtrados = [valores_12_meses[i] if i < len(valores_12_meses) else 0.0 for i in indices]
     
     if mes_idx == 0 or mes_idx == 1:
-        print(f"[CALC] Mês {mes_idx}: saz={saz_normalizada}, indices={indices} → retorna {len(valores_filtrados)} valores")
+        _log_calc(f"[CALC] Mês {mes_idx}: saz={saz_normalizada}, indices={indices} → retorna {len(valores_filtrados)} valores")
     
     return valores_filtrados
 
@@ -380,6 +409,7 @@ FUNCOES_NATIVAS = {
     "MEDIA": MEDIA,
     "MINIMO": MINIMO,
     "MAXIMO": MAXIMO,
+    "DESVIO_PADRAO": DESVIO_PADRAO,
 }
 
 DESCRICOES_FUNCOES = {
@@ -387,6 +417,7 @@ DESCRICOES_FUNCOES = {
     "MEDIA": "Calcula a média aritmética dos valores (com suporte a intervalo temporal)",
     "MINIMO": "Encontra o valor mínimo entre os valores (com suporte a intervalo temporal)",
     "MAXIMO": "Encontra o valor máximo entre os valores (com suporte a intervalo temporal)",
+    "DESVIO_PADRAO": "Calcula o desvio padrão populacional (com suporte a janela temporal)",
 }
 
 EXEMPLOS_FUNCOES = {
@@ -394,7 +425,83 @@ EXEMPLOS_FUNCOES = {
     "MEDIA": "MEDIA(TD71; -7)     # Média dos últimos 7 meses",
     "MINIMO": "MINIMO(TD71; -12)   # Mínimo dos últimos 12 meses (ano anterior)",
     "MAXIMO": "MAXIMO(TD71; 7)     # Máximo dos próximos 7 meses",
+    "DESVIO_PADRAO": "DESVIO_PADRAO(TD90; -5; 1) # Desvio dos últimos 5 meses com lag=1",
 }
+
+
+def parse_argumentos_temporais(argumentos_str: str) -> Tuple[List[str], Optional[int], int]:
+    """
+    Faz parse de argumentos de função com suporte a referências e parâmetros temporais.
+
+    Sintaxe suportada:
+    - "TD71"
+    - "TD71;TD72;TD87"
+    - "TD71:TD90"
+    - "IPCA; -3"            (janela)
+    - "IPCA; -3; 1"         (janela e lag)
+
+    Returns:
+        (referencias, janela, lag)
+    """
+    partes = [p.strip() for p in __import__("re").split(r"[;,]", argumentos_str) if p.strip()]
+
+    referencias: List[str] = []
+    numeros: List[int] = []
+    lag = 0
+
+    for parte in partes:
+        try:
+            numero = int(parte)
+            numeros.append(numero)
+            continue
+        except ValueError:
+            pass
+
+        referencias.append(parte.upper())
+
+    if not referencias and partes:
+        referencias = [partes[0].upper()]
+
+    janela: Optional[int] = None
+    if len(numeros) >= 2:
+        janela = numeros[0]
+        lag = abs(numeros[1])
+    elif len(numeros) == 1:
+        if len(referencias) <= 1:
+            janela = numeros[0]
+        else:
+            lag = abs(numeros[0])
+
+    return referencias, janela, lag
+
+
+def extrair_janela_por_mes(valores_12_meses: List[float], mes_idx: int, janela: int, lag: int = 0) -> List[float]:
+    """
+    Extrai janela temporal com wrap-around para um mês específico.
+
+    janela > 0: próximos N meses a partir do mês base
+    janela < 0: últimos N meses até o mês base
+    """
+    if not valores_12_meses:
+        return []
+
+    tamanho = len(valores_12_meses)
+    if tamanho == 0:
+        return []
+
+    if janela == 0:
+        return valores_12_meses[:]
+
+    base_idx = (mes_idx - lag) % 12
+    n = min(abs(janela), 12)
+
+    if janela > 0:
+        indices = [(base_idx + i) % 12 for i in range(n)]
+    else:
+        inicio = base_idx - n + 1
+        indices = [(inicio + i) % 12 for i in range(n)]
+
+    return [valores_12_meses[i] for i in indices]
 
 
 # ============================================================================
@@ -436,7 +543,7 @@ def parse_range_intervalo(intervalo: str, codigos_disponiveis: List[str]) -> Lis
             
             return codigos_disponiveis[start:end]
         except ValueError:
-            print(f"[CALC] Códigos {cod_inicio}:{cod_fim} não encontrados")
+            _log_calc(f"[CALC] Códigos {cod_inicio}:{cod_fim} não encontrados")
             return []
     
     else:
@@ -449,40 +556,176 @@ def parse_range_intervalo(intervalo: str, codigos_disponiveis: List[str]) -> Lis
 # AVALIADOR DE FUNÇÕES (Integração com fórmulas)
 # ============================================================================
 
-def evaluar_funcao_em_formula(nome_funcao: str, argumentos: str, 
-                             dre_dados: Dict, mes_idx: int = None) -> float:
+def _detectar_indices_em_formula(formula: str) -> List[str]:
     """
-    Avalia uma função nativa dentro de uma fórmula de metodologia com suporte a sazonalidade.
+    Detecta referências de índices econômicos em uma fórmula.
+    
+    Índices são nomes em UPPERCASE que NÃO são:
+    - Códigos de DRE (TD71, MFB, MFBE, etc)
+    - Funções nativas (SOMA, MEDIA, etc)
+    - Operadores (**, +, -, *, /, (,), etc)
+    
+    Args:
+        formula: String da fórmula (ex: "=MEDIA(TD71) + 0.05*IPCA")
+        
+    Returns:
+        Lista de nomes de índices detectados (ex: ["IPCA"])
+    """
+    import re
+    
+    # Padrão: palavra composta por maiúsculas, números, e underscore
+    padrao_indices = r'\b([A-Z][A-Z0-9_]*)\b'
+    
+    # Encontrar todas as palavras em uppercase
+    palavras = re.findall(padrao_indices, formula)
+    
+    # Filtrar palavras que são funções nativas ou códigos DRE conhecidos
+    funcoes_nativas_set = set(FUNCOES_NATIVAS.keys())
+    
+    codigos_dre_conhecidos = {
+        "TD71", "TD72", "TD90", "TD91", "TD70", "TD87", "TD88", "TD95", "TD96", "TD97",
+        "MFB", "TD11", "TD12", "MFBE", "TD76", "TD16", "TD92", "TD81",
+        # Adicionar outros conforme necessário
+    }
+    
+    indices_detectados = []
+    for palavra in palavras:
+        if (palavra not in funcoes_nativas_set and 
+            palavra not in codigos_dre_conhecidos and
+            palavra not in ["IF", "ELSE", "THEN", "AND", "OR"]):
+            indices_detectados.append(palavra)
+    
+    # Remover duplicatas mantendo ordem
+    indices_detectados = list(dict.fromkeys(indices_detectados))
+    
+    _log_calc(f"[CALC] Índices detectados na fórmula: {indices_detectados}")
+    return indices_detectados
+
+
+def _carregar_dados_indices_para_12_meses() -> Dict[str, List[float]]:
+    """
+    Carrega dados de TODOS os índices econômicos e agrega para 12 meses.
+    
+    Usa as funções de backend para ler índices.
+    
+    Returns:
+        Dicionário {nome_indice: [12_valores]}
+        Ex: {"IPCA": [0.48, 0.52, ..., 0.49], "TAXA_SELIC": [...]}
+    """
+    global _INDICES_12M_CACHE
+
+    if _INDICES_12M_CACHE is not None:
+        return _INDICES_12M_CACHE
+
+    try:
+        # Importar funções de backend
+        import sys
+        import os
+        
+        # Adicionar caminho do backend
+        backend_path = os.path.join(os.path.dirname(__file__), "..", "..", "backend")
+        if backend_path not in sys.path:
+            sys.path.insert(0, backend_path)
+        
+        from database import (
+            obter_lista_indices_disponiveis, 
+            agregar_indice_para_12_meses
+        )
+        
+        # Carregar todos os índices
+        indices_nomes = obter_lista_indices_disponiveis()
+        indices_12_meses = {}
+        
+        for nome_indice in indices_nomes:
+            try:
+                valores_12 = agregar_indice_para_12_meses(nome_indice, metodo="media")
+                if valores_12:
+                    indices_12_meses[nome_indice] = valores_12
+            except Exception as e:
+                _log_calc(f"[CALC] Erro ao carregar índice {nome_indice}: {e}")
+        
+        _INDICES_12M_CACHE = indices_12_meses
+        return indices_12_meses
+    
+    except Exception as e:
+        _log_calc(f"[CALC] Erro ao carregar índices: {e}")
+        return {}
+
+
+def _preparar_contexto_com_indices(dre_dados: Dict) -> Dict:
+    """
+    Prepara contexto completo com variáveis DRE + índices econômicos.
+    
+    Para cada índice, cria entrada no contexto com 12 valores mensais.
+    
+    Args:
+        dre_dados: Dicionário com dados da DRE
+        
+    Returns:
+        Dicionário estendido com {**dre_dados, IPCA: [...], TAXA_SELIC: [...], ...}
+    """
+    contexto = dict(dre_dados)
+    
+    # Carregar índices
+    indices_12_meses = _carregar_dados_indices_para_12_meses()
+    
+    # Adicionar índices como "pseudo-variáveis" no contexto
+    for nome_indice, valores_12 in indices_12_meses.items():
+        # Normalizar nome do índice (remover caracteres especiais)
+        chave_contexto = nome_indice.upper().replace("-", "_").replace(" ", "_")
+        
+        contexto[chave_contexto] = {
+            "tipo": "indice_economico",
+            "valores": valores_12,
+            "nome": nome_indice
+        }
+        
+        _log_calc(f"[CALC] Índice adicionado ao contexto: {chave_contexto}")
+    
+    return contexto
+
+
+def evaluar_funcao_em_formula(nome_funcao: str, argumentos: str, 
+                             dre_dados: Dict, mes_idx: int = None,
+                             incluir_indices: bool = True) -> float:
+    """
+    Avalia uma função nativa dentro de uma fórmula de metodologia com suporte a sazonalidade e índices.
+    
+    ✨ NOVO: Suporta referências a índices econômicos nos argumentos
     
     Args:
         nome_funcao: Nome da função ('SOMA', 'MEDIA', etc)
         argumentos: String com argumentos com ou sem intervalo temporal
-                   Ex: 'TD71' ou 'TD71; 7' ou 'TD71; -7'
+                   Ex: 'TD71' ou 'TD71; 7' ou 'IPCA' ou 'IPCA; -7'
         dre_dados: Dicionário com dados da DRE
         mes_idx: Índice do mês (0-11) se aplicável, None para valor agregado
+        incluir_indices: Se True, permite referências a índices econômicos
         
     Returns:
         float: Valor calculado
         
     Exemplos:
         evaluar_funcao_em_formula('SOMA', 'TD71', dre_dados) → soma 12 meses
-        evaluar_funcao_em_formula('SOMA', 'TD71; 7', dre_dados) → soma próximos 7 meses
-        evaluar_funcao_em_formula('MEDIA', 'TD72; -7', dre_dados) → média dos últimos 7 meses
+        evaluar_funcao_em_formula('SOMA', 'IPCA', dre_dados, incluir_indices=True) → soma 12 meses de IPCA
+        evaluar_funcao_em_formula('MEDIA', 'IPCA; -7', dre_dados, incluir_indices=True) → média últimos 7 meses
     """
     
     if nome_funcao.upper() not in FUNCOES_NATIVAS:
-        print(f"[CALC] Função desconhecida: {nome_funcao}")
+        _log_calc(f"[CALC] Função desconhecida: {nome_funcao}")
         return 0.0
     
     try:
+        # ✨ Preparar contexto com índices se permitido
+        contexto = _preparar_contexto_com_indices(dre_dados) if incluir_indices else dre_dados
+        
         # ===== ETAPA 1: Extrair código e intervalo temporal =====
         codigo_str, intervalo_temporal = processar_intervalo_temporal(argumentos.strip())
         
-        print(f"[CALC] {nome_funcao}({argumentos})")
-        print(f"[CALC]  → Código: {codigo_str}, Intervalo: {intervalo_temporal}")
+        _log_calc(f"[CALC] {nome_funcao}({argumentos})")
+        _log_calc(f"[CALC]  → Código: {codigo_str}, Intervalo: {intervalo_temporal}")
         
         # ===== ETAPA 2: Obter lista de códigos a processar =====
-        codigos_disponiveis = list(dre_dados.keys())
+        codigos_disponiveis = list(contexto.keys())
         
         # Detectar se é intervalo de códigos (TD71:TD90) ou apenas um código
         if ":" in codigo_str:
@@ -493,19 +736,19 @@ def evaluar_funcao_em_formula(nome_funcao: str, argumentos: str,
             if codigo_str in codigos_disponiveis:
                 codigos_a_usar = [codigo_str]
             else:
-                print(f"[CALC] Código '{codigo_str}' não encontrado")
+                _log_calc(f"[CALC] Código '{codigo_str}' não encontrado")
                 return 0.0
         
         if not codigos_a_usar:
-            print(f"[CALC] Nenhum código válido encontrado em: {codigo_str}")
+            _log_calc(f"[CALC] Nenhum código válido encontrado em: {codigo_str}")
             return 0.0
         
         # ===== ETAPA 3: Coletar valores com filtro temporal =====
         valores_para_funcao = []
         
         for codigo in codigos_a_usar:
-            if codigo in dre_dados:
-                valores_var = dre_dados[codigo].get("valores", [0.0] * 12)
+            if codigo in contexto:
+                valores_var = contexto[codigo].get("valores", [0.0] * 12)
                 
                 # Aplicar filtro temporal
                 valores_filtrados = aplicar_intervalo_temporal(valores_var, intervalo_temporal)
@@ -521,14 +764,12 @@ def evaluar_funcao_em_formula(nome_funcao: str, argumentos: str,
         funcao = FUNCOES_NATIVAS[nome_funcao.upper()]
         resultado = funcao(valores_para_funcao)
         
-        print(f"[CALC]  → Resultado: {resultado}")
+        _log_calc(f"[CALC]  → Resultado: {resultado}")
         
         return resultado
         
     except Exception as e:
-        print(f"[CALC] ❌ Erro ao avaliar {nome_funcao}({argumentos}): {e}")
-        import traceback
-        traceback.print_exc()
+        _log_calc(f"[CALC] ❌ Erro ao avaliar {nome_funcao}({argumentos}): {e}")
         return 0.0
 
 
@@ -536,20 +777,24 @@ def evaluar_funcao_dinamica_por_mes(
     nome_funcao: str, 
     argumentos: str, 
     dre_dados: Dict,
-    saz: Union[Dict, int, None] = None
+    saz: Union[Dict, int, None] = None,
+    incluir_indices: bool = True
 ) -> List[float]:
     """
-    Avalia uma função de forma DINÂMICA para cada mês (com sazonalidade).
+    Avalia uma função de forma DINÂMICA para cada mês (com sazonalidade e índices).
+    
+    ✨ NOVO: Suporta referências a índices econômicos
     
     Este é o novo fluxo que calcula diferentes valores para cada mês,
     em vez de calcular uma única vez e reutilizar.
     
     Args:
         nome_funcao: Nome da função ('SOMA', 'MEDIA', etc)
-        argumentos: String com argumentos (ex: 'TD71' ou 'TD71:TD90')
+        argumentos: String com argumentos (ex: 'TD71' ou 'TD71:TD90' ou 'IPCA')
                     NOTA: argumentos NÃO incluem o intervalo temporal aqui
         dre_dados: Dicionário com dados da DRE
         saz: Sazonalidade (dict novo, int legacy, ou None)
+        incluir_indices: Se True, permite referências a índices econômicos
         
     Returns:
         List[float]: 12 valores, um para cada mês, calculados dinamicamente
@@ -562,71 +807,94 @@ def evaluar_funcao_dinamica_por_mes(
         # Para cada mês, sempre usa os meses jan-jul (sazonalidade fixa)
         evaluar_funcao_dinamica_por_mes('SOMA', 'TD71', dre_dados,
                                         {tipo: FIXO, mes_inicio: 1, mes_fim: 7})
+        
+        # Para cada mês, calcula a média dos últimos 3 meses do IPCA
+        evaluar_funcao_dinamica_por_mes('MEDIA', 'IPCA', dre_dados,
+                                        {tipo: VARIAVEL, quantidade: 3, ...},
+                                        incluir_indices=True)
     """
     if nome_funcao.upper() not in FUNCOES_NATIVAS:
-        print(f"[CALC] Função desconhecida: {nome_funcao}")
+        _log_calc(f"[CALC] Função desconhecida: {nome_funcao}")
         return [0.0] * 12
+    
+    # ✨ Preparar contexto com índices se permitido
+    contexto = _preparar_contexto_com_indices(dre_dados) if incluir_indices else dre_dados
     
     # Normalizar sazonalidade
     saz_normalizada = normalizar_sazonalidade(saz)
     
-    print(f"[CALC] {nome_funcao}({argumentos}) - Sazonalidade: {saz_normalizada}")
+    _log_calc(f"[CALC] {nome_funcao}({argumentos}) - Sazonalidade: {saz_normalizada}")
     
     valores_resultado_12_meses = []
     
+    referencias, janela, lag = parse_argumentos_temporais(argumentos)
+
     # Para cada um dos 12 meses
     for mes_idx in range(12):
         try:
-            # ===== ETAPA 1: Extrair código =====
-            codigo_str = argumentos.strip()
-            
-            # ===== ETAPA 2: Obter lista de códigos =====
-            codigos_disponiveis = list(dre_dados.keys())
-            
-            if ":" in codigo_str:
-                codigos_a_usar = parse_range_intervalo(codigo_str, codigos_disponiveis)
-            else:
-                if codigo_str in codigos_disponiveis:
-                    codigos_a_usar = [codigo_str]
+            # ===== ETAPA 1: Obter lista de códigos =====
+            codigos_disponiveis = list(contexto.keys())
+            codigos_a_usar: List[str] = []
+
+            for ref in referencias:
+                if ":" in ref:
+                    codigos_a_usar.extend(parse_range_intervalo(ref, codigos_disponiveis))
+                elif ref in codigos_disponiveis:
+                    codigos_a_usar.append(ref)
                 else:
-                    print(f"[CALC] Código '{codigo_str}' não encontrado (mês {mes_idx})")
-                    valores_resultado_12_meses.append(0.0)
-                    continue
+                    _log_calc(f"[CALC] Referência '{ref}' não encontrada (mês {mes_idx})")
             
             if not codigos_a_usar:
-                print(f"[CALC] Nenhum código válido em {codigo_str} (mês {mes_idx})")
+                _log_calc(f"[CALC] Nenhum código válido em {argumentos} (mês {mes_idx})")
                 valores_resultado_12_meses.append(0.0)
                 continue
             
-            # ===== ETAPA 3: Aplicar sazonalidade e coletar valores =====
+            # Remover duplicatas preservando ordem
+            codigos_a_usar = list(dict.fromkeys(codigos_a_usar))
+
+            # ===== ETAPA 2: Aplicar sazonalidade/janela e coletar valores =====
             valores_para_funcao = []
             
             for codigo in codigos_a_usar:
-                if codigo in dre_dados:
-                    valores_var = dre_dados[codigo].get("valores", [0.0] * 12)
-                    
-                    # 🔑 NOVO: Aplicar sazonalidade dinamicamente por mês
-                    valores_filtrados = aplicar_sazonalidade_por_mes(
-                        valores_var, 
-                        saz, 
-                        mes_idx
-                    )
-                    
+                if codigo in contexto:
+                    valores_var = contexto[codigo].get("valores", [0.0] * 12)
+
+                    if janela is not None:
+                        valores_filtrados = extrair_janela_por_mes(
+                            valores_var,
+                            mes_idx,
+                            janela=janela,
+                            lag=lag
+                        )
+                    elif lag:
+                        indice_lag = (mes_idx - lag) % 12
+                        valores_filtrados = [valores_var[indice_lag] if indice_lag < len(valores_var) else 0.0]
+                    elif saz_normalizada.get("tipo") != "NENHUM":
+                        # Mantém sazonalidade explícita da metodologia quando configurada.
+                        valores_filtrados = aplicar_sazonalidade_por_mes(
+                            valores_var,
+                            saz,
+                            mes_idx
+                        )
+                    else:
+                        # Sem janela e sem sazonalidade: função opera no valor do mês corrente.
+                        valores_filtrados = [valores_var[mes_idx] if mes_idx < len(valores_var) else 0.0]
+
                     valores_para_funcao.extend(valores_filtrados)
             
-            # ===== ETAPA 4: Executar função =====
+            # ===== ETAPA 3: Executar função =====
             funcao = FUNCOES_NATIVAS[nome_funcao.upper()]
             valor_mes = funcao(valores_para_funcao)
             valores_resultado_12_meses.append(float(valor_mes))
             
             if mes_idx == 0 or mes_idx == 6 or mes_idx == 11:
-                print(f"[CALC]  → Mês {mes_idx+1}: {valor_mes:.2f}")
+                _log_calc(f"[CALC]  → Mês {mes_idx+1}: {valor_mes:.2f}")
                 
         except Exception as e:
-            print(f"[CALC] ❌ Erro em {nome_funcao}({argumentos}) mês {mes_idx}: {e}")
+            _log_calc(f"[CALC] ❌ Erro em {nome_funcao}({argumentos}) mês {mes_idx}: {e}")
             valores_resultado_12_meses.append(0.0)
     
-    print(f"[CALC]  → Resultado final (12 meses): {valores_resultado_12_meses[:3]}...")
+    _log_calc(f"[CALC]  → Resultado final (12 meses): {valores_resultado_12_meses[:3]}...")
     return valores_resultado_12_meses
 
 

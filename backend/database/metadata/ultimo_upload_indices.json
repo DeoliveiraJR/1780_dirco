@@ -1,0 +1,26 @@
+{
+  "total_registros": 1506,
+  "indices_unicos": 50,
+  "colunas": [
+    "DT_ALVO",
+    "DT_PRJ",
+    "VL_PRBB",
+    "VL_PJTD",
+    "CD_CNR",
+    "NM_CNR",
+    "TX_CFDD_PRJ",
+    "NM_TIP_CNR",
+    "NM_IN",
+    "CD_IEC",
+    "TIT_IN",
+    "NM_UND_MDD",
+    "NM_CTGR",
+    "NM_PERC",
+    "MM_PERC",
+    "TX_RGAO_GEO",
+    "TX_PRF_UMD_EXB",
+    "TX_SFX_UMD_EXB"
+  ],
+  "data_upload": "2026-05-27T22:33:58.670410",
+  "arquivo_origem": "bd_dados_v4_Real.xlsx"
+}
