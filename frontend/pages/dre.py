@@ -16,6 +16,7 @@ import json
 import re
 import ast
 import html
+from urllib.parse import quote, unquote
 import operator as op
 from datetime import datetime
 from copy import deepcopy
@@ -72,8 +73,37 @@ def _extrair_tokens_formula(formula: str) -> list:
     return list(dict.fromkeys(re.findall(r"\b([A-Z][A-Z0-9_]*)\b", formula.upper())))
 
 
+def _normalizar_nome_metodologia_var(nome: str) -> str:
+    """Normaliza nome de metodologia para uso como variável em fórmula (ex: 'Minha Met' → 'MINHA_MET')."""
+    return re.sub(r'[^A-Za-z0-9]', '_', nome).upper()
+
+
+def _resolver_series_metodologias() -> dict:
+    """
+    Retorna séries de 12 valores de cada metodologia já aplicada ao menos uma vez.
+    Viabiliza encadeamento: fórmulas podem referenciar o nome de outra metodologia como variável.
+    A série é gravada em 'serie_computada' no momento em que a metodologia é aplicada.
+    NOTA: só disponível após a metodologia ter sido aplicada pelo menos uma vez.
+    """
+    metodologias = st.session_state.get("dre_metodologias", {})
+    series = {}
+    for met_nome, met_dados in metodologias.items():
+        serie = met_dados.get("serie_computada")
+        if isinstance(serie, list) and len(serie) == 12:
+            nome_var = _normalizar_nome_metodologia_var(met_nome)
+            series[nome_var] = {
+                "valores": [float(v) for v in serie],
+                "tipo": "metodologia",
+                "descricao": f"[Metodologia] {met_nome}",
+                "eh_negrito": False,
+                "formula": None,
+                "metodologia": None,
+            }
+    return series
+
+
 def _obter_contexto_formula(dre_dados: Dict[str, dict] = None) -> Dict[str, dict]:
-    """Combina DRE principal com volumes (TD21/TD62) para validação e cálculo."""
+    """Combina DRE principal com volumes (TD21/TD62) e metodologias encadeadas para validação e cálculo."""
     base_dre = dre_dados if dre_dados is not None else st.session_state.get("dre_dados", {})
     contexto = deepcopy(base_dre)
 
@@ -88,25 +118,40 @@ def _obter_contexto_formula(dre_dados: Dict[str, dict] = None) -> Dict[str, dict
                 "metodologia": None,
             }
 
+    # Injetar séries de metodologias já aplicadas para encadeamento de fórmulas
+    for nome_var, dados_met in _resolver_series_metodologias().items():
+        if nome_var not in contexto:
+            contexto[nome_var] = dados_met
+
     return contexto
 
 
 def _classificar_tokens_formula(formula: str, dre_dados: dict):
-    """Classifica tokens em funções, variáveis DRE, índices e desconhecidos."""
+    """Classifica tokens em funções, variáveis DRE, índices, referências a metodologias e desconhecidos."""
     tokens = _extrair_tokens_formula(formula)
     funcoes = {"SOMA", "MEDIA", "MINIMO", "MAXIMO", "DESVIO_PADRAO"}
     contexto_formula = _obter_contexto_formula(dre_dados)
     contexto = _preparar_contexto_com_indices(contexto_formula)
     vars_dre = set(contexto_formula.keys())
 
+    # Nomes normalizados das metodologias para detectar encadeamento na fórmula
+    nomes_met_vars = {
+        _normalizar_nome_metodologia_var(n)
+        for n in st.session_state.get("dre_metodologias", {}).keys()
+    }
+
     tokens_funcoes = []
     tokens_dre = []
     tokens_indices = []
     tokens_invalidos = []
+    tokens_met = []
 
     for t in tokens:
         if t in funcoes:
             tokens_funcoes.append(t)
+        elif t in nomes_met_vars:
+            # Referência a metodologia encadeada — prioridade sobre vars_dre para distinção visual
+            tokens_met.append(t)
         elif t in vars_dre:
             tokens_dre.append(t)
         elif t in contexto:
@@ -118,6 +163,7 @@ def _classificar_tokens_formula(formula: str, dre_dados: dict):
         "funcoes": tokens_funcoes,
         "dre": tokens_dre,
         "indices": tokens_indices,
+        "metodologias": tokens_met,
         "invalidos": tokens_invalidos,
     }
 
@@ -131,6 +177,8 @@ def _renderizar_tags_formula(classificacao: dict):
         blocos.append(f'<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:999px;background:#dcfce7;color:#166534;font-size:11px;font-weight:600;">dre:{tok}</span>')
     for tok in classificacao.get("indices", []):
         blocos.append(f'<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:999px;background:#cffafe;color:#0e7490;font-size:11px;font-weight:600;">idx:{tok}</span>')
+    for tok in classificacao.get("metodologias", []):
+        blocos.append(f'<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:999px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:600;">met:{tok}</span>')
     for tok in classificacao.get("invalidos", []):
         blocos.append(f'<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 7px;border-radius:999px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700;">inv:{tok}</span>')
 
@@ -148,11 +196,12 @@ def _renderizar_formula_inline(formula: str, classificacao: dict):
         "funcoes": "background:#dbeafe;color:#1e3a8a;",
         "dre": "background:#dcfce7;color:#166534;",
         "indices": "background:#cffafe;color:#0e7490;",
+        "metodologias": "background:#fef3c7;color:#92400e;",
         "invalidos": "background:#fee2e2;color:#991b1b;",
     }
 
     tipos = {}
-    for k in ["funcoes", "dre", "indices", "invalidos"]:
+    for k in ["funcoes", "dre", "indices", "metodologias", "invalidos"]:
         for tok in classificacao.get(k, []):
             tipos[tok.upper()] = k
 
@@ -839,7 +888,10 @@ def _aplicar_metodologia_em_linha(
     mes_inicio: int = 1,
     mes_fim: int = 12,
 ) -> tuple[bool, str, bool]:
-    """Aplica metodologia em uma linha e retorna (ok, mensagem, alterou_valor)."""
+    """Aplica metodologia em uma linha e retorna (ok, mensagem, alterou_valor).
+
+    Regra atual: aplicações na mesma linha são acumulativas (somatório de efeitos) em ordem.
+    """
     if codigo not in dre_dados:
         return False, f"Linha {codigo} não encontrada.", False
 
@@ -849,33 +901,231 @@ def _aplicar_metodologia_em_linha(
         return False, f"Referências inválidas: {', '.join(classif['invalidos'])}", False
 
     valores_antes = list(dre_dados[codigo].get("valores", [0.0] * 12))
-    serie_calc = _avaliar_formula(
-        formula_aplicar,
-        dre_dados,
-        sazonalidade=met_dados.get("sazonalidade")
-    )
 
-    if modo_periodo == "Todos":
-        dre_dados[codigo]["valores"] = list(serie_calc)
+    # Migração de estado legado: metodologia única -> lista acumulativa
+    linha = dre_dados[codigo]
+    if "metodologias_aplicadas" not in linha:
+        linha["metodologias_aplicadas"] = []
+        met_legada = linha.get("metodologia")
+        if isinstance(met_legada, dict) and met_legada.get("nome"):
+            linha["metodologias_aplicadas"].append({
+                "nome": met_legada.get("nome"),
+                "periodo": met_legada.get("periodo", "Todos"),
+                "mes_inicio": int(met_legada.get("mes_inicio", 1)),
+                "mes_fim": int(met_legada.get("mes_fim", 12)),
+                "data_aplicacao": met_legada.get("data_aplicacao", datetime.now().isoformat()),
+            })
+
+    if "valores_base" not in linha:
+        linha["valores_base"] = list(valores_antes)
+
+    existentes = linha.get("metodologias_aplicadas", [])
+    nomes_existentes = [m.get("nome") for m in existentes]
+    if met_nome in nomes_existentes:
+        # Atualiza a configuração da metodologia já acumulada mantendo posição na ordem
+        idx_met = nomes_existentes.index(met_nome)
+        existentes[idx_met] = {
+            "nome": met_nome,
+            "periodo": modo_periodo,
+            "mes_inicio": mes_inicio,
+            "mes_fim": mes_fim,
+            "data_aplicacao": datetime.now().isoformat(),
+        }
     else:
-        inicio_idx = min(mes_inicio, mes_fim) - 1
-        fim_idx = max(mes_inicio, mes_fim) - 1
-        for i in range(inicio_idx, fim_idx + 1):
-            dre_dados[codigo]["valores"][i] = serie_calc[i]
+        # Nova metodologia: acumula no final da ordem
+        existentes.append({
+            "nome": met_nome,
+            "periodo": modo_periodo,
+            "mes_inicio": mes_inicio,
+            "mes_fim": mes_fim,
+            "data_aplicacao": datetime.now().isoformat(),
+        })
+    linha["metodologias_aplicadas"] = existentes
 
-    dre_dados[codigo]["metodologia"] = {
-        "nome": met_nome,
-        "periodo": modo_periodo,
-        "mes_inicio": mes_inicio,
-        "mes_fim": mes_fim,
-        "data_aplicacao": datetime.now().isoformat(),
-    }
+    _recalcular_linha_por_metodologias(dre_dados, codigo)
 
     alterou = not np.allclose(
         np.array(valores_antes, dtype=float),
         np.array(dre_dados[codigo].get("valores", [0.0] * 12), dtype=float)
     )
-    return True, f"Metodologia aplicada em {codigo}.", alterou
+    return True, f"Metodologia acumulada em {codigo}.", alterou
+
+
+def _remover_metodologia_da_linha(dre_dados: dict, codigo: str, restaurar_valores: bool = True) -> tuple[bool, str]:
+    """Remove metodologia da linha e restaura valores anteriores quando possível."""
+    if codigo not in dre_dados:
+        return False, f"Linha {codigo} não encontrada."
+
+    linha = dre_dados.get(codigo, {})
+    mets = linha.get("metodologias_aplicadas", [])
+    if not mets and not isinstance(linha.get("metodologia"), dict):
+        return False, f"Linha {codigo} não possui metodologia aplicada."
+
+    linha["metodologias_aplicadas"] = []
+    linha["metodologia"] = None
+
+    if restaurar_valores:
+        base = linha.get("valores_base")
+        if isinstance(base, list) and len(base) >= 12:
+            linha["valores"] = [float(v) for v in base[:12]]
+        else:
+            linha["valores"] = [0.0] * 12
+
+    return True, f"Metodologias removidas da linha {codigo}."
+
+
+def _recalcular_linha_por_metodologias(dre_dados: dict, codigo: str):
+    """Recalcula uma linha aplicando metodologias acumuladas em ordem (efeito somatório)."""
+    if codigo not in dre_dados:
+        return
+
+    linha = dre_dados[codigo]
+    base = linha.get("valores_base")
+    if not isinstance(base, list) or len(base) < 12:
+        base = list(linha.get("valores", [0.0] * 12))
+        linha["valores_base"] = list(base)
+
+    acumulado = [float(v) for v in base[:12]]
+
+    # Normalização de estado legado
+    mets = linha.get("metodologias_aplicadas", [])
+    if not mets:
+        met_legada = linha.get("metodologia")
+        if isinstance(met_legada, dict) and met_legada.get("nome"):
+            mets = [{
+                "nome": met_legada.get("nome"),
+                "periodo": met_legada.get("periodo", "Todos"),
+                "mes_inicio": int(met_legada.get("mes_inicio", 1)),
+                "mes_fim": int(met_legada.get("mes_fim", 12)),
+                "data_aplicacao": met_legada.get("data_aplicacao", datetime.now().isoformat()),
+            }]
+            linha["metodologias_aplicadas"] = mets
+
+    ativos = []
+    for m in mets:
+        met_nome = m.get("nome")
+        met_cfg = st.session_state.get("dre_metodologias", {}).get(met_nome)
+        if not met_cfg:
+            continue
+
+        # Contexto da fórmula considera o estado acumulado atual da própria linha
+        linha["valores"] = list(acumulado)
+        serie = _avaliar_formula(
+            _normalizar_formula_usuario(met_cfg.get("formula", "")),
+            dre_dados,
+            sazonalidade=met_cfg.get("sazonalidade"),
+        )
+
+        periodo = m.get("periodo", "Todos")
+        mi = int(m.get("mes_inicio", 1))
+        mf = int(m.get("mes_fim", 12))
+        if periodo == "Todos":
+            for i in range(12):
+                acumulado[i] += float(serie[i])
+        else:
+            ini = min(mi, mf) - 1
+            fim = max(mi, mf) - 1
+            for i in range(ini, fim + 1):
+                acumulado[i] += float(serie[i])
+
+        ativos.append(m)
+
+    linha["metodologias_aplicadas"] = ativos
+    linha["valores"] = acumulado
+    if ativos:
+        nomes = [m.get("nome", "") for m in ativos if m.get("nome")]
+        linha["metodologia"] = {
+            "nome": " + ".join(nomes),
+            "periodo": "Todos",
+            "mes_inicio": 1,
+            "mes_fim": 12,
+            "data_aplicacao": ativos[-1].get("data_aplicacao", datetime.now().isoformat()),
+            "metodologias": nomes,
+        }
+    else:
+        linha["metodologia"] = None
+
+
+def _remover_metodologia_especifica_da_linha(dre_dados: dict, codigo: str, met_nome: str):
+    """Remove somente uma metodologia específica da pilha da linha e recalcula o resultado."""
+    if codigo not in dre_dados:
+        return
+    linha = dre_dados[codigo]
+    mets = linha.get("metodologias_aplicadas", [])
+    if not mets:
+        met_legada = linha.get("metodologia")
+        if isinstance(met_legada, dict):
+            # Normaliza: pode ser nome composto ("A + B") ou lista simples
+            nomes_legados = met_legada.get("metodologias", []) or [met_legada.get("nome", "")]
+            if met_nome in nomes_legados:
+                # Migrar para lista antes de remover, depois cai no fluxo normal
+                linha["metodologias_aplicadas"] = [
+                    {
+                        "nome": n,
+                        "periodo": "Todos",
+                        "mes_inicio": 1,
+                        "mes_fim": 12,
+                        "data_aplicacao": met_legada.get("data_aplicacao", datetime.now().isoformat()),
+                    }
+                    for n in nomes_legados if n
+                ]
+                mets = linha["metodologias_aplicadas"]
+            else:
+                return
+        else:
+            return
+
+    filtradas = [m for m in mets if m.get("nome") != met_nome]
+    linha["metodologias_aplicadas"] = filtradas
+
+    # CRÍTICO: limpar campo legado ANTES de chamar _recalcular, para evitar que
+    # a migração de estado legado dentro de _recalcular re-insira a metodologia removida.
+    linha["metodologia"] = None
+
+    if not filtradas:
+        # Sem metodologias: restaurar valores_base diretamente sem chamar _recalcular
+        base = linha.get("valores_base")
+        if isinstance(base, list) and len(base) >= 12:
+            linha["valores"] = [float(v) for v in base[:12]]
+        else:
+            linha["valores"] = [0.0] * 12
+    else:
+        _recalcular_linha_por_metodologias(dre_dados, codigo)
+
+
+def _limpar_query_params_exclusao_metodologia():
+    """Remove query params usados na exclusão por clique de tag da tabela."""
+    for _k in ["dre_del_cod", "dre_del_met", "dre_del_src"]:
+        try:
+            if _k in st.query_params:
+                del st.query_params[_k]
+        except Exception:
+            pass
+
+
+@st.dialog("Confirmar exclusão de metodologia", width="small")
+def _dialog_confirmar_exclusao_metodologia_linha(codigo: str, met_nome: str):
+    st.markdown(f"Deseja remover a metodologia **{met_nome}** da linha **{codigo}**?")
+    st.caption("Essa ação remove apenas esta metodologia da linha selecionada e recalcula os valores.")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Cancelar", use_container_width=True, key=f"btn_cancel_del_ss_{codigo}_{met_nome}"):
+            st.session_state.pop("dre_del_pending", None)
+            st.rerun()
+
+    with c2:
+        if st.button("Excluir", use_container_width=True, type="primary", key=f"btn_ok_del_ss_{codigo}_{met_nome}"):
+            dre_state = deepcopy(st.session_state.get("dre_dados", {}))
+            _remover_metodologia_especifica_da_linha(dre_state, codigo, met_nome)
+
+            st.session_state.dre_dados = dre_state
+            _calcular_totalizadores()
+            _persistir_linhas_dre()
+
+            st.session_state.pop("dre_del_pending", None)
+            st.session_state["dre_msg_sucesso_exclusao_tag"] = f"Metodologia '{met_nome}' removida da linha {codigo}."
+            st.rerun()
 
 
 def _fmt_dre_valor(v: float) -> str:
@@ -894,6 +1144,29 @@ def _fmt_dre_valor(v: float) -> str:
     if abs(val) < 1:
         return fmt_br(val, casas=3)
     return fmt_br(val, casas=2)
+
+
+def _diagnosticar_formula_sem_efeito(formula: str, dre_dados: dict) -> str:
+    """Retorna diagnóstico simples quando uma metodologia não altera valores."""
+    try:
+        formula_norm = _normalizar_formula_usuario(formula or "")
+        classif = _classificar_tokens_formula(formula_norm, dre_dados)
+        refs = list(dict.fromkeys(classif.get("dre", []) + classif.get("indices", [])))
+        if not refs:
+            return ""
+
+        contexto = _preparar_contexto_com_indices(_obter_contexto_formula(dre_dados))
+        refs_zeradas = []
+        for ref in refs:
+            valores = (contexto.get(ref, {}) or {}).get("valores", [])
+            if valores and all(np.isclose(float(v), 0.0) for v in valores):
+                refs_zeradas.append(ref)
+
+        if refs_zeradas:
+            return f" Referências zeradas no escopo atual: {', '.join(refs_zeradas)}."
+        return ""
+    except Exception:
+        return ""
 
 
 # ============================================================================
@@ -1425,14 +1698,27 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
     }
     .dre-met-tag {
         display: inline-block;
-        margin-left: 8px;
-        padding: 2px 7px;
-        border-radius: 999px;
-        font-size: 10px;
+        margin: 2px 4px 2px 0;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
         font-weight: 600;
         color: #0c3a66;
-        background: rgba(6, 182, 212, 0.15);
-        border: 1px solid rgba(6, 182, 212, 0.35);
+        background: rgba(6, 182, 212, 0.18);
+        border: 1px solid rgba(6, 182, 212, 0.4);
+        white-space: nowrap;
+    }
+    .dre-met-tag-click {
+        text-decoration: none;
+        cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+        font-family: inherit;
+        line-height: 1.1;
+    }
+    .dre-met-tag-click:hover {
+        background: rgba(6, 182, 212, 0.25);
+        border-color: rgba(6, 182, 212, 0.7);
     }
     [data-testid="stDataFrame"] div[role="columnheader"] {
         background: linear-gradient(135deg, #0c3a66 0%, #06b6d4 100%) !important;
@@ -1446,6 +1732,21 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
             const u = new URL(window.location.href);
             u.searchParams.set('dre_cell', `${codigo}_${mes}`);
             window.location.href = u.toString();
+        } catch (e) {
+            console.log(e);
+        }
+    }
+
+    function dreAskDelete(codigoEnc, metEnc) {
+        // Fallback JS mantido por compatibilidade; o fluxo primário usa href target=_self
+        try {
+            const codigo = decodeURIComponent(codigoEnc);
+            const metodologia = decodeURIComponent(metEnc);
+            const u = new URL(window.parent.location.href);
+            u.searchParams.set('dre_del_cod', codigo);
+            u.searchParams.set('dre_del_met', metodologia);
+            u.searchParams.set('dre_del_src', 'js');
+            window.parent.location.assign(u.toString());
         } catch (e) {
             console.log(e);
         }
@@ -1482,10 +1783,30 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
         # Descrição
         html_table += f'<td class="desc-col">{descricao}</td>'
 
-        nome_met_col = "-"
+        # Renderizar cada metodologia em sua própria badge (separadas)
+        met_col_html = "-"
         if met_aplicada and isinstance(met_aplicada, dict):
-            nome_met_col = met_aplicada.get("nome", "-")
-        met_col_html = nome_met_col if nome_met_col == "-" else f'<span class="dre-met-tag">{nome_met_col}</span>'
+            mets_lista = met_aplicada.get("metodologias", [])
+            if isinstance(mets_lista, list) and mets_lista:
+                # Em modo visual, tag é clicável para abrir confirmação de exclusão
+                tags_html = []
+                for m in mets_lista:
+                    if not m:
+                        continue
+                    m_txt = html.escape(str(m))
+                    if modo_viz:
+                        tags_html.append(
+                            f'<span class="dre-met-tag" title="Use o painel abaixo para remover">{m_txt}</span>'
+                        )
+                    else:
+                        tags_html.append(f'<span class="dre-met-tag">{m_txt}</span>')
+                met_col_html = " ".join(tags_html) if tags_html else "-"
+            else:
+                # Fallback: usar o nome direto para compat. com estado legado
+                nome = met_aplicada.get("nome", "-")
+                if nome and nome != "-":
+                    nome_txt = html.escape(str(nome))
+                    met_col_html = f'<span class="dre-met-tag">{nome_txt}</span>'
         html_table += f'<td class="met-col">{met_col_html}</td>'
         
         # Valores dos meses
@@ -1522,18 +1843,65 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
 
     if modo_viz:
         st.markdown(f'<div class="dre-table-wrap">{html_table}</div>', unsafe_allow_html=True)
+
+        # ===== PAINEL DE GESTÃO DE METODOLOGIAS POR LINHA =====
+        # Motivo: href/JS navigation causa recarga total e perde session_state (auth).
+        # Solução: botões Streamlit nativos + session_state para disparar st.dialog.
+        linhas_com_met = []
+        for _linha_struct in ESTRUTURA_DRE:
+            _cod = _linha_struct.codigo
+            _dados = dre_dados.get(_cod, {})
+            _met = _dados.get("metodologia")
+            if isinstance(_met, dict):
+                _mets_lista = _met.get("metodologias", [])
+                if _mets_lista:
+                    linhas_com_met.append((_cod, _dados.get("descricao", ""), list(_mets_lista)))
+
+        if linhas_com_met:
+            with st.expander("🗑️ Remover metodologia aplicada", expanded=False):
+                for _cod, _desc, _mets in linhas_com_met:
+                    for _m in _mets:
+                        _c1, _c2 = st.columns([5, 1])
+                        with _c1:
+                            st.markdown(f"**{_cod}** — {_desc[:40]}: `{_m}`")
+                        with _c2:
+                            if st.button(
+                                "✕",
+                                key=f"btn_rm_met_{_cod}_{_m}",
+                                use_container_width=True,
+                                help=f"Remover {_m} de {_cod}",
+                            ):
+                                st.session_state["dre_del_pending"] = {"cod": _cod, "met": _m}
+                                st.rerun()
+
+        # Abrir dialog de confirmação se houver pendência no session_state
+        _del_pending = st.session_state.get("dre_del_pending")
+        if isinstance(_del_pending, dict) and _del_pending.get("cod") and _del_pending.get("met"):
+            _dialog_confirmar_exclusao_metodologia_linha(_del_pending["cod"], _del_pending["met"])
     else:
+        # Escalar valores para bilhões (÷ 1e9) para alinhar com o modo visual que usa "bi"
+        _ESCALA_BI = 1_000_000_000.0
         df_dre_editor = pd.DataFrame(dados_editor)
+        for mes in colunas_meses:
+            df_dre_editor[mes] = (
+                pd.to_numeric(df_dre_editor[mes], errors="coerce")
+                .astype(float)
+                .div(_ESCALA_BI)
+            )
+
         column_config_editor = {
             "TD": st.column_config.TextColumn("TD", width="small", disabled=True),
             "Descrição": st.column_config.TextColumn("Descrição", width="medium", disabled=True),
             "Metodologia": st.column_config.TextColumn("Metodologia", width="small", disabled=True),
         }
         for mes in colunas_meses:
+            # Exibe em bilhões (bi) com 2 casas — mesma escala/unidade do modo visual
             column_config_editor[mes] = st.column_config.NumberColumn(
-                mes,
+                f"{mes} (bi)",
                 width="small",
                 format="%.2f",
+                step=0.01,
+                help="Valor em bilhões (bi). Ex: 2447.78 = R$ 2.447,78 bilhões",
             )
 
         df_editado = st.data_editor(
@@ -1547,10 +1915,19 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
             num_rows="fixed",
         )
 
+        # Reverter escala ao salvar: valores editados (bi) × 1e9 → valor real
         for _, linha_df in df_editado.iterrows():
             codigo = linha_df["TD"]
             if dre_dados.get(codigo, {}).get("tipo") == "variavel":
-                dre_dados[codigo]["valores"] = [float(linha_df[mes]) for mes in colunas_meses]
+                dre_dados[codigo]["valores"] = [
+                    float(linha_df[mes]) * _ESCALA_BI for mes in colunas_meses
+                ]
+
+    if st.session_state.get("dre_msg_sucesso_exclusao_tag"):
+        st.success(st.session_state.get("dre_msg_sucesso_exclusao_tag"))
+        del st.session_state["dre_msg_sucesso_exclusao_tag"]
+
+    st.caption("Gerenciamento de metodologia por linha foi concentrado na aba 'Aplicar e Histórico' para manter o fluxo simples e previsível.")
     
     if not modo_viz:
         dre_cell_qs = st.query_params.get("dre_cell", "")
@@ -2363,9 +2740,12 @@ def _renderizar_metodologias():
                         # Histórico
                         aplicacoes = met_dados.get("aplicacoes", [])
                         if aplicacoes:
-                            st.markdown("** Últimas Aplicações:**")
+                            st.markdown("** Histórico:**")
                             for app in aplicacoes[-5:]:
-                                st.caption(f"• {app.get('escopo', 'N/A')} ({app.get('data', '')[:10]})")
+                                tipo_app = app.get("tipo", "aplicacao")
+                                icone_app = "✏️" if tipo_app == "edicao" else "▶️"
+                                detalhe = f" — {app.get('detalhes','')}" if app.get("detalhes") and tipo_app == "edicao" else ""
+                                st.caption(f"• {icone_app} {app.get('escopo','N/A')} ({app.get('data','')[:10]}){detalhe}")
                 
                 with col_apply:
                     if st.button(" Aplicar", key=f"btn_app_{met_nome}", use_container_width=True, type="primary"):
@@ -2403,6 +2783,17 @@ def _renderizar_metodologias():
                                     else:
                                         st.error(f"{var_codigo}: {msg}")
                             
+                            # Armazenar série computada para encadeamento entre metodologias
+                            try:
+                                _serie_met = _avaliar_formula(
+                                    _normalizar_formula_usuario(met_dados.get('formula', '')),
+                                    dre_dados,
+                                    sazonalidade=met_dados.get("sazonalidade"),
+                                )
+                                st.session_state.dre_metodologias[met_nome]["serie_computada"] = _serie_met
+                            except Exception:
+                                pass
+
                             # ===== SALVAR E RECALCULAR =====
                             st.session_state.dre_dados = dre_dados
                             _calcular_totalizadores()
@@ -2436,7 +2827,11 @@ def _renderizar_metodologias():
                             • Timestamp: {novo_registro['data'][:19].replace('T', ' ')}
                             """)
                             if sem_efeito:
-                                st.warning(f"Sem alteração de valores em: {', '.join(sem_efeito)}. Verifique se a fórmula está resultando em zero no contexto atual.")
+                                diag_sem_efeito = _diagnosticar_formula_sem_efeito(met_dados.get('formula', ''), dre_dados)
+                                st.warning(
+                                    f"Sem alteração de valores em: {', '.join(sem_efeito)}. "
+                                    f"Verifique se a fórmula está resultando em zero no contexto atual.{diag_sem_efeito}"
+                                )
                             st.rerun()
                             
                         except Exception as e:
@@ -2451,8 +2846,23 @@ def _renderizar_metodologias():
                 
                 with col_del:
                     if st.button("🗑️", key=f"btn_del_{met_nome}", use_container_width=True):
+                        dre_state = deepcopy(st.session_state.get("dre_dados", {}))
+                        for cod_linha in list(dre_state.keys()):
+                            _remover_metodologia_especifica_da_linha(dre_state, cod_linha, met_nome)
+
+                        st.session_state.dre_dados = dre_state
+                        _calcular_totalizadores()
+                        _persistir_linhas_dre()
+
                         del st.session_state.dre_metodologias[met_nome]
+                        st.session_state["dre_msg_sucesso_exclusao_met"] = (
+                            f"Metodologia '{met_nome}' excluída e removida das linhas aplicadas."
+                        )
                         st.rerun()
+
+                if st.session_state.get("dre_msg_sucesso_exclusao_met"):
+                    st.success(st.session_state.get("dre_msg_sucesso_exclusao_met"))
+                    del st.session_state["dre_msg_sucesso_exclusao_met"]
                 
                 # ===== MODO EDIÇÃO =====
                 if st.session_state.get(f"editando_{met_nome}", False):
@@ -2498,6 +2908,11 @@ def _renderizar_metodologias():
                         with col_save:
                             if st.form_submit_button("Salvar Alterações", use_container_width=True, type="primary"):
                                 try:
+                                    novo_nome = (novo_nome or "").strip() or met_nome
+                                    nova_formula = _normalizar_formula_usuario(nova_formula)
+                                    old_aplicavel = set(met_dados.get("aplicavel_a", []))
+                                    new_aplicavel = set(nova_aplicavel or [])
+
                                     # Atualizar metodologia
                                     st.session_state.dre_metodologias[met_nome] = {
                                         "nome": novo_nome,
@@ -2513,7 +2928,57 @@ def _renderizar_metodologias():
                                     # Se o nome mudou, reorganizar dicionário
                                     if novo_nome != met_nome:
                                         st.session_state.dre_metodologias[novo_nome] = st.session_state.dre_metodologias.pop(met_nome)
-                                    
+
+                                    # Sincronizar linhas já afetadas por essa metodologia no modelo acumulativo:
+                                    # - remove apenas essa metodologia onde deixou de ser aplicável
+                                    # - renomeia somente essa metodologia na pilha da linha
+                                    dre_state = st.session_state.get("dre_dados", {})
+                                    for cod_linha, dados_linha in dre_state.items():
+                                        mets_linha = dados_linha.get("metodologias_aplicadas", [])
+                                        nomes_linha = [m.get("nome") for m in mets_linha if isinstance(m, dict)]
+                                        if met_nome not in nomes_linha:
+                                            # fallback legado
+                                            met_legada = dados_linha.get("metodologia")
+                                            if not (isinstance(met_legada, dict) and met_legada.get("nome") == met_nome):
+                                                continue
+
+                                        if cod_linha not in new_aplicavel:
+                                            _remover_metodologia_especifica_da_linha(dre_state, cod_linha, met_nome)
+                                        else:
+                                            if novo_nome != met_nome:
+                                                for m in dados_linha.get("metodologias_aplicadas", []):
+                                                    if isinstance(m, dict) and m.get("nome") == met_nome:
+                                                        m["nome"] = novo_nome
+                                            _recalcular_linha_por_metodologias(dre_state, cod_linha)
+
+                                    st.session_state.dre_dados = dre_state
+                                    _calcular_totalizadores()
+                                    _persistir_linhas_dre()
+
+                                    # Registrar evento de edição no histórico da metodologia
+                                    _filtros_edit = st.session_state.get("dre_filtros", {})
+                                    _partes_esc = [
+                                        f"👤 {_filtros_edit.get('cliente','')}" if _filtros_edit.get('cliente','Todos') != 'Todos' else "",
+                                        f"📁 {_filtros_edit.get('categoria','')}" if _filtros_edit.get('categoria') else "",
+                                        f"📦 {_filtros_edit.get('produto','')}" if _filtros_edit.get('produto') else "",
+                                    ]
+                                    _escopo_edit = " • ".join(p for p in _partes_esc if p) or "Sem filtro"
+                                    _detalhes_edit = []
+                                    if novo_nome != met_nome:
+                                        _detalhes_edit.append(f"Renomeado: {met_nome} → {novo_nome}")
+                                    if set(nova_aplicavel) != old_aplicavel:
+                                        _detalhes_edit.append(f"Linhas: {sorted(old_aplicavel)} → {sorted(new_aplicavel)}")
+                                    _registro_edicao = {
+                                        "tipo": "edicao",
+                                        "data": datetime.now().isoformat(),
+                                        "escopo": _escopo_edit,
+                                        "variáveis": nova_aplicavel,
+                                        "detalhes": "; ".join(_detalhes_edit) if _detalhes_edit else "Parâmetros atualizados",
+                                    }
+                                    _apps = st.session_state.dre_metodologias.get(novo_nome, {}).get("aplicacoes", [])
+                                    _apps.append(_registro_edicao)
+                                    st.session_state.dre_metodologias[novo_nome]["aplicacoes"] = _apps
+
                                     st.session_state[f"editando_{met_nome}"] = False
                                     st.success(" Metodologia atualizada!")
                                     st.rerun()

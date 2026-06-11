@@ -2,7 +2,7 @@
 
 Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário**, **controle de permissões** e **DRE Gerencial profissional**.
 
-**Versão Atual:** v3.9.3 | **Status:** ✅ Production Ready | **Última Atualização:** 10/06/2026
+**Versão Atual:** v3.9.4 | **Status:** ✅ Production Ready | **Última Atualização:** 11/06/2026
 
 ---
 
@@ -43,6 +43,14 @@ QUANDO PRESO EM LOOP (3+ tentativas falhadas):
 ---
 
 ## 📌 O que foi implementado
+
+### ✅ [v3.9.4] - DRE (Exclusão de Metodologia + Formatação Consistente)
+- Exclusão de metodologia aplicada por linha com confirmação via modal (`st.dialog`)
+- Correção do bug de reentrada de estado legado que reintroduzia metodologia removida
+- Novo painel nativo no modo visual: **"Remover metodologia aplicada"** (sem `href`/reload)
+- Remoção da última metodologia restaura automaticamente os `valores_base` da linha
+- Modo edição alinhado ao modo visual em unidade **bi** (bilhões), com 2 casas decimais
+- Conversão segura no editor: exibe em bi e persiste no valor real (x `1e9`)
 
 ### ✅ [v3.9.3] - Metodologias (Precisão de Fórmula + UX de Contexto)
 - Confirmação e validação do cálculo mês a mês para metodologia de soma (`SOMA(TD71;TD72)`) aplicada na linha destino

@@ -4,6 +4,38 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
+## 🔧 [v3.9.4] - 2026-06-11 - DRE (Exclusão de Metodologia + Formatação Consistente)
+
+### ✅ CORRIGIDO - Exclusão de metodologia aplicada por linha
+- **Arquivo:** `frontend/pages/dre.py`
+- Remoção por confirmação (modal `st.dialog`) passou a remover efetivamente a metodologia da linha
+- Corrigido bug de reentrada do estado legado (`metodologia`) que reintroduzia a metodologia removida após recálculo
+- Quando a última metodologia da linha é removida, os valores da linha voltam para `valores_base`
+
+### ✅ UX - Fluxo seguro de remoção sem reload de autenticação
+- **Arquivo:** `frontend/pages/dre.py`
+- Removida abordagem com `href`/querystring para ação crítica dentro da tabela HTML
+- Novo painel nativo Streamlit: **"Remover metodologia aplicada"** no modo visual
+- Ação usa `session_state` (`dre_del_pending`) + `st.dialog`, sem navegação de página
+
+### ✅ UX - Formatação alinhada entre modo visual e modo edição
+- **Arquivo:** `frontend/pages/dre.py`
+- Modo edição passou a exibir colunas mensais em **bilhões (bi)** com 2 casas decimais
+- Conversão bidirecional implementada:
+  - Exibição: `valor / 1e9`
+  - Persistência: `valor_editado * 1e9`
+- Eliminada divergência de unidade entre visualização (`bi`) e edição (`tri`)
+
+### ✅ Atualização de Contexto Técnico (Skill)
+- **Arquivo:** `.github/skills/dre-engine-context/SKILL.md`
+- Documentado fluxo atual de remoção por linha via painel nativo + modal
+- Registrada a limitação de `href` em Streamlit multi-page para ações críticas
+
+### ✅ Validação Técnica
+- `python -m py_compile frontend/pages/dre.py` ✅
+
+---
+
 ## 🔧 [v3.9.3] - 2026-06-10 - Metodologias (Precisão + Contexto)
 
 ### ✅ CORRIGIDO - Cálculo de metodologia por referência correta
