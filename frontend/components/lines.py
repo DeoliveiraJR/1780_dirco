@@ -4,7 +4,7 @@ import pandas as pd
 from bokeh.plotting import figure
 from bokeh.models import (
     ColumnDataSource, Legend, LegendItem, NumeralTickFormatter,
-    DatetimeTickFormatter, FullscreenTool, CustomJS
+    DatetimeTickFormatter, FullscreenTool
 )
 
 from utils_ext.constants import (
@@ -70,7 +70,9 @@ def _grafico_serie_historica(df_upload: pd.DataFrame, cliente: str,
                              ana: list, mer: list, ajs: list,
                              ano_proj: int, stylesheet,
                              src_ajs_ref: ColumnDataSource | None = None,
-                             mes_proj: int = 1):
+                             mes_proj: int = 1,
+                             cd_tip_agpd: str = "Todos",
+                             tip_td: str = "Todos"):
     p = figure(height=380, sizing_mode="stretch_width", x_axis_type="datetime",
                title="🕒 SÉRIE HISTÓRICA • Realizado vs Projeções",
                stylesheets=[stylesheet], toolbar_location="right")
@@ -96,6 +98,12 @@ def _grafico_serie_historica(df_upload: pd.DataFrame, cliente: str,
     produto_norm = _norm_txt(produto)
     if produto_norm and produto_norm != "todos":
         dff = dff[dff["PROD_N"] == produto_norm]
+
+    if "CD_TIP_AGPD" in dff.columns and cd_tip_agpd and cd_tip_agpd != "Todos":
+        dff = dff[dff["CD_TIP_AGPD"].astype(str).apply(_norm_txt) == _norm_txt(cd_tip_agpd)]
+    if "TIP_TD" in dff.columns and tip_td and tip_td != "Todos":
+        dff = dff[dff["TIP_TD"].astype(str).apply(_norm_txt) == _norm_txt(tip_td)]
+
     if dff.empty:
         return p
 
@@ -121,50 +129,59 @@ def _grafico_serie_historica(df_upload: pd.DataFrame, cliente: str,
         renderers.append(("Realizado", [r_rl]))
 
     if ano_proj:
-        idx = pd.date_range(f"{ano_proj}-01-01", periods=12, freq="MS")
-        if ana:
-            r_a = p.line("x", "y", source=ColumnDataSource(dict(x=idx, y=ana)),
-                         color=COR_ANALITICA_L, line_width=3, muted_alpha=0.15)
-            renderers.append(("Proj. Analítica", [r_a]))
-        if mer:
-            r_m = p.line("x", "y", source=ColumnDataSource(dict(x=idx, y=mer)),
-                         color=COR_MERCADO_L, line_width=3,
-                         line_dash="dashed", muted_alpha=0.15)
-            renderers.append(("Proj. Mercado", [r_m]))
-        
-        # Curva Ajustada - com atualização em tempo real via src_ajs_ref
-        if src_ajs_ref is not None:
-            # Cria source local com timestamps para eixo X datetime
-            src_ajs_ts = ColumnDataSource(dict(x=idx, y=ajs or [0]*12))
-            r_aj = p.line("x", "y", source=src_ajs_ts,
-                          color=COR_AJUSTADA, line_width=3, muted_alpha=0.15)
-            p.circle("x", "y", source=src_ajs_ts, color=COR_AJUSTADA, size=5)
-            renderers.append(("Proj. Ajustada", [r_aj]))
-            
-            # Callback JS para sincronizar valores Y do src_ajs_ref
-            # src_ajs_ref tem 12 valores a partir de mes_proj (ex: Abr=4 onward)
-            # src_ajs_ts tem 12 valores de Jan a Dez (indice 0=Jan)
-            # Mapeia: src_ref[i] -> src_ts[mes_proj - 1 + i], apenas se dentro do ano (< 12)
-            cb_sync = CustomJS(args=dict(src_ts=src_ajs_ts, src_ref=src_ajs_ref, mes_proj=mes_proj),
-                               code="""
-                const y_ref = src_ref.data['y'];  // 12 valores: mes_proj em diante
-                const y_ts = src_ts.data['y'].slice();  // cópia atual Jan-Dez
-                for (let i = 0; i < 12; i++) {
-                    const posInYear = (mes_proj - 1) + i;  // posicao no array Jan-Dez (0=Jan)
-                    if (posInYear < 12) {  // apenas meses dentro do ano_proj
-                        y_ts[posInYear] = y_ref[i];
-                    }
-                }
-                src_ts.data = Object.assign({}, src_ts.data, {y: y_ts});
-                src_ts.change.emit();
-            """)
-            src_ajs_ref.js_on_change("data", cb_sync)
-        elif ajs:
-            src_ajs_ts = ColumnDataSource(dict(x=idx, y=ajs))
-            r_aj = p.line("x", "y", source=src_ajs_ts,
-                          color=COR_AJUSTADA, line_width=3, muted_alpha=0.15)
-            p.circle("x", "y", source=src_ajs_ts, color=COR_AJUSTADA, size=5)
-            renderers.append(("Proj. Ajustada", [r_aj]))
+        ano_base = int(ano_proj)
+        idx = pd.date_range(f"{ano_base}-01-01", periods=24, freq="MS")
+
+        def _safe24(vals):
+            base = list(vals) if isinstance(vals, list) else []
+            return (base + [0.0] * 24)[:24]
+
+        def _tem_realizado(v):
+            try:
+                vv = float(v)
+                return np.isfinite(vv) and vv != 0.0
+            except Exception:
+                return False
+
+        ana24 = _safe24(ana)
+        mer24 = _safe24(mer)
+        ajs24 = _safe24(ajs)
+
+        rlzd_years = (
+            dff.groupby(["ANO_NUM", "MES_NUM"], as_index=False)[col_realizado]
+               .sum()
+            if col_realizado
+            else pd.DataFrame()
+        )
+
+        for i in range(24):
+            ano_i = ano_base if i < 12 else ano_base + 1
+            mes_i = (i % 12) + 1
+            if not rlzd_years.empty:
+                fatia = rlzd_years[(rlzd_years["ANO_NUM"] == ano_i) & (rlzd_years["MES_NUM"] == mes_i)]
+                if not fatia.empty:
+                    rv = float(fatia[col_realizado].iloc[0])
+                    if _tem_realizado(rv):
+                        ana24[i] = rv
+                        mer24[i] = rv
+                        ajs24[i] = rv
+
+        src_ana = ColumnDataSource(dict(x=idx, y=ana24))
+        src_mer = ColumnDataSource(dict(x=idx, y=mer24))
+        src_ajs = ColumnDataSource(dict(x=idx, y=ajs24))
+
+        r_a = p.line("x", "y", source=src_ana,
+                     color=COR_ANALITICA_L, line_width=3, muted_alpha=0.15)
+        r_m = p.line("x", "y", source=src_mer,
+                     color=COR_MERCADO_L, line_width=3,
+                     line_dash="dashed", muted_alpha=0.15)
+        r_aj = p.line("x", "y", source=src_ajs,
+                      color=COR_AJUSTADA, line_width=3, muted_alpha=0.15)
+        p.circle("x", "y", source=src_ajs, color=COR_AJUSTADA, size=5)
+
+        renderers.append(("Proj. Analítica", [r_a]))
+        renderers.append(("Proj. Mercado", [r_m]))
+        renderers.append(("Proj. Ajustada", [r_aj]))
 
     legend = Legend(items=[LegendItem(label=lab, renderers=rens) for lab, rens in renderers],
                     click_policy="mute", orientation="horizontal", label_text_font_size="12pt")

@@ -191,7 +191,9 @@ def get_dados_upload():
     """
     # Se tem dados em session_state, retorna
     if st.session_state.dados_upload is not None and not st.session_state.dados_upload.empty:
-        return st.session_state.dados_upload
+        df_cache = st.session_state.dados_upload
+        if "CD_CPNT_RSTD" in df_cache.columns or "TIP_TD" in df_cache.columns:
+            return df_cache
     
     # Senão, tenta carregar da base compartilhada
     df_compartilhada = carregar_base_dados_compartilhada()
@@ -212,13 +214,29 @@ def get_dados_upload_original():
 # ============================================================================
 # PERSISTÊNCIA DE CURVAS AJUSTADAS
 # ============================================================================
-def _gerar_combo_key(cliente: str, categoria: str, produto: str) -> str:
-    """Gera chave única para combinação cliente/categoria/produto"""
-    return f"{cliente or 'Todos'}::{categoria}::{produto}"
+def _gerar_combo_key(
+    cliente: str,
+    categoria: str,
+    produto: str,
+    cd_tip_agpd: str = "Todos",
+    tip_td: str = "Todos",
+) -> str:
+    """Gera chave única para combinação de 5 dimensões."""
+    return (
+        f"{cliente or 'Todos'}::{categoria}::{produto}::"
+        f"{cd_tip_agpd or 'Todos'}::{tip_td or 'Todos'}"
+    )
 
 
-def salvar_curva_ajustada(cliente: str, categoria: str, produto: str, 
-                          curva: List[float], nome_simulacao: str = "") -> bool:
+def salvar_curva_ajustada(
+    cliente: str,
+    categoria: str,
+    produto: str,
+    curva: List[float],
+    nome_simulacao: str = "",
+    cd_tip_agpd: str = "Todos",
+    tip_td: str = "Todos",
+) -> bool:
     """
     Salva a curva ajustada para uma combinação específica.
     Persiste no session_state e atualiza o DataFrame principal.
@@ -233,7 +251,7 @@ def salvar_curva_ajustada(cliente: str, categoria: str, produto: str,
     Returns:
         True se salvo com sucesso
     """
-    combo_key = _gerar_combo_key(cliente, categoria, produto)
+    combo_key = _gerar_combo_key(cliente, categoria, produto, cd_tip_agpd, tip_td)
     
     # Garante que curva tem 12 elementos
     curva_normalizada = (list(curva) + [0.0] * 12)[:12]
@@ -245,7 +263,9 @@ def salvar_curva_ajustada(cliente: str, categoria: str, produto: str,
         "nome": nome_simulacao,
         "cliente": cliente,
         "categoria": categoria,
-        "produto": produto
+        "produto": produto,
+        "cd_tip_agpd": cd_tip_agpd,
+        "tip_td": tip_td,
     }
     
     # Adiciona ao histórico
@@ -255,6 +275,8 @@ def salvar_curva_ajustada(cliente: str, categoria: str, produto: str,
         "cliente": cliente,
         "categoria": categoria,
         "produto": produto,
+        "cd_tip_agpd": cd_tip_agpd,
+        "tip_td": tip_td,
         "curva": curva_normalizada,
         "nome": nome_simulacao,
         "data_criacao": datetime.now().isoformat(),
@@ -263,7 +285,14 @@ def salvar_curva_ajustada(cliente: str, categoria: str, produto: str,
     st.session_state.historico_simulacoes.append(entrada_historico)
     
     # Aplica a curva ajustada no DataFrame principal
-    _aplicar_curva_no_dataframe(cliente, categoria, produto, curva_normalizada)
+    _aplicar_curva_no_dataframe(
+        cliente,
+        categoria,
+        produto,
+        curva_normalizada,
+        cd_tip_agpd=cd_tip_agpd,
+        tip_td=tip_td,
+    )
     
     # Atualiza métricas
     atualizar_metricas_dashboard()
@@ -272,14 +301,20 @@ def salvar_curva_ajustada(cliente: str, categoria: str, produto: str,
     return True
 
 
-def carregar_curva_ajustada(cliente: str, categoria: str, produto: str) -> Optional[List[float]]:
+def carregar_curva_ajustada(
+    cliente: str,
+    categoria: str,
+    produto: str,
+    cd_tip_agpd: str = "Todos",
+    tip_td: str = "Todos",
+) -> Optional[List[float]]:
     """
     Carrega a curva ajustada salva para uma combinação específica.
     
     Returns:
         Lista com 12 valores ou None se não existir
     """
-    combo_key = _gerar_combo_key(cliente, categoria, produto)
+    combo_key = _gerar_combo_key(cliente, categoria, produto, cd_tip_agpd, tip_td)
     dados = st.session_state.curvas_ajustadas_persistentes.get(combo_key)
     
     if dados and "curva" in dados:
@@ -289,9 +324,15 @@ def carregar_curva_ajustada(cliente: str, categoria: str, produto: str) -> Optio
     return None
 
 
-def existe_curva_salva(cliente: str, categoria: str, produto: str) -> bool:
+def existe_curva_salva(
+    cliente: str,
+    categoria: str,
+    produto: str,
+    cd_tip_agpd: str = "Todos",
+    tip_td: str = "Todos",
+) -> bool:
     """Verifica se existe curva salva para a combinação"""
-    combo_key = _gerar_combo_key(cliente, categoria, produto)
+    combo_key = _gerar_combo_key(cliente, categoria, produto, cd_tip_agpd, tip_td)
     return combo_key in st.session_state.curvas_ajustadas_persistentes
 
 
@@ -305,8 +346,14 @@ def get_historico_simulacoes() -> List[dict]:
     return st.session_state.historico_simulacoes.copy()
 
 
-def _aplicar_curva_no_dataframe(cliente: str, categoria: str, produto: str, 
-                                 curva: List[float]) -> None:
+def _aplicar_curva_no_dataframe(
+    cliente: str,
+    categoria: str,
+    produto: str,
+    curva: List[float],
+    cd_tip_agpd: str = "Todos",
+    tip_td: str = "Todos",
+) -> None:
     """
     Aplica a curva ajustada diretamente no DataFrame de dados.
     Atualiza a coluna PROJETADO_AJUSTADO para o produto/categoria específico.
@@ -348,6 +395,11 @@ def _aplicar_curva_no_dataframe(cliente: str, categoria: str, produto: str,
     
     if cliente and cliente != "Todos" and col_cli:
         mask = mask & (df[col_cli].astype(str).apply(_norm) == _norm(cliente))
+
+    if "CD_TIP_AGPD" in df.columns and cd_tip_agpd and cd_tip_agpd != "Todos":
+        mask = mask & (df["CD_TIP_AGPD"].astype(str).apply(_norm) == _norm(cd_tip_agpd))
+    if "TIP_TD" in df.columns and tip_td and tip_td != "Todos":
+        mask = mask & (df["TIP_TD"].astype(str).apply(_norm) == _norm(tip_td))
     
     # Atualizar valores por mês
     for i, valor in enumerate(curva):
@@ -425,10 +477,20 @@ def adicionar_simulacao(nome, categoria, produto, taxa_crescimento,
     """
     usuario = st.session_state.get("usuario", "anonimo")
     cliente = cenarios.get("Cliente", "Todos")
+    cd_tip_agpd = cenarios.get("CD_TIP_AGPD", "Todos")
+    tip_td = cenarios.get("TIP_TD", "Todos")
     curva_ajustada = dados_grafico.get("Ajustada", [0.0] * 12)
     
     # Primeiro persiste a curva atual
-    salvar_curva_ajustada(cliente, categoria, produto, curva_ajustada, nome)
+    salvar_curva_ajustada(
+        cliente,
+        categoria,
+        produto,
+        curva_ajustada,
+        nome,
+        cd_tip_agpd=cd_tip_agpd,
+        tip_td=tip_td,
+    )
     
     # SNAPSHOT COMPLETO: Copia todas as curvas persistentes neste momento
     # Isso permite restaurar o estado COMPLETO de todas as curvas
@@ -446,6 +508,8 @@ def adicionar_simulacao(nome, categoria, produto, taxa_crescimento,
         "categoria": categoria,
         "produto": produto,
         "cliente": cliente,
+        "cd_tip_agpd": cd_tip_agpd,
+        "tip_td": tip_td,
         "taxa_crescimento": taxa_crescimento,
         "volatilidade": volatilidade,
         "cenarios": cenarios,

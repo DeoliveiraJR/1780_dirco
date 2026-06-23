@@ -32,6 +32,47 @@ METADATA_DIR.mkdir(parents=True, exist_ok=True)
 INDICES_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _carregar_dataframe_excel_combinado(caminho_arquivo: Path) -> Optional[pd.DataFrame]:
+    """Carrega DADOS e TD_DRE do workbook quando existirem, preservando o recorte completo."""
+    if not caminho_arquivo.exists():
+        return None
+
+    try:
+        abas = pd.read_excel(caminho_arquivo, sheet_name=None)
+    except Exception:
+        return pd.read_excel(caminho_arquivo)
+
+    if not isinstance(abas, dict) or not abas:
+        return None
+
+    if len(abas) == 1:
+        return next(iter(abas.values()))
+
+    nomes_por_aba = {str(nome).strip().upper(): df for nome, df in abas.items() if isinstance(df, pd.DataFrame)}
+    blocos = []
+
+    if "DADOS" in nomes_por_aba:
+        blocos.append(nomes_por_aba["DADOS"])
+    if "TD_DRE" in nomes_por_aba:
+        blocos.append(nomes_por_aba["TD_DRE"])
+
+    if not blocos:
+        blocos = list(abas.values())
+
+    if len(blocos) == 1:
+        return blocos[0]
+
+    return pd.concat(blocos, ignore_index=True, sort=False)
+
+
+def _carregar_base_original_completa() -> Optional[pd.DataFrame]:
+    """Carrega o workbook original do projeto quando a base persistida estiver simplificada."""
+    caminho_original = BASE_DIR.parent.parent / "bd_dados_v9.xlsx"
+    if not caminho_original.exists():
+        return None
+    return _carregar_dataframe_excel_combinado(caminho_original)
+
+
 # ============================================================================
 # GERENCIAMENTO DE USUÁRIOS
 # ============================================================================
@@ -309,7 +350,11 @@ def carregar_base_dados_compartilhada() -> Optional[pd.DataFrame]:
         caminho_arquivo = UPLOADS_DIR / "base_dados_compartilhada.xlsx"
         
         if caminho_arquivo.exists():
-            df = pd.read_excel(caminho_arquivo)
+            df = _carregar_dataframe_excel_combinado(caminho_arquivo)
+            if df is not None and "CD_CPNT_RSTD" not in df.columns:
+                df_original = _carregar_base_original_completa()
+                if df_original is not None and "CD_CPNT_RSTD" in df_original.columns:
+                    df = df_original
             print(f"[DB] Base de dados compartilhada carregada: {len(df)} linhas")
             return df
         
@@ -855,7 +900,15 @@ def carregar_base_usuario(usuario_id: str) -> Optional[pd.DataFrame]:
     if usuario_tem_base_editada(usuario_id):
         arquivo_usuario = UPLOADS_DIR / obter_nome_arquivo_base_usuario(usuario_id)
         try:
-            df = pd.read_excel(arquivo_usuario)
+            df = _carregar_dataframe_excel_combinado(arquivo_usuario)
+            if df is not None and "CD_CPNT_RSTD" not in df.columns:
+                df_original = _carregar_base_original_completa()
+                if df_original is not None and "CD_CPNT_RSTD" in df_original.columns:
+                    df = df_original
+                else:
+                    df_compartilhada = carregar_base_dados_compartilhada()
+                    if df_compartilhada is not None and "CD_CPNT_RSTD" in df_compartilhada.columns:
+                        df = df_compartilhada
             print(f"[DB] Base personalizada do usuário {usuario_id} carregada: {len(df)} linhas")
             return df
         except Exception as e:

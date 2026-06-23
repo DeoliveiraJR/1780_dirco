@@ -4,6 +4,15 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
+
+st.set_page_config(
+    page_title="UAN Dashboard",
+    page_icon="🏦",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items=None
+)
+
 import pandas as pd
 import streamlit.components.v1 as components
 from styles import CORES, CSS_CUSTOM, aplicar_tema
@@ -19,14 +28,6 @@ from services.aggregations import _carregar_curvas_base, _carregar_curvas_por_an
 
 # Inicializar data state logo no início
 init_data_state()
-
-st.set_page_config(
-    page_title="UAN Dashboard",
-    page_icon="🏦",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items=None
-)
 
 aplicar_tema()
 
@@ -118,6 +119,8 @@ else:
     # Garantir que as chaves necessárias existem
     if "filtros" not in st.session_state:
         st.session_state["filtros"] = {
+            "cd_tip_agpd": "Todos",
+            "tip_td": "Todos",
             "cliente": "Todos",
             "categoria": "",
             "produto": "",
@@ -601,8 +604,15 @@ else:
                         print(f"[ROTACAO-DEBUG] curva_rot[11] (último de 2026)={curva_rot[11]:.2f}")
                     
                     if curva_rot:
-                        produto_combo = "" if st.session_state.get("filtros", {}).get("produto", "") == "TODOS" else st.session_state.get("filtros", {}).get("produto", "")
-                        combo_rot = f"{st.session_state.get('filtros', {}).get('cliente', 'Todos')}::{st.session_state.get('filtros', {}).get('categoria', '')}::{produto_combo}"
+                        filtros_rot = st.session_state.get("filtros", {})
+                        produto_combo = "" if filtros_rot.get("produto", "") == "TODOS" else filtros_rot.get("produto", "")
+                        combo_rot = (
+                            f"{filtros_rot.get('cliente', 'Todos')}::"
+                            f"{filtros_rot.get('categoria', '')}::"
+                            f"{produto_combo}::"
+                            f"{filtros_rot.get('cd_tip_agpd', 'Todos')}::"
+                            f"{filtros_rot.get('tip_td', 'Todos')}"
+                        )
 
                         print(f"[ROTACAO-DEBUG] Atribuindo curva_rot ao session_state['ajustada']")
                         st.session_state["ajustada"] = curva_rot  # Agora com 24 elementos
@@ -635,12 +645,16 @@ else:
         
         # ============== FILTROS DA SIMULAÇÃO ==============
         with st.expander("🎯 Filtros da Simulação", expanded=True):
-            # Função auxiliar para recarregar opções
-            def _recarregar_opcoes_sidebar(df, cliente_escolhido):
-                """Retorna (categorias, map_cat_prod) com base no cliente."""
-                dff = df.copy() if df is not None else pd.DataFrame()
-                
-                # Normalizar CLI_N
+            def _update_filtro(key: str, value):
+                filtros = st.session_state.get("filtros", {})
+                filtros[key] = value
+                st.session_state["filtros"] = filtros
+
+            def _filtrar_df_sidebar(df, ignorar: str = ""):
+                dff = df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame()
+                if dff.empty:
+                    return dff
+
                 if "CLI_N" not in dff.columns:
                     if "TIPO_CLIENTE" in dff.columns:
                         dff["CLI_N"] = dff["TIPO_CLIENTE"].astype(str).apply(_norm)
@@ -648,49 +662,87 @@ else:
                         dff["CLI_N"] = dff["TP_CLIENTE"].astype(str).apply(_norm)
                     else:
                         dff["CLI_N"] = ""
-                
-                if cliente_escolhido and cliente_escolhido != "Todos":
-                    dff = dff[dff["CLI_N"] == _norm(cliente_escolhido)]
-                
-                categorias = sorted(dff["CATEGORIA"].dropna().astype(str).unique()) if "CATEGORIA" in dff.columns else []
-                map_cat_prod = {}
-                if "CATEGORIA" in dff.columns and "PRODUTO" in dff.columns:
-                    map_cat_prod = (
-                        dff.groupby("CATEGORIA")["PRODUTO"]
-                           .apply(lambda s: sorted(s.dropna().astype(str).unique().tolist()))
-                           .to_dict()
-                    )
-                return categorias, map_cat_prod
-            
-            # Callbacks para sincronização
-            def _on_cliente_sidebar_change():
-                filtros = st.session_state.get("filtros", {})
-                filtros["cliente"] = st.session_state.get("sb_sim_cliente", "Todos")
-                filtros["categoria"] = ""
-                filtros["produto"] = ""
-                st.session_state["filtros"] = filtros
-            
-            def _on_categoria_sidebar_change():
-                filtros = st.session_state.get("filtros", {})
-                filtros["categoria"] = st.session_state.get("sb_sim_categoria", "")
-                filtros["produto"] = ""
-                st.session_state["filtros"] = filtros
-            
-            def _on_produto_sidebar_change():
-                filtros = st.session_state.get("filtros", {})
-                filtros["produto"] = st.session_state.get("sb_sim_produto", "")
-                st.session_state["filtros"] = filtros
-            
-            # Obter dados
+
+                # Lê dos widget keys (valores do render ATUAL) com fallback no dicionário filtros.
+                # Isso garante que ao mudar um filtro, as opções dos demais filtros encadeados
+                # já se atualizam na mesma render, sem atraso de um ciclo.
+                _fb = st.session_state.get("filtros", {})
+                cd_tip_agpd = st.session_state.get("sb_sim_tipo_volume",
+                                                    _fb.get("cd_tip_agpd", "Todos"))
+                tip_td = st.session_state.get("sb_sim_tip_td",
+                                              _fb.get("tip_td", "Todos"))
+                cliente = st.session_state.get("sb_sim_cliente",
+                                               _fb.get("cliente", "Todos"))
+                categoria = st.session_state.get("sb_sim_categoria",
+                                                 _fb.get("categoria", ""))
+                produto = st.session_state.get("sb_sim_produto",
+                                               _fb.get("produto", "TODOS"))
+
+                if ignorar != "cd_tip_agpd" and "CD_TIP_AGPD" in dff.columns and cd_tip_agpd and cd_tip_agpd != "Todos":
+                    dff = dff[dff["CD_TIP_AGPD"].astype(str).apply(_norm) == _norm(cd_tip_agpd)]
+                if ignorar != "tip_td" and "TIP_TD" in dff.columns and tip_td and tip_td != "Todos":
+                    dff = dff[dff["TIP_TD"].astype(str).apply(_norm) == _norm(tip_td)]
+                if ignorar != "cliente" and cliente and cliente != "Todos":
+                    dff = dff[dff["CLI_N"] == _norm(cliente)]
+                if ignorar != "categoria" and categoria:
+                    dff = dff[dff["CATEGORIA"].astype(str).apply(_norm) == _norm(categoria)]
+                if ignorar != "produto" and produto and produto != "TODOS":
+                    dff = dff[dff["PRODUTO"].astype(str).apply(_norm) == _norm(produto)]
+                return dff
+
             df_upload_sb = get_dados_upload()
-            
-            # Opções de clientes
-            clientes_opcoes_sb = ["Todos"]
+            filtros_sb = st.session_state.get("filtros", {})
+
+            vol_opts = ["Todos"]
+            td_opts = ["Todos"]
+            cli_opts = ["Todos"]
+            cat_opts = []
+            prod_opts = ["TODOS"]
+
             if isinstance(df_upload_sb, pd.DataFrame) and not df_upload_sb.empty:
-                if "TIPO_CLIENTE" in df_upload_sb.columns:
-                    clientes_opcoes_sb += sorted([c for c in df_upload_sb["TIPO_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
-                elif "TP_CLIENTE" in df_upload_sb.columns:
-                    clientes_opcoes_sb += sorted([c for c in df_upload_sb["TP_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
+                df_vol = _filtrar_df_sidebar(df_upload_sb, ignorar="cd_tip_agpd")
+                if "CD_TIP_AGPD" in df_vol.columns:
+                    vol_vals = [v for v in df_vol["CD_TIP_AGPD"].dropna().astype(str).unique() if v.strip()]
+                    vol_opts += sorted(vol_vals)
+
+                df_td = _filtrar_df_sidebar(df_upload_sb, ignorar="tip_td")
+                if "TIP_TD" in df_td.columns:
+                    td_vals = [v for v in df_td["TIP_TD"].dropna().astype(str).unique() if v.strip()]
+                    td_opts += sorted(td_vals)
+
+                df_cli = _filtrar_df_sidebar(df_upload_sb, ignorar="cliente")
+                if "TIPO_CLIENTE" in df_cli.columns:
+                    cli_vals = [v for v in df_cli["TIPO_CLIENTE"].dropna().astype(str).unique() if v.strip()]
+                    cli_opts += sorted(cli_vals)
+                elif "TP_CLIENTE" in df_cli.columns:
+                    cli_vals = [v for v in df_cli["TP_CLIENTE"].dropna().astype(str).unique() if v.strip()]
+                    cli_opts += sorted(cli_vals)
+
+                df_cat = _filtrar_df_sidebar(df_upload_sb, ignorar="categoria")
+                if "CATEGORIA" in df_cat.columns:
+                    cat_opts = sorted([v for v in df_cat["CATEGORIA"].dropna().astype(str).unique() if v.strip()])
+
+                df_prod = _filtrar_df_sidebar(df_upload_sb, ignorar="produto")
+                if "PRODUTO" in df_prod.columns:
+                    prod_vals = sorted([v for v in df_prod["PRODUTO"].dropna().astype(str).unique() if v.strip()])
+                    prod_opts += prod_vals
+
+            if not cat_opts:
+                cat_opts = [""]
+            if not prod_opts:
+                prod_opts = ["TODOS"]
+
+            if filtros_sb.get("cd_tip_agpd", "Todos") not in vol_opts:
+                filtros_sb["cd_tip_agpd"] = "Todos"
+            if filtros_sb.get("tip_td", "Todos") not in td_opts:
+                filtros_sb["tip_td"] = "Todos"
+            if filtros_sb.get("cliente", "Todos") not in cli_opts:
+                filtros_sb["cliente"] = "Todos"
+            if filtros_sb.get("categoria", "") not in cat_opts:
+                filtros_sb["categoria"] = ""
+            if filtros_sb.get("produto", "TODOS") not in prod_opts:
+                filtros_sb["produto"] = "TODOS"
+            st.session_state["filtros"] = filtros_sb
             
             # --- Nome da Simulação ---
             st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📝 NOME DA SIMULAÇÃO</p>", unsafe_allow_html=True)
@@ -708,63 +760,79 @@ else:
                 st.session_state["filtros"] = filtros
             
             st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
+
+            # --- Tipo de Volume ---
+            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📊 TIPO DE VOLUME</p>", unsafe_allow_html=True)
+            vol_mem = st.session_state.get("filtros", {}).get("cd_tip_agpd", "Todos")
+            idx_vol = vol_opts.index(vol_mem) if vol_mem in vol_opts else 0
+            sim_tipo_volume_sb = st.selectbox(
+                "Tipo de volume",
+                vol_opts,
+                index=idx_vol,
+                key="sb_sim_tipo_volume",
+                label_visibility="collapsed",
+            )
+            _update_filtro("cd_tip_agpd", sim_tipo_volume_sb)
+
+            st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
+
+            # --- Tipo TD ---
+            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>🏷️ TIPO TD</p>", unsafe_allow_html=True)
+            td_mem = st.session_state.get("filtros", {}).get("tip_td", "Todos")
+            idx_td = td_opts.index(td_mem) if td_mem in td_opts else 0
+            sim_tip_td_sb = st.selectbox(
+                "Tipo TD",
+                td_opts,
+                index=idx_td,
+                key="sb_sim_tip_td",
+                label_visibility="collapsed",
+            )
+            _update_filtro("tip_td", sim_tip_td_sb)
+
+            st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
             
             # --- Cliente ---
             st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>👤 CLIENTE</p>", unsafe_allow_html=True)
             cliente_mem_sb = st.session_state.get("filtros", {}).get("cliente", "Todos")
-            idx_cliente_sb = clientes_opcoes_sb.index(cliente_mem_sb) if cliente_mem_sb in clientes_opcoes_sb else 0
+            idx_cliente_sb = cli_opts.index(cliente_mem_sb) if cliente_mem_sb in cli_opts else 0
             sim_cliente_sb = st.selectbox(
                 "Cliente",
-                clientes_opcoes_sb,
+                cli_opts,
                 index=idx_cliente_sb,
                 key="sb_sim_cliente",
-                on_change=_on_cliente_sidebar_change,
                 label_visibility="collapsed"
             )
-            filtros = st.session_state.get("filtros", {})
-            filtros["cliente"] = sim_cliente_sb
-            st.session_state["filtros"] = filtros
+            _update_filtro("cliente", sim_cliente_sb)
             
             st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
-            
-            # Recarrega categorias/produtos
-            cats_sb, map_cat_prod_sb = _recarregar_opcoes_sidebar(df_upload_sb, sim_cliente_sb)
             
             # --- Categoria ---
             st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📁 CATEGORIA</p>", unsafe_allow_html=True)
             categoria_mem_sb = st.session_state.get("filtros", {}).get("categoria", "")
-            idx_cat_sb = cats_sb.index(categoria_mem_sb) if categoria_mem_sb in cats_sb else (0 if cats_sb else None)
+            idx_cat_sb = cat_opts.index(categoria_mem_sb) if categoria_mem_sb in cat_opts else (0 if cat_opts else None)
             sim_categoria_sb = st.selectbox(
                 "Categoria",
-                cats_sb,
+                cat_opts,
                 index=idx_cat_sb,
                 key="sb_sim_categoria",
-                on_change=_on_categoria_sidebar_change,
                 label_visibility="collapsed"
             )
-            filtros = st.session_state.get("filtros", {})
-            filtros["categoria"] = sim_categoria_sb
-            st.session_state["filtros"] = filtros
+            _update_filtro("categoria", sim_categoria_sb)
             
             st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
             
             # --- Produto (com opção TODOS) ---
             st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📦 PRODUTO</p>", unsafe_allow_html=True)
-            prds_sb = map_cat_prod_sb.get(sim_categoria_sb, [])
-            prds_sb_com_todos = ["TODOS"] + prds_sb if prds_sb else ["TODOS"]
             produto_mem_sb = st.session_state.get("filtros", {}).get("produto", "TODOS")
-            idx_prd_sb = prds_sb_com_todos.index(produto_mem_sb) if produto_mem_sb in prds_sb_com_todos else 0
+            idx_prd_sb = prod_opts.index(produto_mem_sb) if produto_mem_sb in prod_opts else 0
             sim_produto_sb = st.selectbox(
                 "Produto",
-                prds_sb_com_todos,
+                prod_opts,
                 index=idx_prd_sb,
                 key="sb_sim_produto",
-                on_change=_on_produto_sidebar_change,
                 label_visibility="collapsed"
             )
-            filtros = st.session_state.get("filtros", {})
-            filtros["produto"] = sim_produto_sb
-            st.session_state["filtros"] = filtros
+            _update_filtro("produto", sim_produto_sb)
             
             st.markdown('<div style="height: 12px;"></div>', unsafe_allow_html=True)
             

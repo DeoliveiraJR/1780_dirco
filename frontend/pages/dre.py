@@ -20,13 +20,13 @@ from urllib.parse import quote, unquote
 import operator as op
 from datetime import datetime
 from copy import deepcopy
-from typing import Union, Dict
+from typing import Union, Dict, List
 
 # Importar utilitários
 from utils_ext.css import make_stylesheet
 from utils_ext.formatters import fmt_br
 from utils_ext.series import (
-    _norm_txt, _mes_to_num, _variacao_mensal
+    _norm_txt, _mes_to_num, _variacao_mensal, _ensure_cli_n
 )
 from utils_ext.constants import (
     MESES_FULL, MESES_NUM, MESES_ABR, MESES_ABR_LIST, COR_ANALITICA, COR_MERCADO, 
@@ -40,13 +40,25 @@ from utils_ext.calc_functions import (
 from utils_ext.icons import get_icon, render_icon_header, render_section_divider, render_info_box, render_page_header
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data_manager import get_dados_upload, carregar_curva_ajustada, init_data_state
-from services.aggregations import _carregar_curvas_por_ano
+from data_manager import (
+    get_dados_upload,
+    carregar_base_dados_compartilhada,
+    carregar_curva_ajustada,
+    init_data_state,
+)
 
 try:
     from st_keyup import st_keyup
 except Exception:
     st_keyup = None
+
+
+_DIALOG_DECORATOR = getattr(st, "dialog", None) or getattr(st, "experimental_dialog", None)
+if _DIALOG_DECORATOR is None:
+    def _DIALOG_DECORATOR(*_args, **_kwargs):
+        def _decorator(func):
+            return func
+        return _decorator
 
 
 DEBUG_DRE_LOGS = False
@@ -562,8 +574,6 @@ def _init_dre_state():
                 "valores": linha.valores.copy(),
                 "eh_negrito": linha.eh_negrito,
             }
-        # Carregar TD21 da simulação se disponível
-        _carregar_td21_volumes()
     
     if "dre_metodologias" not in st.session_state:
         st.session_state.dre_metodologias = {}
@@ -677,82 +687,235 @@ def _avaliar_expressao_segura(expr: str, variaveis: Dict[str, float]) -> float:
     return float(_eval(arvore))
 
 
+def _normalizar_valor_monetario_series(serie: pd.Series) -> pd.Series:
+    """Converte série monetária para float, aceitando formatos BR e placeholders."""
+    base = pd.to_numeric(serie, errors="coerce")
+    if base.notna().any():
+        return base.fillna(0.0)
+
+    txt = (
+        serie.astype(str)
+        .str.strip()
+        .str.replace("-", "0", regex=False)
+        .str.replace(r"[^0-9,.-]", "", regex=True)
+        .str.replace(".", "", regex=False)
+        .str.replace(",", ".", regex=False)
+    )
+    return pd.to_numeric(txt, errors="coerce").fillna(0.0)
+
+
+def _filtrar_base_dre(
+    cliente: str = "Todos",
+    categoria: str = "",
+    produto: str = "",
+    ano: int = 2026,
+) -> pd.DataFrame:
+    """Aplica recorte de filtros da DRE na base carregada via upload."""
+    # A DRE precisa da base completa (DADOS + TD_DRE). O cache global pode estar apenas com DADOS.
+    df_upload = carregar_base_dados_compartilhada()
+    if df_upload is None or df_upload.empty:
+        df_upload = get_dados_upload()
+    if df_upload is None or df_upload.empty:
+        return pd.DataFrame()
+
+    dff = _ensure_cli_n(df_upload)
+    if "MES_NUM" not in dff.columns:
+        dff["MES_NUM"] = dff["MES"].apply(_mes_to_num) if "MES" in dff.columns else np.nan
+    if "ANO_NUM" not in dff.columns:
+        dff["ANO_NUM"] = pd.to_numeric(dff.get("ANO", 0), errors="coerce").fillna(0).astype(int)
+
+    if cliente and cliente != "Todos":
+        alvo = _norm_txt(cliente).replace("_", " ")
+        mask_cli = dff["CLI_N"].astype(str).apply(_norm_txt) == alvo
+        if not mask_cli.any():
+            tokens = [t for t in alvo.replace("cliente", "").split() if t]
+            if tokens:
+                mask_cli = dff["CLI_N"].astype(str).apply(
+                    lambda v: all(tok in _norm_txt(v) for tok in tokens)
+                )
+        dff = dff[mask_cli]
+
+    if categoria:
+        alvo_cat = _norm_txt(categoria)
+        dff = dff[dff["CATEGORIA"].astype(str).apply(_norm_txt) == alvo_cat]
+
+    if produto:
+        dff_prod = dff[dff["PRODUTO"].astype(str).apply(lambda v: _produto_eh_equivalente(v, produto))]
+
+        if dff_prod.empty and ":" in str(produto) and "COD_PRODUTO" in dff.columns:
+            cod = _normalizar_codigo_produto(produto)
+            dff_prod = dff[dff["COD_PRODUTO"].astype(str).apply(_normalizar_codigo_produto) == cod]
+
+        if dff_prod.empty and ":" in str(produto):
+            desc = _extrair_descricao_produto(produto)
+            dff_prod = dff[dff["PRODUTO"].astype(str).apply(lambda v: _extrair_descricao_produto(v) == desc)]
+
+        dff = dff_prod
+
+    dff = dff[
+        (dff["ANO_NUM"] == int(ano))
+        & (pd.to_numeric(dff["MES_NUM"], errors="coerce").between(1, 12))
+    ]
+    return dff
+
+
+def _normalizar_codigo_produto(valor: str) -> str:
+    texto = str(valor or "")
+    if ":" in texto:
+        texto = texto.split(":", 1)[0]
+    return re.sub(r"\D", "", texto)
+
+
+def _extrair_descricao_produto(valor: str) -> str:
+    texto = str(valor or "")
+    if ":" in texto:
+        texto = texto.split(":", 1)[1]
+    return _norm_txt(texto)
+
+
+def _produto_eh_equivalente(valor_base: str, valor_filtro: str) -> bool:
+    if not valor_base or not valor_filtro:
+        return False
+
+    base_norm = _norm_txt(valor_base)
+    filtro_norm = _norm_txt(valor_filtro)
+    if base_norm == filtro_norm:
+        return True
+
+    base_cod = _normalizar_codigo_produto(valor_base)
+    filtro_cod = _normalizar_codigo_produto(valor_filtro)
+    if base_cod and filtro_cod and (
+        base_cod == filtro_cod
+        or base_cod.startswith(filtro_cod)
+        or filtro_cod.startswith(base_cod)
+    ):
+        return True
+
+    return _extrair_descricao_produto(valor_base) == _extrair_descricao_produto(valor_filtro)
+
+
+def _selecionar_opcao_equivalente(opcoes: list, valor_atual: str) -> int:
+    if valor_atual in opcoes:
+        return opcoes.index(valor_atual)
+
+    for idx, opcao in enumerate(opcoes):
+        if _produto_eh_equivalente(opcao, valor_atual):
+            return idx
+
+    return 0
+
+
+def _serie_realizada_por_codigo(dff: pd.DataFrame, codigo: str) -> list:
+    """Retorna série [12] de realizado para um código TD no recorte filtrado."""
+    if dff is None or dff.empty:
+        return [0.0] * 12
+
+    col_comp = "CD_CPNT_RSTD" if "CD_CPNT_RSTD" in dff.columns else None
+    if not col_comp:
+        return [0.0] * 12
+
+    col_valor = "CURVA_REALIZADO" if "CURVA_REALIZADO" in dff.columns else None
+    if not col_valor:
+        return [0.0] * 12
+
+    df_comp = dff[dff[col_comp].astype(str).str.upper() == str(codigo).upper()]
+    if df_comp.empty:
+        return [0.0] * 12
+
+    vals = _normalizar_valor_monetario_series(df_comp[col_valor])
+    grp = (
+        pd.DataFrame({"MES_NUM": df_comp["MES_NUM"], "VAL": vals})
+        .groupby("MES_NUM", as_index=True)["VAL"]
+        .sum()
+        .reindex(range(1, 13))
+        .fillna(0.0)
+    )
+    return (grp.astype(float).tolist() + [0.0] * 12)[:12]
+
+
+def _serie_realizada_por_tip_td(dff: pd.DataFrame, codigo: str) -> list:
+    """Retorna série [12] a partir de TIP_TD (guia DADOS), usada para TD21/TD62."""
+    if dff is None or dff.empty or "TIP_TD" not in dff.columns:
+        return [0.0] * 12
+
+    col_valor = "CURVA_REALIZADO" if "CURVA_REALIZADO" in dff.columns else None
+    if not col_valor:
+        return [0.0] * 12
+
+    df_comp = dff[dff["TIP_TD"].astype(str).str.upper() == str(codigo).upper()]
+    if df_comp.empty:
+        return [0.0] * 12
+
+    vals = _normalizar_valor_monetario_series(df_comp[col_valor])
+    grp = (
+        pd.DataFrame({"MES_NUM": df_comp["MES_NUM"], "VAL": vals})
+        .groupby("MES_NUM", as_index=True)["VAL"]
+        .sum()
+        .reindex(range(1, 13))
+        .fillna(0.0)
+    )
+    return (grp.astype(float).tolist() + [0.0] * 12)[:12]
+
+
+def _carregar_realizados_dre_linhas(
+    cliente: str = "Todos",
+    categoria: str = "",
+    produto: str = "",
+    ano: int = 2026,
+) -> bool:
+    """Inicializa as linhas variáveis da DRE com valores realizados do upload."""
+    dff = _filtrar_base_dre(cliente=cliente, categoria=categoria, produto=produto, ano=ano)
+    if dff.empty:
+        for linha in ESTRUTURA_DRE:
+            if linha.tipo == "variavel":
+                st.session_state.dre_dados[linha.codigo]["valores"] = [0.0] * 12
+        return False
+
+    for linha in ESTRUTURA_DRE:
+        if linha.tipo != "variavel":
+            continue
+        st.session_state.dre_dados[linha.codigo]["valores"] = _serie_realizada_por_codigo(dff, linha.codigo)
+    return True
+
+
 def _carregar_td21_volumes(cliente: str = "Todos", categoria: str = "", produto: str = "", ano: int = 2026):
     """
-    Carrega valores de TD21 (Curva Ajustada) para a seção de volumes financeiros.
+    Carrega valores de TD21 e TD62 para a seção de volumes financeiros.
+    Os valores respeitam os filtros atuais de cliente/categoria/produto/ano.
     """
     try:
-        # Verificar se dre_volumes_dados foi inicializado
         if "dre_volumes_dados" not in st.session_state:
             return
-        
-        curva_ajustada = st.session_state.get("ajustada", [0.0] * 12)
-        if len(curva_ajustada) == 24:
-            curva_ajustada = curva_ajustada[:12]
-        
-        if st.session_state.dre_volumes_dados.get("TD21"):
-            st.session_state.dre_volumes_dados["TD21"]["valores"] = list(curva_ajustada)
+
+        dff = _filtrar_base_dre(cliente=cliente, categoria=categoria, produto=produto, ano=ano)
+
+        # TD21 prioriza curva ajustada da simulação para manter aderência com o Simulador.
+        curva_sim = carregar_curva_ajustada(cliente, categoria, produto)
+        td21 = [0.0] * 12
+        if curva_sim and len(curva_sim) >= 12:
+            td21 = [float(v) for v in list(curva_sim)[:12]]
+        else:
+            td21 = _serie_realizada_por_tip_td(dff, "TD21")
+
+        td62 = _serie_realizada_por_tip_td(dff, "TD62")
+
+        for codigo, serie in (("TD21", td21), ("TD62", td62)):
+            if st.session_state.dre_volumes_dados.get(codigo):
+                st.session_state.dre_volumes_dados[codigo]["valores"] = list(serie)
+            if st.session_state.get("dre_dados", {}).get(codigo):
+                st.session_state.dre_dados[codigo]["valores"] = list(serie)
     except Exception as e:
         print(f"[DRE] Erro ao carregar TD21: {e}")
 
 
 def _carregar_td71_simulacao(cliente: str = "Todos", categoria: str = "", produto: str = "", ano: int = 2026):
     """
-    Carrega valores de TD71 a partir da curva ajustada.
-    Tenta em ordem:
-    1. Carregar do BACKEND SCHEMA (novo - sincronizado com Simulador)
-    2. Carregar curva persistida no session_state
-    3. Carregar de st.session_state.ajustada (simulador)
-    4. Carregar curva analítica do DataFrame de upload
-    5. Deixar em zero
+    Nome legado mantido por compatibilidade.
+    Comportamento atual: TD71 é carregado apenas com realizado da base filtrada.
     """
     try:
-        # 0. NOVO: Tentar carregar do BACKEND SCHEMA primeiro
-        if cliente and cliente != "Todos" and categoria and produto:
-            try:
-                usuario_id = st.session_state.get("usuario_id", "")
-                if usuario_id:
-                    from data_manager import obter_curva_do_backend
-                    curva_backend = obter_curva_do_backend(usuario_id, cliente, categoria, produto, ano)
-                    if curva_backend and len(curva_backend) == 12 and any(v != 0.0 for v in curva_backend):
-                        st.session_state.dre_dados["TD71"]["valores"] = list(curva_backend)
-                        print(f"[DRE]  TD71 carregado do BACKEND: {cliente}::{categoria}::{produto}::{ano}")
-                        return
-            except Exception as e:
-                print(f"[DRE] Aviso ao carregar do backend: {e}")
-        
-        # 1. Tentar carregar curva persistida para essa combinação específica
-        if cliente or categoria or produto:
-            curva_persistida = carregar_curva_ajustada(cliente, categoria, produto)
-            if curva_persistida and len(curva_persistida) == 12:
-                st.session_state.dre_dados["TD71"]["valores"] = list(curva_persistida)
-                print(f"[DRE] TD71 carregado de curva persistida: {cliente}::{categoria}::{produto}")
-                return
-        
-        # 2. Tentar carregar do session_state do simulador (usuário veio direto do simulador)
-        ajustada = st.session_state.get("ajustada", None)
-        if ajustada and len(ajustada) == 12:
-            st.session_state.dre_dados["TD71"]["valores"] = list(ajustada)
-            print("[DRE] TD71 sincronizado com simulador (session_state.ajustada)")
-            return
-        
-        # 3. Tentar carregar curva analítica do DataFrame de upload
-        if cliente and cliente != "Todos" and categoria and produto:
-            try:
-                df_upload = get_dados_upload()
-                if df_upload is not None and not df_upload.empty:
-                    ana_curva, mer_curva, ajs_curva = _carregar_curvas_por_ano(df_upload, cliente, categoria, produto, ano)
-                    # Usar a curva analítica como fallback
-                    if ana_curva and len(ana_curva) == 12 and any(v != 0.0 for v in ana_curva):
-                        st.session_state.dre_dados["TD71"]["valores"] = list(ana_curva)
-                        print(f"[DRE] TD71 carregado de curva analítica (upload): {cliente}::{categoria}::{produto}::{ano}")
-                        return
-            except Exception as e:
-                print(f"[DRE] Erro ao carregar curva analítica: {e}")
-        
-        # 4. Se nada funcionar, deixa em zero (será preenchido manualmente)
-        print("[DRE] Nenhuma curva encontrada para TD71 - valores em zero")
-        
+        dff = _filtrar_base_dre(cliente=cliente, categoria=categoria, produto=produto, ano=ano)
+        st.session_state.dre_dados["TD71"]["valores"] = _serie_realizada_por_codigo(dff, "TD71")
     except Exception as e:
         print(f"[DRE] Erro ao carregar TD71: {e}")
 
@@ -1103,7 +1266,7 @@ def _limpar_query_params_exclusao_metodologia():
             pass
 
 
-@st.dialog("Confirmar exclusão de metodologia", width="small")
+@_DIALOG_DECORATOR("Confirmar exclusão de metodologia", width="small")
 def _dialog_confirmar_exclusao_metodologia_linha(codigo: str, met_nome: str):
     st.markdown(f"Deseja remover a metodologia **{met_nome}** da linha **{codigo}**?")
     st.caption("Essa ação remove apenas esta metodologia da linha selecionada e recalcula os valores.")
@@ -1276,6 +1439,18 @@ def _restaurar_linhas_dre(combo_key: str) -> bool:
     except Exception as e:
         _log_dre(f"[DRE] Falha ao restaurar linhas: {e}")
         return False
+
+
+def _linhas_variaveis_estao_zeradas() -> bool:
+    """Detecta se as linhas variáveis da DRE estão integralmente zeradas na sessão atual."""
+    dre_dados = st.session_state.get("dre_dados", {})
+    for linha in ESTRUTURA_DRE:
+        if linha.tipo != "variavel":
+            continue
+        serie = dre_dados.get(linha.codigo, {}).get("valores", [])
+        if any(abs(float(v or 0.0)) > 0 for v in serie):
+            return False
+    return True
 
 
 
@@ -1477,14 +1652,6 @@ def _renderizar_secao_volumes_financeiros():
     """Renderiza a primeira seção: Volumes Financeiros (TD21 e TD62) em tabela tipo-DRE"""
     
     volumes_dados = st.session_state.dre_volumes_dados
-    
-    # Sincronizar TD21 com curva ajustada
-    curva_ajustada = st.session_state.get("ajustada", [0.0] * 12)
-    if len(curva_ajustada) == 24:
-        curva_ajustada = curva_ajustada[:12]
-    
-    if volumes_dados.get("TD21"):
-        volumes_dados["TD21"]["valores"] = list(curva_ajustada)
     
     # Preparar dados para tabela
     dados_tabela = []
@@ -1908,8 +2075,8 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
             df_dre_editor,
             key="dre_grade_editavel",
             hide_index=True,
-            width="stretch",
-            height="content",
+            use_container_width=True,
+            height=560,
             disabled=["TD", "Descrição", "Metodologia"],
             column_config=column_config_editor,
             num_rows="fixed",
@@ -1960,7 +2127,9 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
 
         st.caption("No Streamlit, o componente de edição não expõe evento de duplo clique por célula. Use o painel abaixo para aplicar metodologia por TD/mês com o mesmo efeito operacional.")
 
-        with st.expander("⚡ Aplicação rápida de metodologia (estilo planilha)", expanded=False):
+        with st.container(border=True):
+            st.markdown("#### ⚡ Aplicação rápida de metodologia")
+            st.caption("Fluxo estilo planilha para aplicar a mesma metodologia em várias linhas.")
             variaveis_editaveis = [ln.codigo for ln in ESTRUTURA_DRE if ln.tipo == "variavel"]
             col_q1, col_q2 = st.columns([1.2, 1.8])
             with col_q1:
@@ -2030,7 +2199,8 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
                     if erros:
                         st.error(" | ".join(erros))
 
-        with st.expander("🧩 Aplicar por célula (modo edição)", expanded=False):
+        with st.container(border=True):
+            st.markdown("#### 🧩 Aplicar por célula")
             st.caption("Fluxo equivalente ao duplo clique: selecione célula alvo e aplique a metodologia para célula/faixa.")
             variaveis_editaveis = [ln.codigo for ln in ESTRUTURA_DRE if ln.tipo == "variavel"]
             col_c1, col_c2, col_c3 = st.columns([1.2, 1, 1.4])
@@ -2168,15 +2338,20 @@ def renderizar():
     
     # Cliente
     with col_cli:
+        dff_filtro = _ensure_cli_n(df_upload) if df_upload is not None else None
+
         clientes = ["Todos"]
-        if df_upload is not None and "TIPO_CLIENTE" in df_upload.columns:
-            cli_list = sorted([c for c in df_upload["TIPO_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
+        if dff_filtro is not None and "TIPO_CLIENTE" in dff_filtro.columns:
+            cli_list = sorted([c for c in dff_filtro["TIPO_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
             clientes.extend(cli_list)
+
+        _cli_atual = st.session_state.get("dre_cliente_filter", "Todos")
+        _idx_cli = clientes.index(_cli_atual) if _cli_atual in clientes else 0
         
         cliente_sel = st.selectbox(
             "Cliente",
             clientes,
-            index=0,
+            index=_idx_cli,
             key="dre_cliente_filter",
             label_visibility="collapsed"
         )
@@ -2185,15 +2360,19 @@ def renderizar():
     # Categoria
     with col_cat:
         categorias = [""]
-        if df_upload is not None and "CATEGORIA" in df_upload.columns:
-            df_cli = df_upload if cliente_sel == "Todos" else df_upload[df_upload["TIPO_CLIENTE"].astype(str) == cliente_sel]
+        if dff_filtro is not None and "CATEGORIA" in dff_filtro.columns:
+            df_cli = dff_filtro if cliente_sel == "Todos" else dff_filtro[dff_filtro["CLI_N"] == _norm_txt(cliente_sel)]
             cat_list = sorted([c for c in df_cli["CATEGORIA"].dropna().astype(str).unique() if c.strip() != ""])
             categorias = [""] + cat_list
         
+        # Preserva o valor atual do widget se ainda estiver disponível nas opções
+        _cat_atual = st.session_state.get("dre_categoria_filter", "")
+        _idx_cat = categorias.index(_cat_atual) if _cat_atual in categorias else 0
+
         categoria_sel = st.selectbox(
             "Categoria",
             categorias,
-            index=0,
+            index=_idx_cat,
             key="dre_categoria_filter",
             label_visibility="collapsed"
         )
@@ -2202,15 +2381,21 @@ def renderizar():
     # Produto
     with col_prod:
         produtos = [""]
-        if df_upload is not None and categoria_sel and "CATEGORIA" in df_upload.columns:
-            df_cat = df_upload[df_upload["CATEGORIA"].astype(str) == categoria_sel]
-            prod_list = sorted([p for p in df_cat["PRODUTO"].dropna().astype(str).unique() if p.strip() != ""][:10])
+        if dff_filtro is not None and categoria_sel and "CATEGORIA" in dff_filtro.columns:
+            df_cat = dff_filtro[dff_filtro["CATEGORIA"].astype(str) == categoria_sel]
+            if cliente_sel != "Todos":
+                df_cat = df_cat[df_cat["CLI_N"] == _norm_txt(cliente_sel)]
+            prod_list = sorted([p for p in df_cat["PRODUTO"].dropna().astype(str).unique() if p.strip() != ""])
             produtos = [""] + prod_list
-        
+
+        # Preserva o valor atual do widget se ainda estiver disponível nas opções
+        _prod_atual = st.session_state.get("dre_produto_filter", "")
+        _idx_prod = _selecionar_opcao_equivalente(produtos, _prod_atual)
+
         produto_sel = st.selectbox(
             "Produto",
             produtos,
-            index=0,
+            index=_idx_prod,
             key="dre_produto_filter",
             label_visibility="collapsed"
         )
@@ -2251,27 +2436,26 @@ def renderizar():
         
         # ===== ETAPA 1: SALVAR DADOS DO FILTRO ANTERIOR =====
         if combo_filtro_anterior:  # Se não é a primeira inicialização
-            st.session_state.dre_dados_persistidos[combo_filtro_anterior] = deepcopy(st.session_state.dre_dados)
             _persistir_linhas_dre(combo_filtro_anterior)
         
         # ===== ETAPA 2: CARREGAR OU INICIALIZAR DADOS DO NOVO FILTRO =====
         if _restaurar_linhas_dre(combo_filtro_atual):
-            pass
-        elif combo_filtro_atual in st.session_state.dre_dados_persistidos:
-            # Já existe dados salvos para este filtro - RESTAURAR
-            st.session_state.dre_dados = deepcopy(st.session_state.dre_dados_persistidos[combo_filtro_atual])
+            # Corrige sessões antigas persistidas com zeros antes da leitura correta da TD_DRE.
+            if _linhas_variaveis_estao_zeradas():
+                _carregar_realizados_dre_linhas(cliente_sel, categoria_sel, produto_sel, ano_sel)
         else:
-            # Primeiro acesso a este filtro - RESETAR VALORES (EXCETO TD71)
-            for codigo in st.session_state.dre_dados:
-                if codigo != "TD71":
-                    st.session_state.dre_dados[codigo]["valores"] = [0.0] * 12
+            # Primeiro acesso a este filtro: inicializa DRE com realizados da base.
+            _carregar_realizados_dre_linhas(cliente_sel, categoria_sel, produto_sel, ano_sel)
         
         # ===== ARMAZENAR NOVA CHAVE DE FILTRO =====
         st.session_state.dre_combo_filtro_anterior = combo_filtro_atual
+
+    # Recuperação defensiva: sessões antigas podem manter o combo atual todo zerado.
+    if _linhas_variaveis_estao_zeradas():
+        _carregar_realizados_dre_linhas(cliente_sel, categoria_sel, produto_sel, ano_sel)
     
-    # ===== NOTA: TD71 MANTÉM VALORES ZERADOS =====
-    # O carregamento de TD71 foi desativado. Será preenchido através de outra lógica no futuro.
-    # _carregar_td71_simulacao(cliente_sel, categoria_sel, produto_sel, ano_sel)
+    # Sincronizar volumes com filtros atuais.
+    _carregar_td21_volumes(cliente_sel, categoria_sel, produto_sel, ano_sel)
     
     st.divider()
     

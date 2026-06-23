@@ -18,7 +18,42 @@ def _filtrar_categoria_produto(dff: pd.DataFrame, categoria: str, produto: str) 
         dff = dff[dff["PROD_N"] == produto_norm]
     return dff
 
-def _carregar_curvas_base(df_upload: pd.DataFrame, cliente: str, categoria: str, produto: str):
+
+def _aplicar_filtros_dimensao(
+    dff: pd.DataFrame,
+    cd_tip_agpd: str = "Todos",
+    tip_td: str = "Todos",
+) -> pd.DataFrame:
+    """Aplica filtros de dimensão quando as colunas existem na base."""
+    out = dff
+    if (
+        "CD_TIP_AGPD" in out.columns
+        and cd_tip_agpd
+        and str(cd_tip_agpd).strip()
+        and str(cd_tip_agpd) != "Todos"
+    ):
+        alvo = _norm_txt(cd_tip_agpd)
+        out = out[out["CD_TIP_AGPD"].astype(str).apply(_norm_txt) == alvo]
+
+    if (
+        "TIP_TD" in out.columns
+        and tip_td
+        and str(tip_td).strip()
+        and str(tip_td) != "Todos"
+    ):
+        alvo = _norm_txt(tip_td)
+        out = out[out["TIP_TD"].astype(str).apply(_norm_txt) == alvo]
+
+    return out
+
+def _carregar_curvas_base(
+    df_upload: pd.DataFrame,
+    cliente: str,
+    categoria: str,
+    produto: str,
+    cd_tip_agpd: str = "Todos",
+    tip_td: str = "Todos",
+):
     if df_upload is None or len(df_upload) == 0:
         return [0.0]*12, [0.0]*12, None
     
@@ -41,6 +76,7 @@ def _carregar_curvas_base(df_upload: pd.DataFrame, cliente: str, categoria: str,
 
     if cliente and cliente != "Todos":
         dff = dff[dff["CLI_N"] == _norm_txt(cliente)]
+    dff = _aplicar_filtros_dimensao(dff, cd_tip_agpd=cd_tip_agpd, tip_td=tip_td)
     dff = _filtrar_categoria_produto(dff, categoria, produto)
     if dff.empty:
         return [0.0]*12, [0.0]*12, None
@@ -59,7 +95,15 @@ def _carregar_curvas_base(df_upload: pd.DataFrame, cliente: str, categoria: str,
     mer = (grp["PROJETADO_MERCADO"].astype(float).tolist() + [0.0]*12)[:12]
     return ana, mer, ano
 
-def _carregar_curvas_por_ano(df_upload: pd.DataFrame, cliente: str, categoria: str, produto: str, ano_proj: int):
+def _carregar_curvas_por_ano(
+    df_upload: pd.DataFrame,
+    cliente: str,
+    categoria: str,
+    produto: str,
+    ano_proj: int,
+    cd_tip_agpd: str = "Todos",
+    tip_td: str = "Todos",
+):
     """
     Carrega curvas analítica, mercado e ajustada para um ano específico.
     Retorna: (ana[12], mer[12], ajustada[12])
@@ -79,6 +123,7 @@ def _carregar_curvas_por_ano(df_upload: pd.DataFrame, cliente: str, categoria: s
 
     if cliente and cliente != "Todos":
         dff = dff[dff["CLI_N"] == _norm_txt(cliente)]
+    dff = _aplicar_filtros_dimensao(dff, cd_tip_agpd=cd_tip_agpd, tip_td=tip_td)
     
     dff = _filtrar_categoria_produto(dff, categoria, produto)
     dff = dff[(dff["ANO_NUM"] == int(ano_proj)) & (pd.to_numeric(dff["MES_NUM"], errors="coerce").between(1, 12))]
@@ -99,7 +144,17 @@ def _carregar_curvas_por_ano(df_upload: pd.DataFrame, cliente: str, categoria: s
     return ana, mer, ajs
 
 
-def _carregar_proximos_12_meses(df_upload: pd.DataFrame, cliente: str, categoria: str, produto: str, mes_atual: int, ano_atual: int, mascarar_zeros_finais: bool = True):
+def _carregar_proximos_12_meses(
+    df_upload: pd.DataFrame,
+    cliente: str,
+    categoria: str,
+    produto: str,
+    mes_atual: int,
+    ano_atual: int,
+    mascarar_zeros_finais: bool = True,
+    cd_tip_agpd: str = "Todos",
+    tip_td: str = "Todos",
+):
     """
     Carrega dados para os próximos 12 meses, combinando anos se necessário.
     
@@ -130,12 +185,36 @@ def _carregar_proximos_12_meses(df_upload: pd.DataFrame, cliente: str, categoria
     }
     
     # Carrega realizados para ambos os anos
-    r_ano_atual = _obter_realizados_por_ano(df_upload, cliente, categoria, produto, mascarar_zeros_finais=mascarar_zeros_finais)
+    r_ano_atual = _obter_realizados_por_ano(
+        df_upload,
+        cliente,
+        categoria,
+        produto,
+        mascarar_zeros_finais=mascarar_zeros_finais,
+        cd_tip_agpd=cd_tip_agpd,
+        tip_td=tip_td,
+    )
     
     # Carrega projeções para ano atual e próximo ano
-    ana_atual, mer_atual, ajs_atual = _carregar_curvas_por_ano(df_upload, cliente, categoria, produto, ano_atual)
+    ana_atual, mer_atual, ajs_atual = _carregar_curvas_por_ano(
+        df_upload,
+        cliente,
+        categoria,
+        produto,
+        ano_atual,
+        cd_tip_agpd=cd_tip_agpd,
+        tip_td=tip_td,
+    )
     ano_proximo = ano_atual + 1
-    ana_proximo, mer_proximo, ajs_proximo = _carregar_curvas_por_ano(df_upload, cliente, categoria, produto, ano_proximo)
+    ana_proximo, mer_proximo, ajs_proximo = _carregar_curvas_por_ano(
+        df_upload,
+        cliente,
+        categoria,
+        produto,
+        ano_proximo,
+        cd_tip_agpd=cd_tip_agpd,
+        tip_td=tip_td,
+    )
     
     rlzd_ano_atual = r_ano_atual.get(ano_atual, [0.0]*12) if r_ano_atual else [0.0]*12
     rlzd_ano_proximo = r_ano_atual.get(ano_proximo, [0.0]*12) if r_ano_atual else [0.0]*12
@@ -183,7 +262,15 @@ def _carregar_proximos_12_meses(df_upload: pd.DataFrame, cliente: str, categoria
     return resultado
 
 
-def _carregar_ajustada_produto(df_upload: pd.DataFrame, cliente: str, categoria: str, produto: str, ano_proj: int):
+def _carregar_ajustada_produto(
+    df_upload: pd.DataFrame,
+    cliente: str,
+    categoria: str,
+    produto: str,
+    ano_proj: int,
+    cd_tip_agpd: str = "Todos",
+    tip_td: str = "Todos",
+):
     """
     Série [12] do produto/ano: PROJETADO_AJUSTADO (fallback Analítico).
     """
@@ -192,6 +279,7 @@ def _carregar_ajustada_produto(df_upload: pd.DataFrame, cliente: str, categoria:
     dff = _ensure_cli_n(df_upload)
     if cliente and cliente != "Todos":
         dff = dff[dff["CLI_N"] == _norm_txt(cliente)]
+    dff = _aplicar_filtros_dimensao(dff, cd_tip_agpd=cd_tip_agpd, tip_td=tip_td)
     if "CAT_N" not in dff.columns:
         dff["CAT_N"] = dff["CATEGORIA"].astype(str).apply(_norm_txt)
     if "PROD_N" not in dff.columns:
@@ -214,7 +302,15 @@ def _carregar_ajustada_produto(df_upload: pd.DataFrame, cliente: str, categoria:
             .sum().reindex(range(1,13)).fillna(0.0).astype(float))
     return (s.tolist() + [0.0]*12)[:12]
 
-def _obter_realizados_por_ano(df_upload: pd.DataFrame, cliente: str, categoria: str, produto: str, mascarar_zeros_finais: bool = True):
+def _obter_realizados_por_ano(
+    df_upload: pd.DataFrame,
+    cliente: str,
+    categoria: str,
+    produto: str,
+    mascarar_zeros_finais: bool = True,
+    cd_tip_agpd: str = "Todos",
+    tip_td: str = "Todos",
+):
     result = {}
     if df_upload is None or df_upload.empty:
         return result
@@ -234,6 +330,7 @@ def _obter_realizados_por_ano(df_upload: pd.DataFrame, cliente: str, categoria: 
 
     if cliente and cliente != "Todos":
         dff = dff[dff["CLI_N"] == _norm_txt(cliente)]
+    dff = _aplicar_filtros_dimensao(dff, cd_tip_agpd=cd_tip_agpd, tip_td=tip_td)
     dff = _filtrar_categoria_produto(dff, categoria, produto)
     dff = dff[pd.to_numeric(dff["MES_NUM"], errors="coerce").between(1, 12)]
     dff = dff[pd.to_numeric(dff["ANO_NUM"], errors="coerce") >= 2022]
@@ -248,7 +345,14 @@ def _obter_realizados_por_ano(df_upload: pd.DataFrame, cliente: str, categoria: 
         result[int(ano)] = _mask_trailing_zeros(serie) if mascarar_zeros_finais else serie
     return result
 
-def _agregados_por_categoria(df_upload: pd.DataFrame, cliente: str, ano_proj: int, mascarar_zeros_finais: bool = True):
+def _agregados_por_categoria(
+    df_upload: pd.DataFrame,
+    cliente: str,
+    ano_proj: int,
+    mascarar_zeros_finais: bool = True,
+    cd_tip_agpd: str = "Todos",
+    tip_td: str = "Todos",
+):
     """
     Retorna:
       { categoria: {
@@ -263,6 +367,7 @@ def _agregados_por_categoria(df_upload: pd.DataFrame, cliente: str, ano_proj: in
     dff = _ensure_cli_n(df_upload).copy()
     if cliente and cliente != "Todos":
         dff = dff[dff["CLI_N"] == _norm_txt(cliente)]
+    dff = _aplicar_filtros_dimensao(dff, cd_tip_agpd=cd_tip_agpd, tip_td=tip_td)
 
     if "CAT_N" not in dff.columns:
         dff["CAT_N"] = dff["CATEGORIA"].astype(str).apply(_norm_txt)
@@ -364,7 +469,16 @@ def _agregados_por_categoria(df_upload: pd.DataFrame, cliente: str, ano_proj: in
     return out
 
 
-def _agregados_por_produto(df_upload: pd.DataFrame, cliente: str, categoria: str, produto: str, ano_proj: int, mascarar_zeros_finais: bool = True):
+def _agregados_por_produto(
+    df_upload: pd.DataFrame,
+    cliente: str,
+    categoria: str,
+    produto: str,
+    ano_proj: int,
+    mascarar_zeros_finais: bool = True,
+    cd_tip_agpd: str = "Todos",
+    tip_td: str = "Todos",
+):
     """
     Retorna dados agregados para um produto específico:
       {
@@ -385,6 +499,7 @@ def _agregados_por_produto(df_upload: pd.DataFrame, cliente: str, categoria: str
     # Filtro por cliente
     if cliente and cliente != "Todos":
         dff = dff[dff["CLI_N"] == _norm_txt(cliente)]
+    dff = _aplicar_filtros_dimensao(dff, cd_tip_agpd=cd_tip_agpd, tip_td=tip_td)
 
     # Normaliza colunas
     if "CAT_N" not in dff.columns:

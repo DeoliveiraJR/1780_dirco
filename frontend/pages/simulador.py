@@ -34,7 +34,8 @@ from utils_ext.display import _badge_html_from_value, _build_var_disp_column
 
 from services.aggregations import (
     _carregar_curvas_base, _obter_realizados_por_ano, _agregados_por_categoria,
-    _carregar_ajustada_produto, _carregar_proximos_12_meses
+    _carregar_ajustada_produto, _carregar_proximos_12_meses,
+    _aplicar_filtros_dimensao,
 )
 
 from components.lines import _grafico_visao_anual_linhas, _grafico_serie_historica
@@ -118,6 +119,8 @@ def renderizar():
     # ==================== SINCRONIZAÇÃO COM FILTROS DA SIDEBAR ====================
     # Os filtros agora estão na sidebar, vamos sincronizar com a lógica do simulador
     filtros = st.session_state.get("filtros", {})
+    sim_cd_tip_agpd = filtros.get("cd_tip_agpd", "Todos")
+    sim_tip_td = filtros.get("tip_td", "Todos")
     sim_cliente = filtros.get("cliente", "Todos")
     sim_categoria = filtros.get("categoria", "")
     sim_produto = filtros.get("produto", "")
@@ -154,14 +157,22 @@ def renderizar():
 
     dff_check = _ensure_cli_n(df_upload)
     base_f = dff_check if cliente=="Todos" else dff_check[dff_check["CLI_N"] == _norm_txt(cliente)]
+    base_f = _aplicar_filtros_dimensao(base_f, cd_tip_agpd=sim_cd_tip_agpd, tip_td=sim_tip_td)
     if not categoria and not base_f.empty:
         categoria = str(base_f["CATEGORIA"].dropna().astype(str).unique()[0])
     base_fc = base_f[base_f["CATEGORIA"].astype(str) == str(categoria)]
     if not produto_todos_selecionado and not produto and not base_fc.empty:
         produto = str(base_fc["PRODUTO"].dropna().astype(str).unique()[0])
 
-    analitica, mercado, ano_proj = _carregar_curvas_base(df_upload, cliente, categoria, produto)
-    combo = f"{cliente}::{categoria}::{produto}"
+    analitica, mercado, ano_proj = _carregar_curvas_base(
+        df_upload,
+        cliente,
+        categoria,
+        produto,
+        cd_tip_agpd=sim_cd_tip_agpd,
+        tip_td=sim_tip_td,
+    )
+    combo = f"{cliente}::{categoria}::{produto}::{sim_cd_tip_agpd}::{sim_tip_td}"
     
     # ==================== ATUALIZA PARÂMETROS NA SIDEBAR ====================
     st.session_state["sim_qtd_meses"] = 12
@@ -193,7 +204,13 @@ def renderizar():
         st.session_state["curva_analitica"] = analitica[:]
         st.session_state["curva_mercado"] = mercado[:]
         
-        curva_salva = carregar_curva_ajustada(cliente, categoria, produto)
+        curva_salva = carregar_curva_ajustada(
+            cliente,
+            categoria,
+            produto,
+            cd_tip_agpd=sim_cd_tip_agpd,
+            tip_td=sim_tip_td,
+        )
         if curva_salva is not None:
             st.session_state["ajustada"] = curva_salva[:]
             print(f"[PERSIST] Curva carregada do banco: {combo}")
@@ -310,7 +327,15 @@ def renderizar():
     
     # Carrega os valores dos estados (FONTE DE VERDADE) - SERÁ REDEFINIDO DEPOIS COM OS DADOS CORRETOS
     
-    realizados_dict = _obter_realizados_por_ano(df_upload, cliente, categoria, produto, mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS)
+    realizados_dict = _obter_realizados_por_ano(
+        df_upload,
+        cliente,
+        categoria,
+        produto,
+        mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS,
+        cd_tip_agpd=sim_cd_tip_agpd,
+        tip_td=sim_tip_td,
+    )
     anos_realizados = sorted(realizados_dict.keys())
     variacoes_rlzd = {ano: _variacao_mensal(realizados_dict[ano]) for ano in anos_realizados}
 
@@ -337,10 +362,26 @@ def renderizar():
     # Carrega curvas para ambos os anos (ano_atual e ano_projecao_proxima)
     # Isso garante que se estivermos em mar/26, mostramos até mar/27 com dados corretos
     from services.aggregations import _carregar_curvas_por_ano
-    ana_ano_atual, mer_ano_atual, ajs_ano_atual = _carregar_curvas_por_ano(df_upload, cliente, categoria, produto, ano_atual)
+    ana_ano_atual, mer_ano_atual, ajs_ano_atual = _carregar_curvas_por_ano(
+        df_upload,
+        cliente,
+        categoria,
+        produto,
+        ano_atual,
+        cd_tip_agpd=sim_cd_tip_agpd,
+        tip_td=sim_tip_td,
+    )
     
     # Carrega dados de 2027
-    ana_ano_proximo_temp, mer_ano_proximo_temp, ajs_ano_proximo_temp = _carregar_curvas_por_ano(df_upload, cliente, categoria, produto, ano_projecao_proxima)
+    ana_ano_proximo_temp, mer_ano_proximo_temp, ajs_ano_proximo_temp = _carregar_curvas_por_ano(
+        df_upload,
+        cliente,
+        categoria,
+        produto,
+        ano_projecao_proxima,
+        cd_tip_agpd=sim_cd_tip_agpd,
+        tip_td=sim_tip_td,
+    )
     
     # Sempre usar dados de ano_proximo, mesmo que sejam zeros
     # O usuário pode ajustar depois no painel
@@ -575,6 +616,8 @@ def renderizar():
             cenarios={
                 "Ajustada": True,
                 "Cliente": st.session_state.get("filtros", {}).get("cliente", "Todos"),
+                "CD_TIP_AGPD": st.session_state.get("filtros", {}).get("cd_tip_agpd", "Todos"),
+                "TIP_TD": st.session_state.get("filtros", {}).get("tip_td", "Todos"),
                 "ajuste_mensal": st.session_state.get("sim_ajuste_mensal_final", 0),
                 "inclinacao": st.session_state.get("sim_inclinacao", 0),
             },
@@ -1263,12 +1306,24 @@ def renderizar():
 
     # -------------------- GRÁFICOS AUXILIARES -------------------------
     g1 = _grafico_visao_anual_linhas(
-        _obter_realizados_por_ano(df_upload, cliente, categoria, produto, mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS),
+        _obter_realizados_por_ano(
+            df_upload,
+            cliente,
+            categoria,
+            produto,
+            mascarar_zeros_finais=MASCARAR_ZEROS_FINAIS,
+            cd_tip_agpd=sim_cd_tip_agpd,
+            tip_td=sim_tip_td,
+        ),
         analitica, mercado, ajustada, ano_proj, style_top, src_ajs_ref=src_ajs
     )
     g2 = _grafico_serie_historica(df_upload, cliente, categoria, produto,
-                                analitica, mercado, ajustada, ano_proj,
-                                style_top, src_ajs_ref=src_ajs, mes_proj=mes_atual)
+                                analitica, mercado, ajustada, ano_atual,
+                                style_top,
+                                src_ajs_ref=src_ajs,
+                                mes_proj=mes_atual,
+                                cd_tip_agpd=sim_cd_tip_agpd,
+                                tip_td=sim_tip_td)
 
     layout_topo = column(
         row(div_valores, div_incremento, sizing_mode="stretch_width", height=100),
