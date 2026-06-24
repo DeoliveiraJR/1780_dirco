@@ -192,7 +192,10 @@ def get_dados_upload():
     # Se tem dados em session_state, retorna
     if st.session_state.dados_upload is not None and not st.session_state.dados_upload.empty:
         df_cache = st.session_state.dados_upload
-        if "CD_CPNT_RSTD" in df_cache.columns or "TIP_TD" in df_cache.columns:
+        # O cache da sessão pode conter apenas a guia DADOS (o que é suficiente
+        # para filtros da sidebar, Simulador e volumes financeiros).
+        colunas_minimas = {"CATEGORIA", "PRODUTO", "MES", "ANO"}
+        if colunas_minimas.issubset(df_cache.columns):
             return df_cache
     
     # Senão, tenta carregar da base compartilhada

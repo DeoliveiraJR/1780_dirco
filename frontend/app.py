@@ -655,6 +655,16 @@ else:
                 if dff.empty:
                     return dff
 
+                def _valor_presente(coluna: str, valor: str) -> bool:
+                    if coluna not in dff.columns:
+                        return False
+                    if valor is None:
+                        return False
+                    alvo = _norm(valor)
+                    if not alvo:
+                        return False
+                    return alvo in set(dff[coluna].dropna().astype(str).apply(_norm).tolist())
+
                 if "CLI_N" not in dff.columns:
                     if "TIPO_CLIENTE" in dff.columns:
                         dff["CLI_N"] = dff["TIPO_CLIENTE"].astype(str).apply(_norm)
@@ -678,15 +688,37 @@ else:
                 produto = st.session_state.get("sb_sim_produto",
                                                _fb.get("produto", "TODOS"))
 
-                if ignorar != "cd_tip_agpd" and "CD_TIP_AGPD" in dff.columns and cd_tip_agpd and cd_tip_agpd != "Todos":
+                if (
+                    ignorar != "cd_tip_agpd"
+                    and "CD_TIP_AGPD" in dff.columns
+                    and cd_tip_agpd
+                    and cd_tip_agpd != "Todos"
+                    and _valor_presente("CD_TIP_AGPD", cd_tip_agpd)
+                ):
                     dff = dff[dff["CD_TIP_AGPD"].astype(str).apply(_norm) == _norm(cd_tip_agpd)]
-                if ignorar != "tip_td" and "TIP_TD" in dff.columns and tip_td and tip_td != "Todos":
+                if (
+                    ignorar != "tip_td"
+                    and "TIP_TD" in dff.columns
+                    and tip_td
+                    and tip_td != "Todos"
+                    and _valor_presente("TIP_TD", tip_td)
+                ):
                     dff = dff[dff["TIP_TD"].astype(str).apply(_norm) == _norm(tip_td)]
-                if ignorar != "cliente" and cliente and cliente != "Todos":
+                if (
+                    ignorar != "cliente"
+                    and cliente
+                    and cliente != "Todos"
+                    and _valor_presente("CLI_N", cliente)
+                ):
                     dff = dff[dff["CLI_N"] == _norm(cliente)]
-                if ignorar != "categoria" and categoria:
+                if ignorar != "categoria" and categoria and _valor_presente("CATEGORIA", categoria):
                     dff = dff[dff["CATEGORIA"].astype(str).apply(_norm) == _norm(categoria)]
-                if ignorar != "produto" and produto and produto != "TODOS":
+                if (
+                    ignorar != "produto"
+                    and produto
+                    and produto != "TODOS"
+                    and _valor_presente("PRODUTO", produto)
+                ):
                     dff = dff[dff["PRODUTO"].astype(str).apply(_norm) == _norm(produto)]
                 return dff
 

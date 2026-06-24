@@ -184,7 +184,8 @@ def salvar_upload_admin(arquivo_excel: bytes, nome_arquivo: str, usuario_id: str
         
         has_dados = any(aba.lower().strip() in ['dados', 'data'] for aba in abas_disponíveis)
         has_indices = any(aba.lower().strip() == 'indices_tesou' for aba in abas_disponíveis)
-        print(f"[DB] has_dados={has_dados}, has_indices={has_indices}")
+        has_td_dre = any(aba.lower().strip() == 'td_dre' for aba in abas_disponíveis)
+        print(f"[DB] has_dados={has_dados}, has_indices={has_indices}, has_td_dre={has_td_dre}")
         print(f"[DB] Abas normalizadas: {[aba.lower().strip() for aba in abas_disponíveis]}")
         
         resultados = {"dados": False, "indices": False, "msg_dados": "", "msg_indices": ""}
@@ -207,6 +208,8 @@ def salvar_upload_admin(arquivo_excel: bytes, nome_arquivo: str, usuario_id: str
                     "arquivo_original": nome_arquivo,
                     "arquivo_salvo": str(caminho_arquivo_dados.relative_to(BASE_DIR.parent)),
                     "aba_processada": aba_dados,
+                    "abas_disponiveis": abas_disponíveis,
+                    "tem_td_dre": has_td_dre,
                     "usuario_id": usuario_id,
                     "usuario_email": usuario.get("email"),
                     "data_upload": datetime.now().isoformat(),
@@ -236,7 +239,13 @@ def salvar_upload_admin(arquivo_excel: bytes, nome_arquivo: str, usuario_id: str
                             print(f"[DB]     Erro ao parsear para {usr_id}: {e}")
                 
                 resultados["dados"] = True
-                resultados["msg_dados"] = f" Base de Projeções: {len(df_dados)} registros importados"
+                if has_td_dre:
+                    resultados["msg_dados"] = f" Base de Projeções: {len(df_dados)} registros importados (com TD_DRE)"
+                else:
+                    resultados["msg_dados"] = (
+                        f" Base de Projeções: {len(df_dados)} registros importados "
+                        f"(sem TD_DRE: a DRE realizada pode ficar zerada)"
+                    )
                 print(f"[DB] Dados salvos: {caminho_arquivo_dados}")
                 
             except Exception as e:
@@ -352,11 +361,17 @@ def carregar_base_dados_compartilhada() -> Optional[pd.DataFrame]:
         if caminho_arquivo.exists():
             df = _carregar_dataframe_excel_combinado(caminho_arquivo)
             if df is not None and "CD_CPNT_RSTD" not in df.columns:
-                df_original = _carregar_base_original_completa()
-                if df_original is not None and "CD_CPNT_RSTD" in df_original.columns:
-                    df = df_original
+                # Compatibilidade com uploads antigos sem TD_DRE: mantém a base carregada,
+                # mas o cálculo da DRE só usará o que existir no schema disponível.
+                pass
             print(f"[DB] Base de dados compartilhada carregada: {len(df)} linhas")
             return df
+
+        # Fallback histórico: se não houver base compartilhada enviada, tenta o workbook legado do projeto.
+        df_original = _carregar_base_original_completa()
+        if df_original is not None:
+            print(f"[DB] Base legado carregada como fallback: {len(df_original)} linhas")
+            return df_original
         
         print("[DB] Nenhuma base de dados compartilhada encontrada ainda")
         return None
@@ -896,31 +911,20 @@ def carregar_base_usuario(usuario_id: str) -> Optional[pd.DataFrame]:
     Returns:
         DataFrame com dados ou None
     """
-    # Verifica se usuário tem sua própria cópia editada
     if usuario_tem_base_editada(usuario_id):
         arquivo_usuario = UPLOADS_DIR / obter_nome_arquivo_base_usuario(usuario_id)
         try:
             df = _carregar_dataframe_excel_combinado(arquivo_usuario)
-            if df is not None and "CD_CPNT_RSTD" not in df.columns:
-                df_original = _carregar_base_original_completa()
-                if df_original is not None and "CD_CPNT_RSTD" in df_original.columns:
-                    df = df_original
-                else:
-                    df_compartilhada = carregar_base_dados_compartilhada()
-                    if df_compartilhada is not None and "CD_CPNT_RSTD" in df_compartilhada.columns:
-                        df = df_compartilhada
-            print(f"[DB] Base personalizada do usuário {usuario_id} carregada: {len(df)} linhas")
-            return df
+            if df is not None and ("CD_CPNT_RSTD" in df.columns or "TIP_TD" in df.columns):
+                print(f"[DB] Base personalizada do usuário {usuario_id} carregada: {len(df)} linhas")
+                return df
         except Exception as e:
             print(f"[DB] Erro ao carregar base personalizada: {e}")
-            # Fallback: carrega compartilhada
-            return carregar_base_dados_compartilhada()
-    else:
-        # Carrega base compartilhada
-        df = carregar_base_dados_compartilhada()
-        if df is not None:
-            print(f"[DB] Base compartilhada carregada para usuário {usuario_id}")
-        return df
+
+    df = carregar_base_dados_compartilhada()
+    if df is not None:
+        print(f"[DB] Base compartilhada carregada para usuário {usuario_id}")
+    return df
 
 
 def criar_base_usuario_copia(usuario_id: str) -> Tuple[bool, str]:

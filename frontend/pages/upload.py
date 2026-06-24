@@ -268,7 +268,10 @@ def upload_interface():
 
     with col1:
         st.markdown("#### Selecione o arquivo Excel para importar")
-        st.markdown("Aceita 1 ou 2 abas: **DADOS** (projeções) e/ou **INDICES_TESOU** (índices econômicos)")
+        st.markdown(
+            "Aceita até 3 abas: **DADOS** (volumes/projeções), **TD_DRE** (realizados da DRE) "
+            "e **INDICES_TESOU** (índices econômicos)."
+        )
         
         uploaded_file = st.file_uploader(
             "Escolha um arquivo Excel (.xlsx ou .xls)",

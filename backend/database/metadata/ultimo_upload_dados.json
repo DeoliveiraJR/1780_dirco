@@ -1,12 +1,12 @@
 {
-  "arquivo_original": "bd_dados_v4_Test.xlsx",
+  "arquivo_original": "bd_dados_v9.xlsx",
   "arquivo_salvo": "database\\uploads\\base_dados_compartilhada.xlsx",
-  "aba_processada": "Dados",
+  "aba_processada": "DADOS",
   "usuario_id": "usr_001",
   "usuario_email": "admin@uan.com.br",
-  "data_upload": "2026-05-27T15:15:57.475654",
-  "tamanho_bytes": 139896,
-  "linhas": 2400,
+  "data_upload": "2026-06-24T00:00:00",
+  "tamanho_bytes": 0,
+  "linhas": 14026,
   "colunas": [
     "DATA_COMPLETA",
     "MES",
@@ -19,7 +19,15 @@
     "CURVA_REALIZADO",
     "PROJETADO_ANALITICO",
     "PROJETADO_MERCADO",
-    "PROJETADO_AJUSTADO"
+    "PROJETADO_AJUSTADO",
+    "CD_TIP_AGPD",
+    "TIP_TD"
   ],
-  "tipo": "projecoes"
+  "tipo": "projecoes",
+  "has_td_dre": true,
+  "abas_disponiveis": [
+    "DADOS",
+    "TD_DRE",
+    "INDICES_TESOU"
+  ]
 }

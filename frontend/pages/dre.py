@@ -46,6 +46,7 @@ from data_manager import (
     carregar_curva_ajustada,
     init_data_state,
 )
+from services.aggregations import _carregar_ajustada_produto
 
 try:
     from st_keyup import st_keyup
@@ -719,10 +720,23 @@ def _filtrar_base_dre(
         return pd.DataFrame()
 
     dff = _ensure_cli_n(df_upload)
+
+    def _serie_coluna(coluna: str, default=np.nan) -> pd.Series:
+        if coluna in dff.columns:
+            return dff[coluna]
+        return pd.Series([default] * len(dff), index=dff.index)
+
     if "MES_NUM" not in dff.columns:
-        dff["MES_NUM"] = dff["MES"].apply(_mes_to_num) if "MES" in dff.columns else np.nan
+        if "MES" in dff.columns:
+            dff["MES_NUM"] = dff["MES"].apply(_mes_to_num)
+        else:
+            dff["MES_NUM"] = np.nan
+
     if "ANO_NUM" not in dff.columns:
-        dff["ANO_NUM"] = pd.to_numeric(dff.get("ANO", 0), errors="coerce").fillna(0).astype(int)
+        ano_fonte = _serie_coluna("ANO")
+        if pd.to_numeric(ano_fonte, errors="coerce").isna().all() and "DATA" in dff.columns:
+            ano_fonte = pd.to_datetime(dff["DATA"], errors="coerce").dt.year
+        dff["ANO_NUM"] = pd.to_numeric(ano_fonte, errors="coerce")
 
     if cliente and cliente != "Todos":
         alvo = _norm_txt(cliente).replace("_", " ")
@@ -752,10 +766,16 @@ def _filtrar_base_dre(
 
         dff = dff_prod
 
-    dff = dff[
-        (dff["ANO_NUM"] == int(ano))
-        & (pd.to_numeric(dff["MES_NUM"], errors="coerce").between(1, 12))
-    ]
+    ano_num = pd.to_numeric(_serie_coluna("ANO_NUM"), errors="coerce")
+    mes_num = pd.to_numeric(_serie_coluna("MES_NUM"), errors="coerce")
+
+    mask_mes = mes_num.between(1, 12)
+    if ano_num.notna().any():
+        mask_final = (ano_num == int(ano)) & mask_mes
+    else:
+        mask_final = mask_mes
+
+    dff = dff[mask_final]
     return dff
 
 
@@ -881,7 +901,7 @@ def _carregar_realizados_dre_linhas(
 def _carregar_td21_volumes(cliente: str = "Todos", categoria: str = "", produto: str = "", ano: int = 2026):
     """
     Carrega valores de TD21 e TD62 para a seção de volumes financeiros.
-    Os valores respeitam os filtros atuais de cliente/categoria/produto/ano.
+    Os valores seguem a curva ajustada/simulada ativa quando disponível.
     """
     try:
         if "dre_volumes_dados" not in st.session_state:
@@ -889,17 +909,27 @@ def _carregar_td21_volumes(cliente: str = "Todos", categoria: str = "", produto:
 
         dff = _filtrar_base_dre(cliente=cliente, categoria=categoria, produto=produto, ano=ano)
 
-        # TD21 prioriza curva ajustada da simulação para manter aderência com o Simulador.
-        curva_sim = carregar_curva_ajustada(cliente, categoria, produto)
-        td21 = [0.0] * 12
-        if curva_sim and len(curva_sim) >= 12:
-            td21 = [float(v) for v in list(curva_sim)[:12]]
-        else:
-            td21 = _serie_realizada_por_tip_td(dff, "TD21")
+        df_upload = get_dados_upload()
+        filtros_dre = st.session_state.get("dre_filtros", {})
+        cd_tip_agpd_dre = filtros_dre.get("cd_tip_agpd", "Todos")
+        tip_td_dre = filtros_dre.get("tip_td", "Todos")
+        td_ajustada = _carregar_ajustada_produto(
+            df_upload,
+            cliente,
+            categoria,
+            produto,
+            ano,
+            cd_tip_agpd=cd_tip_agpd_dre,
+            tip_td=tip_td_dre,
+        )
+
+        # Quando não houver curva ajustada persistida, preserva o legado baseado em TIP_TD.
+        if td_ajustada is None:
+            td_ajustada = _serie_realizada_por_tip_td(dff, "TD21")
 
         td62 = _serie_realizada_por_tip_td(dff, "TD62")
 
-        for codigo, serie in (("TD21", td21), ("TD62", td62)):
+        for codigo, serie in (("TD21", td_ajustada), ("TD62", td62)):
             if st.session_state.dre_volumes_dados.get(codigo):
                 st.session_state.dre_volumes_dados[codigo]["valores"] = list(serie)
             if st.session_state.get("dre_dados", {}).get(codigo):
@@ -2333,6 +2363,16 @@ def renderizar():
     # ===== FILTROS (Cliente, Categoria, Produto) =====
     # Carregar dados para filtros
     df_upload = get_dados_upload()
+
+    if df_upload is not None and not df_upload.empty:
+        tem_tip_td = "TIP_TD" in df_upload.columns
+        tem_comp_dre = "CD_CPNT_RSTD" in df_upload.columns
+        if not (tem_tip_td and tem_comp_dre):
+            st.warning(
+                "Base carregada sem todas as colunas da DRE realizada (TIP_TD/CD_CPNT_RSTD). "
+                "Nesse cenário, parte dos valores pode aparecer zerada. "
+                "Faça upload de um workbook contendo DADOS + TD_DRE."
+            )
     
     col_cli, col_cat, col_prod, col_ano, col_modo, col_btn = st.columns([1.2, 1.2, 1.5, 1, 1, 1])
     
@@ -2341,8 +2381,20 @@ def renderizar():
         dff_filtro = _ensure_cli_n(df_upload) if df_upload is not None else None
 
         clientes = ["Todos"]
-        if dff_filtro is not None and "TIPO_CLIENTE" in dff_filtro.columns:
-            cli_list = sorted([c for c in dff_filtro["TIPO_CLIENTE"].dropna().astype(str).unique() if c.strip() != ""])
+        if dff_filtro is not None:
+            col_cliente = None
+            if "TIPO_CLIENTE" in dff_filtro.columns:
+                col_cliente = "TIPO_CLIENTE"
+            elif "TP_CLIENTE" in dff_filtro.columns:
+                col_cliente = "TP_CLIENTE"
+
+            if col_cliente is not None:
+                cli_list = sorted([
+                    c for c in dff_filtro[col_cliente].dropna().astype(str).unique()
+                    if c.strip() != ""
+                ])
+            else:
+                cli_list = []
             clientes.extend(cli_list)
 
         _cli_atual = st.session_state.get("dre_cliente_filter", "Todos")
