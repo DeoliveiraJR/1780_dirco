@@ -48,6 +48,21 @@ from data_manager import (
 )
 from services.aggregations import _carregar_ajustada_produto
 
+# ── Backend DRE (persistência de simulações por usuário) ──────────────────────
+_backend_path = os.path.join(os.path.dirname(__file__), "..", "..", "backend")
+if _backend_path not in sys.path:
+    sys.path.insert(0, _backend_path)
+try:
+    from database import (
+        salvar_simulacao_dre as _salvar_simulacao_dre_backend,
+        carregar_simulacao_dre as _carregar_simulacao_dre_backend,
+    )
+    _DRE_BACKEND_OK = True
+except Exception as _e:
+    print(f"[DRE] Backend de persistência DRE não carregado: {_e}")
+    _DRE_BACKEND_OK = False
+
+
 try:
     from st_keyup import st_keyup
 except Exception:
@@ -877,24 +892,78 @@ def _serie_realizada_por_tip_td(dff: pd.DataFrame, codigo: str) -> list:
     return (grp.astype(float).tolist() + [0.0] * 12)[:12]
 
 
+def _mes_corte_da_serie(serie_12: list) -> int:
+    """Retorna o último mês (1-based) com valor realizado não-zero.
+    
+    Regra: percorre do mês 12 para 1; o primeiro não-zero encontrado é o corte.
+    0 = nenhum mês realizado (tudo futuro).
+    """
+    for i in range(11, -1, -1):
+        try:
+            if abs(float(serie_12[i] or 0)) > 0:
+                return i + 1  # converte índice 0-based para mês 1-based
+        except Exception:
+            pass
+    return 0
+
+
+def _mesclar_realizado_projetado(linha: dict) -> list:
+    """Retorna valores[12] = realizado onde existe, projetado nos demais."""
+    realizado = linha.get("realizado", [0.0] * 12)
+    projetado = linha.get("projetado", [0.0] * 12)
+    mes_corte = int(linha.get("mes_corte", 0))
+    merged = []
+    for i in range(12):
+        if i < mes_corte and abs(float(realizado[i] or 0)) > 0:
+            merged.append(float(realizado[i]))
+        else:
+            merged.append(float(projetado[i] or 0))
+    return merged
+
+
 def _carregar_realizados_dre_linhas(
     cliente: str = "Todos",
     categoria: str = "",
     produto: str = "",
     ano: int = 2026,
 ) -> bool:
-    """Inicializa as linhas variáveis da DRE com valores realizados do upload."""
+    """Inicializa as linhas variáveis da DRE com valores realizados do upload.
+
+    NOVO MODELO: separa realizado (imutável) de projetado (editável).
+    - `realizado[12]`: carregado da TD_DRE — NUNCA será sobrescrito por metodologia.
+    - `projetado[12]`: inicia zerado; preenchido por metodologias ou pelo usuário.
+    - `mes_corte`: último mês com realizado ≠ 0.
+    - `valores[12]`: merge dos dois — usado na exibição e nos cálculos.
+    """
     dff = _filtrar_base_dre(cliente=cliente, categoria=categoria, produto=produto, ano=ano)
     if dff.empty:
-        for linha in ESTRUTURA_DRE:
-            if linha.tipo == "variavel":
-                st.session_state.dre_dados[linha.codigo]["valores"] = [0.0] * 12
+        for linha_struct in ESTRUTURA_DRE:
+            if linha_struct.tipo == "variavel":
+                ln = st.session_state.dre_dados[linha_struct.codigo]
+                ln["realizado"]  = [0.0] * 12
+                ln["projetado"]  = [0.0] * 12
+                ln["mes_corte"]  = 0
+                ln["valores"]    = [0.0] * 12
+                ln["valores_base"] = [0.0] * 12
         return False
 
-    for linha in ESTRUTURA_DRE:
-        if linha.tipo != "variavel":
+    for linha_struct in ESTRUTURA_DRE:
+        if linha_struct.tipo != "variavel":
             continue
-        st.session_state.dre_dados[linha.codigo]["valores"] = _serie_realizada_por_codigo(dff, linha.codigo)
+        ln = st.session_state.dre_dados[linha_struct.codigo]
+        serie_realizada = _serie_realizada_por_codigo(dff, linha_struct.codigo)
+        mes_corte = _mes_corte_da_serie(serie_realizada)
+
+        ln["realizado"]  = [float(v) for v in serie_realizada]
+        ln["mes_corte"]  = mes_corte
+        # Só inicializa projetado se ainda não houver (preserva simulação em andamento)
+        if "projetado" not in ln:
+            ln["projetado"] = [0.0] * 12
+        # valores_base = snapshot do projetado (para restauração quando metodologia é removida)
+        if "valores_base" not in ln:
+            ln["valores_base"] = list(ln["projetado"])
+        # valores = merge para exibição
+        ln["valores"] = _mesclar_realizado_projetado(ln)
     return True
 
 
@@ -1109,8 +1178,10 @@ def _aplicar_metodologia_em_linha(
                 "data_aplicacao": met_legada.get("data_aplicacao", datetime.now().isoformat()),
             })
 
+    # NOVO: valores_base = snapshot do projetado ANTES da primeira metodologia
+    # (apenas inicializa; mantém se já existir para preservar o baseline correto)
     if "valores_base" not in linha:
-        linha["valores_base"] = list(valores_antes)
+        linha["valores_base"] = list(linha.get("projetado", [0.0] * 12))
 
     existentes = linha.get("metodologias_aplicadas", [])
     nomes_existentes = [m.get("nome") for m in existentes]
@@ -1160,25 +1231,33 @@ def _remover_metodologia_da_linha(dre_dados: dict, codigo: str, restaurar_valore
     if restaurar_valores:
         base = linha.get("valores_base")
         if isinstance(base, list) and len(base) >= 12:
-            linha["valores"] = [float(v) for v in base[:12]]
+            linha["projetado"] = [float(v) for v in base[:12]]
         else:
-            linha["valores"] = [0.0] * 12
+            linha["projetado"] = [0.0] * 12
+        linha["valores"] = _mesclar_realizado_projetado(linha)
 
     return True, f"Metodologias removidas da linha {codigo}."
 
 
 def _recalcular_linha_por_metodologias(dre_dados: dict, codigo: str):
-    """Recalcula uma linha aplicando metodologias acumuladas em ordem (efeito somatório)."""
+    """Recalcula uma linha aplicando metodologias acumuladas em ordem (efeito somatório).
+
+    REGRA DE PROTEÇÃO: meses com realizado (índice < mes_corte) são preservados —
+    a metodologia só escreve nos meses futuros (projetado).
+    """
     if codigo not in dre_dados:
         return
 
     linha = dre_dados[codigo]
-    base = linha.get("valores_base")
-    if not isinstance(base, list) or len(base) < 12:
-        base = list(linha.get("valores", [0.0] * 12))
-        linha["valores_base"] = list(base)
+    mes_corte = int(linha.get("mes_corte", 0))
 
-    acumulado = [float(v) for v in base[:12]]
+    # Base do projetado: valores_base guarda o projetado antes de qualquer metodologia
+    base_projetado = linha.get("valores_base")
+    if not isinstance(base_projetado, list) or len(base_projetado) < 12:
+        base_projetado = [0.0] * 12
+        linha["valores_base"] = list(base_projetado)
+
+    acumulado_projetado = [float(v) for v in base_projetado[:12]]
 
     # Normalização de estado legado
     mets = linha.get("metodologias_aplicadas", [])
@@ -1194,6 +1273,13 @@ def _recalcular_linha_por_metodologias(dre_dados: dict, codigo: str):
             }]
             linha["metodologias_aplicadas"] = mets
 
+    # Para calcular a fórmula, o contexto de cada linha expõe o merge atual (realizado + projetado)
+    linha["valores"] = _mesclar_realizado_projetado({
+        "realizado": linha.get("realizado", [0.0] * 12),
+        "projetado": acumulado_projetado,
+        "mes_corte": mes_corte,
+    })
+
     ativos = []
     for m in mets:
         met_nome = m.get("nome")
@@ -1201,8 +1287,6 @@ def _recalcular_linha_por_metodologias(dre_dados: dict, codigo: str):
         if not met_cfg:
             continue
 
-        # Contexto da fórmula considera o estado acumulado atual da própria linha
-        linha["valores"] = list(acumulado)
         serie = _avaliar_formula(
             _normalizar_formula_usuario(met_cfg.get("formula", "")),
             dre_dados,
@@ -1212,19 +1296,32 @@ def _recalcular_linha_por_metodologias(dre_dados: dict, codigo: str):
         periodo = m.get("periodo", "Todos")
         mi = int(m.get("mes_inicio", 1))
         mf = int(m.get("mes_fim", 12))
+
         if periodo == "Todos":
-            for i in range(12):
-                acumulado[i] += float(serie[i])
+            ini, fim = 0, 11
         else:
             ini = min(mi, mf) - 1
             fim = max(mi, mf) - 1
-            for i in range(ini, fim + 1):
-                acumulado[i] += float(serie[i])
 
+        for i in range(ini, fim + 1):
+            mes_num = i + 1  # 1-based
+            # ── PROTEÇÃO: não sobrescreve meses realizados ──
+            if mes_num <= mes_corte:
+                continue
+            acumulado_projetado[i] += float(serie[i])
+
+        # Atualiza contexto com o acumulado mais recente
+        linha["valores"] = _mesclar_realizado_projetado({
+            "realizado": linha.get("realizado", [0.0] * 12),
+            "projetado": acumulado_projetado,
+            "mes_corte": mes_corte,
+        })
         ativos.append(m)
 
     linha["metodologias_aplicadas"] = ativos
-    linha["valores"] = acumulado
+    linha["projetado"] = acumulado_projetado
+    linha["valores"] = _mesclar_realizado_projetado(linha)
+
     if ativos:
         nomes = [m.get("nome", "") for m in ativos if m.get("nome")]
         linha["metodologia"] = {
@@ -1276,12 +1373,13 @@ def _remover_metodologia_especifica_da_linha(dre_dados: dict, codigo: str, met_n
     linha["metodologia"] = None
 
     if not filtradas:
-        # Sem metodologias: restaurar valores_base diretamente sem chamar _recalcular
+        # Sem metodologias: restaurar projetado ao baseline e recalcular merge
         base = linha.get("valores_base")
         if isinstance(base, list) and len(base) >= 12:
-            linha["valores"] = [float(v) for v in base[:12]]
+            linha["projetado"] = [float(v) for v in base[:12]]
         else:
-            linha["valores"] = [0.0] * 12
+            linha["projetado"] = [0.0] * 12
+        linha["valores"] = _mesclar_realizado_projetado(linha)
     else:
         _recalcular_linha_por_metodologias(dre_dados, codigo)
 
@@ -1368,61 +1466,107 @@ def _diagnosticar_formula_sem_efeito(formula: str, dre_dados: dict) -> str:
 
 def salvar_dre_usuario():
     """
-    Salva dados da DRE para o usuário atual no session_state.
-    Isso permite que os dados persistam entre navegações de página.
+    Salva dados da DRE para o usuário atual.
+    - session_state: para acesso rápido na sessão
+    - JSON em backend/database/simulacoes/: para persistência entre sessões
     """
     usuario = st.session_state.get("usuario", "anonimo")
+    usuario_id = st.session_state.get("usuario_id", usuario)
     filtros = st.session_state.get("dre_filtros", {})
+    ano = st.session_state.get("dre_ano_filter", 2026)
     dre_dados = st.session_state.get("dre_dados", {})
     dre_metodologias = st.session_state.get("dre_metodologias", {})
-    
-    # Cria chave única para esta combinação cliente/categoria/produto
-    combo_key = f"{filtros.get('cliente', 'Todos')}::{filtros.get('categoria', '')}::{filtros.get('produto', '')}"
-    
-    # Inicializa dicionário de DREs salvas se não existir
+
+    combo_key = f"{filtros.get('cliente', 'Todos')}::{filtros.get('categoria', '')}::{filtros.get('produto', '')}::{ano}"
+
+    # ── Persistência em session_state (acesso rápido) ───────────────────────
     if "dre_salvas" not in st.session_state:
         st.session_state.dre_salvas = {}
-    
     if usuario not in st.session_state.dre_salvas:
         st.session_state.dre_salvas[usuario] = {}
-    
-    # Salva dados da DRE
     st.session_state.dre_salvas[usuario][combo_key] = {
         "cliente": filtros.get("cliente", "Todos"),
         "categoria": filtros.get("categoria", ""),
         "produto": filtros.get("produto", ""),
+        "ano": ano,
         "dre_dados": dre_dados,
         "dre_metodologias": dre_metodologias,
         "data_salvo": datetime.now().isoformat(),
     }
-    
+
+    # ── Persistência JSON no backend (sobrevive a restart) ──────────────────
+    if _DRE_BACKEND_OK:
+        projecoes = {}
+        for codigo, ln in dre_dados.items():
+            projetado = ln.get("projetado")
+            if isinstance(projetado, list) and len(projetado) >= 12:
+                projecoes[codigo] = [float(v) for v in projetado[:12]]
+        try:
+            ok, msg = _salvar_simulacao_dre_backend(usuario_id, combo_key, projecoes, dre_metodologias)
+            if ok:
+                _log_dre(f"[DRE] Persistida no JSON backend: {combo_key}")
+            else:
+                _log_dre(f"[DRE] Falha no backend: {msg}")
+        except Exception as e:
+            _log_dre(f"[DRE] Exceção ao persistir no backend: {e}")
+
     _log_dre(f"[DRE] Salva para usuário {usuario}: {combo_key}")
-    st.success(f" DRE salva com sucesso para {filtros.get('produto', 'Sem produto')}!")
+    st.success(f"DRE salva com sucesso para {filtros.get('produto', 'escopo atual')}!")
+
+
+def _carregar_simulacao_dre_usuario(combo_key: str):
+    """Carrega projeções e metodologias persistidas do backend para o escopo dado.
+    
+    Aplica sobre as linhas já inicializadas com realizados:
+    - projetado[12] é restaurado a partir do JSON
+    - metodologias são restauradas para o session_state
+    - valores[12] é recalculado (merge)
+    """
+    if not _DRE_BACKEND_OK:
+        return
+
+    usuario_id = st.session_state.get("usuario_id", st.session_state.get("usuario", "anonimo"))
+    try:
+        escopo = _carregar_simulacao_dre_backend(usuario_id, combo_key)
+    except Exception as e:
+        _log_dre(f"[DRE] Exceção ao carregar simulação DRE: {e}")
+        return
+
+    if not escopo:
+        return
+
+    projecoes_salvas = escopo.get("projecoes", {})
+    metodologias_salvas = escopo.get("metodologias", {})
+
+    dre_dados = st.session_state.get("dre_dados", {})
+    for codigo, projetado_salvo in projecoes_salvas.items():
+        if codigo not in dre_dados:
+            continue
+        ln = dre_dados[codigo]
+        if isinstance(projetado_salvo, list) and len(projetado_salvo) >= 12:
+            ln["projetado"] = [float(v) for v in projetado_salvo[:12]]
+            ln["valores_base"] = list(ln["projetado"])
+            ln["valores"] = _mesclar_realizado_projetado(ln)
+
+    if metodologias_salvas:
+        st.session_state["dre_metodologias"] = metodologias_salvas
+
+    st.session_state["dre_dados"] = dre_dados
+    _log_dre(f"[DRE] Simulação restaurada do backend: {combo_key}")
 
 
 def carregar_dre_usuario(cliente: str, categoria: str, produto: str):
-    """
-    Carrega dados da DRE do usuário se existirem para esta combinação.
-    
-    Args:
-        cliente, categoria, produto: Filtros para localizar a DRE
-        
-    Returns:
-        Dicionário com dre_dados e dre_metodologias, ou None
-    """
+    """Carrega dados da DRE do session_state para esta combinação (legado)."""
     usuario = st.session_state.get("usuario", "anonimo")
     combo_key = f"{cliente}::{categoria}::{produto}"
-    
     try:
         dre_salvas = st.session_state.get("dre_salvas", {}).get(usuario, {})
-        dre_salva = dre_salvas.get(combo_key, None)
-        
+        dre_salva = dre_salvas.get(combo_key)
         if dre_salva:
             _log_dre(f"[DRE] Carregada para usuário {usuario}: {combo_key}")
-            return dre_salva
         else:
             _log_dre(f"[DRE] Nenhuma DRE salva para: {combo_key}")
-            return None
+        return dre_salva
     except Exception as e:
         _log_dre(f"[DRE] Erro ao carregar: {e}")
         return None
@@ -2006,15 +2150,30 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
                     met_col_html = f'<span class="dre-met-tag">{nome_txt}</span>'
         html_table += f'<td class="met-col">{met_col_html}</td>'
         
-        # Valores dos meses
+        # Valores dos meses — realizado = cinza/bloqueado, projetado = editável
+        ln_dados = dre_dados.get(codigo, {})
+        mes_corte_linha = int(ln_dados.get("mes_corte", 0))
         for mes_idx in range(12):
             valor = valores[mes_idx]
             valor_formatado = _fmt_dre_valor(valor)
-            if tipo == "variavel" and not modo_viz:
+            mes_num = mes_idx + 1  # 1-based
+            eh_realizado = tipo == "variavel" and mes_num <= mes_corte_linha
+
+            if eh_realizado:
+                # Mês realizado: cinza, bloqueado, badge "R"
+                html_table += (
+                    f'<td class="mes-col" '
+                    f'style="background:#f1f5f9;color:#64748b;" '
+                    f'title="Realizado — não editável">'
+                    f'{valor_formatado}'
+                    f'<sup style="color:#94a3b8;font-size:8px;margin-left:2px;">R</sup>'
+                    f'</td>'
+                )
+            elif tipo == "variavel" and not modo_viz:
                 html_table += (
                     f'<td class="mes-col dre-cell-editable" '
                     f'ondblclick="dreSelectCell(\'{codigo}\',{mes_idx+1})" '
-                    f'title="Duplo clique para aplicar metodologia nesta célula">{valor_formatado}</td>'
+                    f'title="Projetado — duplo clique para aplicar metodologia">{valor_formatado}</td>'
                 )
             else:
                 html_table += f'<td class="mes-col">{valor_formatado}</td>'
@@ -2229,59 +2388,6 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
                     if erros:
                         st.error(" | ".join(erros))
 
-        with st.container(border=True):
-            st.markdown("#### 🧩 Aplicar por célula")
-            st.caption("Fluxo equivalente ao duplo clique: selecione célula alvo e aplique a metodologia para célula/faixa.")
-            variaveis_editaveis = [ln.codigo for ln in ESTRUTURA_DRE if ln.tipo == "variavel"]
-            col_c1, col_c2, col_c3 = st.columns([1.2, 1, 1.4])
-            with col_c1:
-                cel_linha = st.selectbox("Linha (TD)", variaveis_editaveis, key="met_cell_linha")
-            with col_c2:
-                cel_mes = st.selectbox("Mês base", options=list(range(1, 13)), format_func=lambda m: MESES_ABR_LIST[m-1], key="met_cell_mes")
-            with col_c3:
-                mets_celula = {
-                    nome: dados for nome, dados in st.session_state.get("dre_metodologias", {}).items()
-                    if cel_linha in dados.get("aplicavel_a", [])
-                }
-                met_celula = st.selectbox("Metodologia", ["Nenhuma"] + list(mets_celula.keys()), key="met_cell_nome")
-
-            col_c4, col_c5, col_c6 = st.columns([1.2, 1, 1])
-            with col_c4:
-                modo_cell = st.selectbox("Aplicação", ["Somente célula", "Da célula até Dez", "Intervalo"], key="met_cell_modo")
-            with col_c5:
-                cell_ini = st.selectbox("Início", options=list(range(1, 13)), format_func=lambda m: MESES_ABR_LIST[m-1], key="met_cell_ini")
-            with col_c6:
-                cell_fim = st.selectbox("Fim", options=list(range(1, 13)), format_func=lambda m: MESES_ABR_LIST[m-1], key="met_cell_fim")
-
-            if st.button("Aplicar na célula/faixa", key="btn_met_cell_apply", use_container_width=True):
-                if met_celula == "Nenhuma":
-                    st.error("Selecione uma metodologia para aplicar.")
-                else:
-                    if modo_cell == "Somente célula":
-                        ini, fim = cel_mes, cel_mes
-                    elif modo_cell == "Da célula até Dez":
-                        ini, fim = cel_mes, 12
-                    else:
-                        ini, fim = cell_ini, cell_fim
-
-                    ok, msg, alterou = _aplicar_metodologia_em_linha(
-                        dre_dados,
-                        cel_linha,
-                        met_celula,
-                        mets_celula[met_celula],
-                        modo_periodo="Intervalo" if ini != 1 or fim != 12 else "Todos",
-                        mes_inicio=ini,
-                        mes_fim=fim,
-                    )
-                    if ok:
-                        if alterou:
-                            st.success(f"{msg} Faixa aplicada: {MESES_ABR_LIST[ini-1]} a {MESES_ABR_LIST[fim-1]}.")
-                        else:
-                            st.warning("Aplicação concluída, porém sem mudança visível de valores na faixa.")
-                        st.rerun()
-                    else:
-                        st.error(msg)
-        
     st.session_state.dre_dados = dre_dados
     _calcular_totalizadores()
     _persistir_linhas_dre()
@@ -2364,16 +2470,6 @@ def renderizar():
     # Carregar dados para filtros
     df_upload = get_dados_upload()
 
-    if df_upload is not None and not df_upload.empty:
-        tem_tip_td = "TIP_TD" in df_upload.columns
-        tem_comp_dre = "CD_CPNT_RSTD" in df_upload.columns
-        if not (tem_tip_td and tem_comp_dre):
-            st.warning(
-                "Base carregada sem todas as colunas da DRE realizada (TIP_TD/CD_CPNT_RSTD). "
-                "Nesse cenário, parte dos valores pode aparecer zerada. "
-                "Faça upload de um workbook contendo DADOS + TD_DRE."
-            )
-    
     col_cli, col_cat, col_prod, col_ano, col_modo, col_btn = st.columns([1.2, 1.2, 1.5, 1, 1, 1])
     
     # Cliente
@@ -2495,9 +2591,13 @@ def renderizar():
             # Corrige sessões antigas persistidas com zeros antes da leitura correta da TD_DRE.
             if _linhas_variaveis_estao_zeradas():
                 _carregar_realizados_dre_linhas(cliente_sel, categoria_sel, produto_sel, ano_sel)
+                # Após carregar realizados, overlay da simulação persistida no backend
+                _carregar_simulacao_dre_usuario(combo_filtro_atual)
         else:
             # Primeiro acesso a este filtro: inicializa DRE com realizados da base.
             _carregar_realizados_dre_linhas(cliente_sel, categoria_sel, produto_sel, ano_sel)
+            # Overlay da simulação persistida (se houver) — preserva projetado salvo
+            _carregar_simulacao_dre_usuario(combo_filtro_atual)
         
         # ===== ARMAZENAR NOVA CHAVE DE FILTRO =====
         st.session_state.dre_combo_filtro_anterior = combo_filtro_atual

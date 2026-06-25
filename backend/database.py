@@ -1243,6 +1243,100 @@ def agregar_indice_para_12_meses(
         return None
 
 
+# ============================================================================
+# PERSISTÊNCIA DE SIMULAÇÕES DRE POR USUÁRIO
+# ============================================================================
+
+def _caminho_simulacao_dre(usuario_id: str) -> Path:
+    """Retorna o caminho do arquivo JSON de simulação DRE do usuário."""
+    return SIMULACOES_DIR / f"dre_{usuario_id}_simulacao.json"
+
+
+def salvar_simulacao_dre(
+    usuario_id: str,
+    combo_key: str,
+    projecoes: Dict[str, list],
+    metodologias: Dict[str, dict],
+) -> Tuple[bool, str]:
+    """
+    Persiste os valores projetados e metodologias da DRE por usuário + escopo de filtro.
+
+    Args:
+        usuario_id: ID do usuário
+        combo_key: Chave de escopo ("cliente::categoria::produto::ano")
+        projecoes: {codigo_td: [v1..v12]} — apenas valores projetados (pós-corte)
+        metodologias: dre_metodologias do session_state
+
+    Returns:
+        (sucesso, mensagem)
+    """
+    try:
+        arquivo = _caminho_simulacao_dre(usuario_id)
+
+        dados_existentes: dict = {}
+        if arquivo.exists():
+            with open(arquivo, "r", encoding="utf-8") as f:
+                dados_existentes = json.load(f)
+
+        dados_existentes.setdefault("escopos", {})
+        dados_existentes["escopos"][combo_key] = {
+            "projecoes": projecoes,
+            "metodologias": metodologias,
+            "salvo_em": datetime.now().isoformat(),
+        }
+        dados_existentes["usuario_id"] = usuario_id
+        dados_existentes["ultima_atualizacao"] = datetime.now().isoformat()
+
+        with open(arquivo, "w", encoding="utf-8") as f:
+            json.dump(dados_existentes, f, indent=2, ensure_ascii=False)
+
+        print(f"[DB-DRE] Simulação salva: {usuario_id} / {combo_key}")
+        return True, "Simulação DRE salva com sucesso."
+    except Exception as e:
+        print(f"[DB-DRE] Erro ao salvar simulação DRE: {e}")
+        return False, f"Erro ao salvar: {str(e)}"
+
+
+def carregar_simulacao_dre(
+    usuario_id: str,
+    combo_key: str,
+) -> Optional[Dict]:
+    """
+    Carrega os valores projetados e metodologias da DRE para um escopo específico.
+
+    Returns:
+        {"projecoes": {...}, "metodologias": {...}} ou None se não existir
+    """
+    try:
+        arquivo = _caminho_simulacao_dre(usuario_id)
+        if not arquivo.exists():
+            return None
+
+        with open(arquivo, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+
+        escopo = dados.get("escopos", {}).get(combo_key)
+        if escopo:
+            print(f"[DB-DRE] Simulação carregada: {usuario_id} / {combo_key}")
+        return escopo
+    except Exception as e:
+        print(f"[DB-DRE] Erro ao carregar simulação DRE: {e}")
+        return None
+
+
+def listar_escopos_simulacao_dre(usuario_id: str) -> List[str]:
+    """Lista todos os escopos (combo_keys) salvos para um usuário."""
+    try:
+        arquivo = _caminho_simulacao_dre(usuario_id)
+        if not arquivo.exists():
+            return []
+        with open(arquivo, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+        return list(dados.get("escopos", {}).keys())
+    except Exception:
+        return []
+
+
 if __name__ == "__main__":
     # Testes básicos
     inicializar_database()
