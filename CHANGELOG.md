@@ -4,6 +4,50 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
+## 🔧 [v4.0.0] - 2026-06-25 - Sincronização de Filtros, Base DRE Correta e UX DRE
+
+### ✅ CORRIGIDO - DRE zerada (causa raiz: base compartilhada sem TD_DRE)
+- **Arquivos:** `backend/database/uploads/base_dados_compartilhada.xlsx`, `backend/database/metadata/ultimo_upload_dados.json`
+- Base compartilhada ativa substituída pelo workbook completo (`bd_dados_v9.xlsx`) com as 3 abas: `DADOS`, `TD_DRE`, `INDICES_TESOU`
+- Metadados atualizados para refletir `has_td_dre: true` e `abas_disponiveis`
+- Validado recorte PF_VAREJO + CRÉDITO + CONSIGNADO + 2026: 76 linhas, 10 componentes, TD71 com valor real
+
+### ✅ CORRIGIDO - Filtros da sidebar auto-restringindo-se (valores stale)
+- **Arquivo:** `frontend/app.py`
+- A função `_filtrar_df_sidebar()` aplicava filtros com valores de ciclo anterior que não existiam mais no DataFrame atual
+- Corrigido: cada filtro dimensional só é aplicado se o valor existir na coluna correspondente do DataFrame carregado (`_valor_presente()`)
+- Resultado: combos laterais voltam a listar todas as opções reais da base após upload ou troca de filtro
+
+### ✅ CORRIGIDO - Cache da sessão sendo descartado indevidamente
+- **Arquivo:** `frontend/data_manager.py`
+- `get_dados_upload()` descartava o DataFrame em sessão quando ele não continha `CD_CPNT_RSTD` ou `TIP_TD` (colunas da TD_DRE)
+- Corrigido: o cache é aceito como válido se contiver as colunas mínimas `CATEGORIA`, `PRODUTO`, `MES` e `ANO`
+- Resultado: Simulador e filtros da sidebar funcionam corretamente mesmo com bases que têm apenas a guia `DADOS`
+
+### ✅ CORRIGIDO - TD21/TD62 cruzando estado do Simulador
+- **Arquivo:** `frontend/pages/dre.py`
+- A carga dos volumes financeiros usava os filtros de `st.session_state["filtros"]` (do Simulador) em vez dos filtros de `st.session_state["dre_filtros"]` (da DRE)
+- **Regras implementadas:**
+  - `TD21` usa a curva ajustada/simulada (PROJETADO_AJUSTADO) para o recorte filtrado da DRE; fallback por TIP_TD se não houver curva ajustada
+  - `TD62` usa exclusivamente o realizado por `TIP_TD="TD62"` no recorte da DRE
+  - Os dois campos leem filtros de `dre_filtros`, não de `filtros` do Simulador
+
+### ✅ UX - Aviso amarelo removido do topo da DRE
+- **Arquivo:** `frontend/pages/dre.py`
+- Removido bloco de `st.warning` que alertava sobre base sem `TIP_TD/CD_CPNT_RSTD`
+- Com a base correta ativa, o aviso não é mais necessário e gerava ruído visual
+
+### ✅ UX - Seção redundante "Aplicar por célula" removida
+- **Arquivo:** `frontend/pages/dre.py`
+- No modo edição, existiam dois painéis de aplicação de metodologia: "Aplicação rápida" e "Aplicar por célula"
+- Removida a seção "Aplicar por célula" (duplicada funcionalmente), mantida apenas "Aplicação rápida de metodologia"
+
+### ✅ Validação Técnica
+- `python -m py_compile frontend/pages/dre.py frontend/app.py frontend/data_manager.py` ✅
+- Commit: `4045361` na branch `main`
+
+---
+
 ## 🔧 [v3.9.4] - 2026-06-11 - DRE (Exclusão de Metodologia + Formatação Consistente)
 
 ### ✅ CORRIGIDO - Exclusão de metodologia aplicada por linha

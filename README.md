@@ -2,7 +2,7 @@
 
 Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário**, **controle de permissões** e **DRE Gerencial profissional**.
 
-**Versão Atual:** v3.9.4 | **Status:** ✅ Production Ready | **Última Atualização:** 11/06/2026
+**Versão Atual:** v4.0.0 | **Status:** ✅ Production Ready | **Última Atualização:** 25/06/2026
 
 ---
 
@@ -43,6 +43,14 @@ QUANDO PRESO EM LOOP (3+ tentativas falhadas):
 ---
 
 ## 📌 O que foi implementado
+
+### ✅ [v4.0.0] - Sincronização de Filtros, Base DRE Correta e UX DRE
+- **Base DRE correta ativa:** base compartilhada substituída pelo workbook completo (`bd_dados_v9.xlsx`) com `DADOS` + `TD_DRE` + `INDICES_TESOU`; DRE deixou de zerar nas linhas TD71/TD72 e demais componentes
+- **Filtros da sidebar corrigidos:** opções de Cliente/Categoria/Produto/TipTD agora listam todos os valores reais da base, sem auto-restrição por valores de ciclos anteriores
+- **Cache de sessão preservado:** `get_dados_upload()` não descarta mais o DataFrame em memória quando ele vem só da guia `DADOS` (Simulador e filtros funcionam sem exigir TD_DRE)
+- **TD21/TD62 isolados:** TD21 segue a curva ajustada/simulada (sem cruzar com filtros do Simulador); TD62 usa realizado por TIP_TD no recorte da DRE
+- **Aviso amarelo removido** do topo da DRE (não é mais necessário com base correta)
+- **Seção duplicada removida** no modo edição: mantida apenas "Aplicação rápida de metodologia"; removida "Aplicar por célula"
 
 ### ✅ [v3.9.4] - DRE (Exclusão de Metodologia + Formatação Consistente)
 - Exclusão de metodologia aplicada por linha com confirmação via modal (`st.dialog`)
@@ -509,6 +517,6 @@ Para questões ou problemas:
 
 ---
 
-**Última atualização:** 02/06/2026 | **Versão:** v3.1 | **Status:** ✅ Production Ready
+**Última atualização:** 25/06/2026 | **Versão:** v4.0.0 | **Status:** ✅ Production Ready
 
 Mantém este README como documentação única e oficial. Para histórico detalhado, consulte [CHANGELOG.md](CHANGELOG.md).

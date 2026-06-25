@@ -20,6 +20,12 @@ Escopo principal:
 - Filtros de escopo DRE: st.session_state["dre_filtros"]
 - Persistência da grade DRE (atual): sessão atual (session_state), sem restore em arquivo após restart
 
+### Regra de fonte da DRE (CRÍTICO)
+- A DRE realizada exige a guia `TD_DRE` com a coluna `CD_CPNT_RSTD`; sem ela, TD71/TD72 e demais componentes ficam zero.
+- `_filtrar_base_dre()` chama `carregar_base_dados_compartilhada()` diretamente (não `get_dados_upload()`), pois a base compartilhada pode conter TD_DRE enquanto o cache de sessão tem apenas DADOS.
+- A base ativa está em `backend/database/uploads/base_dados_compartilhada.xlsx`; deve ter as 3 abas: `DADOS`, `TD_DRE`, `INDICES_TESOU`.
+- Se a DRE estiver zerada: verificar `backend/database/metadata/ultimo_upload_dados.json` → campo `has_td_dre`; se `false` ou ausente, fazer upload do workbook completo.
+
 ### 2) Contexto de fórmula
 Funções centrais:
 - _obter_contexto_formula(dre_dados)
@@ -108,7 +114,7 @@ Regras atuais:
 ### Modo edição
 - st.data_editor para edição de valores mensais
 - Totalizadores não são editáveis
-- Aplicação por célula/faixa é feita por painel auxiliar (limitação de eventos de célula no data_editor)
+- **Painel de metodologia único:** "Aplicação rápida de metodologia" (único painel no modo edição); a seção "Aplicar por célula" foi removida por ser redundante
 
 ## Encadeamento de metodologias
 
@@ -157,6 +163,21 @@ METODOLOGIA_BASE = SOMA(TD71;TD72)   → apply first
   - renomeação troca apenas a entrada correspondente na pilha;
   - a linha é recalculada em seguida.
 
+## Volumes financeiros TD21 e TD62 (regras atuais)
+
+### TD21 — MSD Curva Ajustada (Faturamento)
+- Fonte preferencial: `PROJETADO_AJUSTADO` no recorte da DRE via `_carregar_ajustada_produto()`
+- Fallback: realizado por `TIP_TD="TD21"` se não houver curva ajustada persistida
+- Filtros lidos de `st.session_state["dre_filtros"]` (NUNCA de `st.session_state["filtros"]` do Simulador)
+
+### TD62 — Componente TD62
+- Fonte: realizado por `TIP_TD="TD62"` no recorte da DRE
+- Não segue curva ajustada; mantém realizado independentemente
+
+### Isolamento DRE x Simulador
+- `_carregar_td21_volumes()` usa `dre_filtros` como contexto; nunca usa `filtros` (sidebar do Simulador)
+- Evita cruzamento de estado entre as duas páginas
+
 ## Limitações conhecidas e decisões
 - st.data_editor não expõe evento robusto de duplo clique por célula
 - Para fluxo por célula, usar painel auxiliar com TD/mês base e aplicação por faixa
@@ -174,6 +195,13 @@ Checklist:
 3. Confirmar linha destino aplicada
 4. Confirmar período (Todos vs Intervalo)
 5. Reaplicar e conferir coluna Metodologia na linha destino
+
+### Sintoma: DRE inteiramente zerada (TD71, TD72, etc.)
+Checklist:
+1. Abrir `backend/database/metadata/ultimo_upload_dados.json` → verificar `has_td_dre`
+2. Se `false` ou coluna ausente: a base ativa não tem `TD_DRE` → fazer upload do workbook completo na página Upload
+3. A base compartilhada correta deve ter abas `DADOS`, `TD_DRE` e `INDICES_TESOU`
+4. Após upload, reiniciar sessão (logout/login) para limpar cache
 
 ### Sintoma: aplicação sem efeito
 Checklist:
