@@ -26,7 +26,8 @@ from typing import Union, Dict, List
 from utils_ext.css import make_stylesheet
 from utils_ext.formatters import fmt_br
 from utils_ext.series import (
-    _norm_txt, _mes_to_num, _variacao_mensal, _ensure_cli_n
+    _norm_txt, _mes_to_num, _variacao_mensal, _ensure_cli_n, _ensure_normalized_columns,
+    _normalizar_codigo_produto, _extrair_descricao_produto, _normalizar_tokens_produto, _produto_eh_equivalente
 )
 from utils_ext.constants import (
     MESES_FULL, MESES_NUM, MESES_ABR, MESES_ABR_LIST, COR_ANALITICA, COR_MERCADO, 
@@ -42,8 +43,9 @@ from utils_ext.icons import get_icon, render_icon_header, render_section_divider
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_manager import (
     get_dados_upload,
-    carregar_base_dados_compartilhada,
     carregar_curva_ajustada,
+    get_base_dre_ativa,
+    get_origem_base_dre_ativa,
     init_data_state,
 )
 from services.aggregations import _carregar_ajustada_produto
@@ -727,14 +729,13 @@ def _filtrar_base_dre(
     ano: int = 2026,
 ) -> pd.DataFrame:
     """Aplica recorte de filtros da DRE na base carregada via upload."""
-    # A DRE precisa da base completa (DADOS + TD_DRE). O cache global pode estar apenas com DADOS.
-    df_upload = carregar_base_dados_compartilhada()
-    if df_upload is None or df_upload.empty:
-        df_upload = get_dados_upload()
+    # A DRE deve usar a mesma base ativa exibida ao usuario: upload atual da sessao
+    # quando existir; caso contrario, a base compartilhada real (nao a personalizada).
+    df_upload = get_base_dre_ativa()
     if df_upload is None or df_upload.empty:
         return pd.DataFrame()
 
-    dff = _ensure_cli_n(df_upload)
+    dff = _ensure_normalized_columns(df_upload)
 
     def _serie_coluna(coluna: str, default=np.nan) -> pd.Series:
         if coluna in dff.columns:
@@ -808,6 +809,41 @@ def _extrair_descricao_produto(valor: str) -> str:
     return _norm_txt(texto)
 
 
+def _normalizar_tokens_produto(texto: str) -> set:
+    if not texto:
+        return set()
+
+    tokens = set(re.findall(r"[a-z0-9]+", _norm_txt(texto)))
+    norm_tokens = set()
+    for token in tokens:
+        token_norm = token
+        # Regras de plural em português
+        if len(token_norm) > 4 and token_norm.endswith("ais"):
+            # especial → especiais: troca "ais" por "al"
+            token_norm = token_norm[:-3] + "al"
+        elif len(token_norm) > 4 and token_norm.endswith("eis"):
+            # papel → papeis: troca "eis" por "el"
+            token_norm = token_norm[:-3] + "el"
+        elif len(token_norm) > 4 and token_norm.endswith("ois"):
+            # caracol → caracois: troca "ois" por "ol"
+            token_norm = token_norm[:-3] + "ol"
+        elif len(token_norm) > 4 and token_norm.endswith("uis"):
+            # azul → azuis: troca "uis" por "ul"
+            token_norm = token_norm[:-3] + "ul"
+        elif len(token_norm) > 4 and token_norm.endswith("es"):
+            # Para palavras como "cheques", remover apenas o "s" (não os dois caracteres)
+            # Checa se a letra antes do "e" é uma vogal
+            vogais = {"a", "e", "i", "o", "u"}
+            if len(token_norm) >= 3 and token_norm[-3] in vogais:
+                token_norm = token_norm[:-1]
+            else:
+                token_norm = token_norm[:-2]
+        elif len(token_norm) > 3 and token_norm.endswith("s"):
+            token_norm = token_norm[:-1]
+        norm_tokens.add(token_norm)
+    return norm_tokens
+
+
 def _produto_eh_equivalente(valor_base: str, valor_filtro: str) -> bool:
     if not valor_base or not valor_filtro:
         return False
@@ -826,7 +862,21 @@ def _produto_eh_equivalente(valor_base: str, valor_filtro: str) -> bool:
     ):
         return True
 
-    return _extrair_descricao_produto(valor_base) == _extrair_descricao_produto(valor_filtro)
+    base_desc = _extrair_descricao_produto(valor_base)
+    filtro_desc = _extrair_descricao_produto(valor_filtro)
+    if base_desc and filtro_desc:
+        if base_desc == filtro_desc:
+            return True
+
+        base_tokens = _normalizar_tokens_produto(base_desc)
+        filtro_tokens = _normalizar_tokens_produto(filtro_desc)
+        if base_tokens and filtro_tokens:
+            if base_tokens == filtro_tokens:
+                return True
+            if base_tokens.issubset(filtro_tokens) or filtro_tokens.issubset(base_tokens):
+                return True
+
+    return False
 
 
 def _selecionar_opcao_equivalente(opcoes: list, valor_atual: str) -> int:
@@ -853,7 +903,12 @@ def _serie_realizada_por_codigo(dff: pd.DataFrame, codigo: str) -> list:
     if not col_valor:
         return [0.0] * 12
 
-    df_comp = dff[dff[col_comp].astype(str).str.upper() == str(codigo).upper()]
+    # Filtra apenas linhas com componente (exclui linhas da guia DADOS sem componente)
+    dff_com_componente = dff[dff[col_comp].notna()]
+    df_comp = dff_com_componente[dff_com_componente[col_comp].astype(str).str.upper() == str(codigo).upper()]
+    # Filtra linhas com valor zero (provavelmente duplicatas da guia DADOS)
+    df_comp = df_comp[df_comp[col_valor].notna() & (df_comp[col_valor] != 0)]
+    
     if df_comp.empty:
         return [0.0] * 12
 
@@ -2214,7 +2269,8 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
                     linhas_com_met.append((_cod, _dados.get("descricao", ""), list(_mets_lista)))
 
         if linhas_com_met:
-            with st.expander("🗑️ Remover metodologia aplicada", expanded=False):
+            with st.container(border=True):
+                st.markdown("#### 🗑️ Remover metodologia aplicada")
                 for _cod, _desc, _mets in linhas_com_met:
                     for _m in _mets:
                         _c1, _c2 = st.columns([5, 1])
@@ -2467,10 +2523,16 @@ def renderizar():
     )
     
     # ===== FILTROS (Cliente, Categoria, Produto) =====
-    # Carregar dados para filtros
-    df_upload = get_dados_upload()
+    # Carregar dados para filtros a partir da mesma fonte usada nos realizados da DRE.
+    df_upload = get_base_dre_ativa()
+    origem_base_dre = get_origem_base_dre_ativa()
 
     col_cli, col_cat, col_prod, col_ano, col_modo, col_btn = st.columns([1.2, 1.2, 1.5, 1, 1, 1])
+
+    if origem_base_dre.startswith("upload_session:"):
+        st.caption(f"Base ativa da DRE: upload atual da sessao ({origem_base_dre.split(':', 1)[1]}).")
+    else:
+        st.caption("Base ativa da DRE: base compartilhada salva no sistema.")
     
     # Cliente
     with col_cli:
@@ -2574,37 +2636,25 @@ def renderizar():
         if st.button("Salvar", use_container_width=True, type="primary"):
             salvar_dre_usuario()
     
+    # Botão para Recarregar Base TD_DRE (força atualização)
+    with col_btn:
+        if st.button("🔄 Recarregar Base", use_container_width=True):
+            # Limpar cache persistido para forçar recarregamento completo
+            st.session_state.dre_dados_persistidos = {}
+            st.session_state.dre_combo_filtro_anterior = ""
+            st.rerun()
+    
     # ===== DETECTAR MUDANÇA DE FILTRO E PERSISTIR DADOS =====
     # Criar chave única para a combinação atual de filtros
     combo_filtro_atual = f"{cliente_sel}::{categoria_sel}::{produto_sel}::{ano_sel}"
     combo_filtro_anterior = st.session_state.get("dre_combo_filtro_anterior", "")
     
-    if combo_filtro_atual != combo_filtro_anterior:
-        # print(f"[DRE] Mudanca de filtro detectada")  # Removed emoji for Windows encoding
-        
-        # ===== ETAPA 1: SALVAR DADOS DO FILTRO ANTERIOR =====
-        if combo_filtro_anterior:  # Se não é a primeira inicialização
-            _persistir_linhas_dre(combo_filtro_anterior)
-        
-        # ===== ETAPA 2: CARREGAR OU INICIALIZAR DADOS DO NOVO FILTRO =====
-        if _restaurar_linhas_dre(combo_filtro_atual):
-            # Corrige sessões antigas persistidas com zeros antes da leitura correta da TD_DRE.
-            if _linhas_variaveis_estao_zeradas():
-                _carregar_realizados_dre_linhas(cliente_sel, categoria_sel, produto_sel, ano_sel)
-                # Após carregar realizados, overlay da simulação persistida no backend
-                _carregar_simulacao_dre_usuario(combo_filtro_atual)
-        else:
-            # Primeiro acesso a este filtro: inicializa DRE com realizados da base.
-            _carregar_realizados_dre_linhas(cliente_sel, categoria_sel, produto_sel, ano_sel)
-            # Overlay da simulação persistida (se houver) — preserva projetado salvo
-            _carregar_simulacao_dre_usuario(combo_filtro_atual)
-        
-        # ===== ARMAZENAR NOVA CHAVE DE FILTRO =====
-        st.session_state.dre_combo_filtro_anterior = combo_filtro_atual
-
-    # Recuperação defensiva: sessões antigas podem manter o combo atual todo zerado.
-    if _linhas_variaveis_estao_zeradas():
-        _carregar_realizados_dre_linhas(cliente_sel, categoria_sel, produto_sel, ano_sel)
+    # Sempre recarregar realizados da TD_DRE para garantir dados atualizados
+    _carregar_realizados_dre_linhas(cliente_sel, categoria_sel, produto_sel, ano_sel)
+    _carregar_simulacao_dre_usuario(combo_filtro_atual)
+    
+    # Atualizar chave de filtro anterior
+    st.session_state.dre_combo_filtro_anterior = combo_filtro_atual
     
     # Sincronizar volumes com filtros atuais.
     _carregar_td21_volumes(cliente_sel, categoria_sel, produto_sel, ano_sel)

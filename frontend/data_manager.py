@@ -22,6 +22,7 @@ try:
         listar_produtos,
         get_produto_projection
     )
+    from utils_ext.series import _ensure_normalized_columns
 except ImportError:
     print("[DATA_MANAGER] ⚠️  database_schema não disponível ainda")
 
@@ -34,6 +35,10 @@ def init_data_state():
         st.session_state.dados_upload = None
     if "dados_upload_original" not in st.session_state:
         st.session_state.dados_upload_original = None  # Backup do upload original
+    if "dre_base_upload" not in st.session_state:
+        st.session_state.dre_base_upload = None
+    if "dre_base_origem" not in st.session_state:
+        st.session_state.dre_base_origem = ""
     if "simulacoes" not in st.session_state:
         st.session_state.simulacoes = []
     if "simulacoes_salvas" not in st.session_state:
@@ -157,6 +162,8 @@ def resetar_tudo():
     st.session_state.filtros = {}
     st.session_state.curva_analitica = []
     st.session_state.curva_mercado = []
+    st.session_state.dre_base_upload = None
+    st.session_state.dre_base_origem = ""
     # Flag para limpar localStorage no próximo render
     st.session_state._limpar_localStorage = True
 
@@ -184,6 +191,55 @@ def set_dados_upload(df):
     atualizar_metricas_dashboard()
 
 
+def set_base_dre_upload(df, origem: str = "upload_local"):
+    """Armazena a base combinada da DRE (DADOS + TD_DRE) para a sessao atual."""
+    if df is None or getattr(df, "empty", True):
+        st.session_state.dre_base_upload = None
+        st.session_state.dre_base_origem = ""
+        return
+
+    df_norm = _ensure_normalized_columns(df.copy())
+    st.session_state.dre_base_upload = df_norm
+    st.session_state.dre_base_origem = origem
+
+
+def limpar_base_dre_upload():
+    """Remove a base temporaria da DRE carregada na sessao atual."""
+    st.session_state.dre_base_upload = None
+    st.session_state.dre_base_origem = ""
+
+
+def get_base_dre_ativa():
+    """Retorna a base ativa da DRE priorizando upload atual da sessao e base compartilhada real.
+
+    Importante: a DRE nao deve depender da base personalizada do usuario, pois os
+    realizados (TD_DRE) precisam refletir a base compartilhada ou o workbook recem-enviado.
+    """
+    df_sessao = st.session_state.get("dre_base_upload")
+    if df_sessao is not None and not df_sessao.empty:
+        return _ensure_normalized_columns(df_sessao)
+
+    try:
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+        from database import carregar_base_dados_compartilhada as db_carregar_compartilhada
+
+        df_compartilhada = db_carregar_compartilhada()
+        if df_compartilhada is not None and not df_compartilhada.empty:
+            return _ensure_normalized_columns(df_compartilhada)
+    except Exception as e:
+        print(f"[DATA_MANAGER] Erro ao carregar base ativa da DRE: {e}")
+
+    return None
+
+
+def get_origem_base_dre_ativa() -> str:
+    """Informa a origem da base ativa da DRE para feedback ao usuario."""
+    if st.session_state.get("dre_base_upload") is not None:
+        return st.session_state.get("dre_base_origem", "upload_local")
+    return "base_compartilhada"
+
+
 def get_dados_upload():
     """
     Recupera dados do upload (com curvas ajustadas aplicadas).
@@ -196,11 +252,14 @@ def get_dados_upload():
         # para filtros da sidebar, Simulador e volumes financeiros).
         colunas_minimas = {"CATEGORIA", "PRODUTO", "MES", "ANO"}
         if colunas_minimas.issubset(df_cache.columns):
+            df_cache = _ensure_normalized_columns(df_cache)
+            st.session_state.dados_upload = df_cache
             return df_cache
     
     # Senão, tenta carregar da base compartilhada
     df_compartilhada = carregar_base_dados_compartilhada()
     if df_compartilhada is not None and not df_compartilhada.empty:
+        df_compartilhada = _ensure_normalized_columns(df_compartilhada)
         # Cache no session_state
         st.session_state.dados_upload = df_compartilhada
         st.session_state.dados_upload_original = df_compartilhada.copy()
@@ -869,6 +928,8 @@ def salvar_upload_admin(arquivo_bytes: bytes, nome_arquivo: str, usuario_id: str
                 # Invalida cache do session_state
                 st.session_state.dados_upload = None
                 st.session_state.dados_upload_original = None
+                st.session_state.dre_base_upload = None
+                st.session_state.dre_base_origem = "base_compartilhada"
                 st.session_state._curvas_aplicadas_sessao = False
                 
                 # NOVO: Flag para invalidar bases personalizadas dos usuarios

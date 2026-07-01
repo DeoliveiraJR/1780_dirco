@@ -8,6 +8,7 @@ Gerencia persistência de dados em arquivos para simular um banco de dados
 
 import os
 import json
+import unicodedata
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -33,7 +34,9 @@ INDICES_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _carregar_dataframe_excel_combinado(caminho_arquivo: Path) -> Optional[pd.DataFrame]:
-    """Carrega DADOS e TD_DRE do workbook quando existirem, preservando o recorte completo."""
+    """Carrega DADOS e TD_DRE do workbook quando existirem, preservando o recorte completo.
+    Se houver TD_DRE, usa suas linhas para componentes de DRE (evita duplicatas com valores 0).
+    """
     if not caminho_arquivo.exists():
         return None
 
@@ -49,20 +52,159 @@ def _carregar_dataframe_excel_combinado(caminho_arquivo: Path) -> Optional[pd.Da
         return next(iter(abas.values()))
 
     nomes_por_aba = {str(nome).strip().upper(): df for nome, df in abas.items() if isinstance(df, pd.DataFrame)}
-    blocos = []
+    
+    tem_dados = "DADOS" in nomes_por_aba
+    tem_td_dre = "TD_DRE" in nomes_por_aba
 
-    if "DADOS" in nomes_por_aba:
-        blocos.append(nomes_por_aba["DADOS"])
-    if "TD_DRE" in nomes_por_aba:
-        blocos.append(nomes_por_aba["TD_DRE"])
+    if not tem_dados and not tem_td_dre:
+        return list(abas.values())[0] if len(abas) >0 else None
 
-    if not blocos:
-        blocos = list(abas.values())
+    if tem_dados and tem_td_dre:
+        # Combina as duas abas, mas evita duplicatas que zeram valores
+        df_dados = nomes_por_aba["DADOS"].copy()
+        df_td_dre = nomes_por_aba["TD_DRE"].copy()
+        
+        # Para DRE, usamos a TD_DRE (que tem os valores de componentes)
+        # para as linhas que tem CD_CPNT_RSTD preenchido
+        return pd.concat([df_dados, df_td_dre], ignore_index=True, sort=False)
+    elif tem_dados:
+        return nomes_por_aba["DADOS"]
+    elif tem_td_dre:
+        return nomes_por_aba["TD_DRE"]
+    else:
+        return list(abas.values())[0]
 
-    if len(blocos) == 1:
-        return blocos[0]
 
-    return pd.concat(blocos, ignore_index=True, sort=False)
+def _normalizar_texto(texto: str) -> str:
+    if texto is None:
+        return ""
+    texto = str(texto).strip().lower()
+    texto = unicodedata.normalize("NFKD", texto)
+    return "".join(ch for ch in texto if not unicodedata.combining(ch))
+
+
+def _mes_to_num(mes) -> int:
+    if pd.isna(mes):
+        return 0
+    texto = str(mes).strip()
+    try:
+        value = int(texto)
+        return value if 1 <= value <= 12 else 0
+    except Exception:
+        pass
+
+    texto = texto.upper()[:3]
+    mapa = {
+        "JAN": 1,
+        "FEV": 2,
+        "MAR": 3,
+        "ABR": 4,
+        "MAI": 5,
+        "JUN": 6,
+        "JUL": 7,
+        "AGO": 8,
+        "SET": 9,
+        "OUT": 10,
+        "NOV": 11,
+        "DEZ": 12,
+    }
+    return mapa.get(texto, 0)
+
+
+def _ensure_normalized_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+
+    dff = df.copy()
+
+    if "CLI_N" not in dff.columns:
+        if "TIPO_CLIENTE" in dff.columns:
+            dff["CLI_N"] = dff["TIPO_CLIENTE"].astype(str).apply(_normalizar_texto)
+        elif "TP_CLIENTE" in dff.columns:
+            dff["CLI_N"] = dff["TP_CLIENTE"].astype(str).apply(_normalizar_texto)
+        else:
+            dff["CLI_N"] = ""
+
+    if "CAT_N" not in dff.columns:
+        dff["CAT_N"] = dff["CATEGORIA"].astype(str).apply(_normalizar_texto) if "CATEGORIA" in dff.columns else ""
+
+    if "PROD_N" not in dff.columns:
+        dff["PROD_N"] = dff["PRODUTO"].astype(str).apply(_normalizar_texto) if "PRODUTO" in dff.columns else ""
+
+    if "MES_N" not in dff.columns:
+        dff["MES_N"] = dff["MES"].astype(str).apply(_normalizar_texto) if "MES" in dff.columns else ""
+
+    if "MES_NUM" not in dff.columns and "MES" in dff.columns:
+        dff["MES_NUM"] = pd.to_datetime(dff["MES"], errors="coerce", dayfirst=True).dt.month.fillna(0).astype(int)
+
+    if "ANO_NUM" not in dff.columns:
+        dff["ANO_NUM"] = pd.to_numeric(dff["ANO"], errors="coerce") if "ANO" in dff.columns else pd.Series([0] * len(dff))
+        if "DATA_COMPLETA" in dff.columns:
+            data_dt = pd.to_datetime(dff["DATA_COMPLETA"], errors="coerce", dayfirst=True)
+            mask = dff["ANO_NUM"].isna() & data_dt.notna()
+            dff.loc[mask, "ANO_NUM"] = data_dt.dt.year[mask]
+        dff["ANO_NUM"] = dff["ANO_NUM"].fillna(0).astype(int)
+
+    if "TIP_TD_N" not in dff.columns and "TIP_TD" in dff.columns:
+        dff["TIP_TD_N"] = dff["TIP_TD"].astype(str).apply(_normalizar_texto)
+
+    if "CD_TIP_AGPD_N" not in dff.columns and "CD_TIP_AGPD" in dff.columns:
+        dff["CD_TIP_AGPD_N"] = dff["CD_TIP_AGPD"].astype(str).apply(_normalizar_texto)
+
+    return dff
+
+
+def _get_shared_cache_path() -> Path:
+    return UPLOADS_DIR / "base_dados_compartilhada.pkl"
+
+
+def _load_df_cache(caminho_cache: Path) -> Optional[pd.DataFrame]:
+    if not caminho_cache.exists():
+        return None
+    try:
+        return pd.read_pickle(caminho_cache)
+    except Exception as e:
+        print(f"[DB] Erro ao carregar cache de base: {e}")
+        return None
+
+
+def _save_df_cache(df: pd.DataFrame, caminho_cache: Path) -> bool:
+    try:
+        df.to_pickle(caminho_cache)
+        return True
+    except Exception as e:
+        print(f"[DB] Erro ao salvar cache de base: {e}")
+        return False
+
+
+def _invalidar_base_cache() -> None:
+    caminho_cache = _get_shared_cache_path()
+    try:
+        if caminho_cache.exists():
+            caminho_cache.unlink()
+            print(f"[DB] Cache da base compartilhada invalidado: {caminho_cache}")
+    except Exception as e:
+        print(f"[DB] Erro ao invalidar cache de base: {e}")
+
+
+def _invalidar_bases_personalizadas() -> None:
+    """Remove cópias personalizadas de base de todos os usuários."""
+    try:
+        for arquivo in UPLOADS_DIR.glob("base_usuario_*.xlsx"):
+            try:
+                arquivo.unlink()
+                print(f"[DB] Base personalizada invalidada: {arquivo}")
+            except Exception as e:
+                print(f"[DB] Erro ao invalidar base personalizada {arquivo}: {e}")
+    except Exception as e:
+        print(f"[DB] Erro ao listar bases personalizadas para invalidar: {e}")
+
+
+def _cache_atual_valido(caminho_origem: Path, caminho_cache: Path) -> bool:
+    try:
+        return caminho_cache.exists() and caminho_origem.exists() and caminho_cache.stat().st_mtime >= caminho_origem.stat().st_mtime
+    except Exception:
+        return False
 
 
 def _carregar_base_original_completa() -> Optional[pd.DataFrame]:
@@ -247,6 +389,14 @@ def salvar_upload_admin(arquivo_excel: bytes, nome_arquivo: str, usuario_id: str
                         f"(sem TD_DRE: a DRE realizada pode ficar zerada)"
                     )
                 print(f"[DB] Dados salvos: {caminho_arquivo_dados}")
+                _invalidar_base_cache()
+                _invalidar_bases_personalizadas()
+                # Salva cache com a base COMBINADA (DADOS + TD_DRE) para a DRE funcionar!
+                df_combinado = _carregar_dataframe_excel_combinado(caminho_arquivo_dados)
+                if df_combinado is not None:
+                    _save_df_cache(_ensure_normalized_columns(df_combinado), _get_shared_cache_path())
+                else:
+                    _save_df_cache(_ensure_normalized_columns(df_dados), _get_shared_cache_path())
                 
             except Exception as e:
                 print(f"[DB]  Erro ao processar dados: {e}")
@@ -351,31 +501,40 @@ def salvar_upload_admin(arquivo_excel: bytes, nome_arquivo: str, usuario_id: str
 def carregar_base_dados_compartilhada() -> Optional[pd.DataFrame]:
     """
     Carrega o arquivo base de dados que é compartilhado entre todos os usuários.
+    Usa um pickle cache quando possível para evitar leitura repetida de Excel.
     
     Returns:
         DataFrame com dados da base ou None se não existir
     """
     try:
         caminho_arquivo = UPLOADS_DIR / "base_dados_compartilhada.xlsx"
-        
+        caminho_cache = _get_shared_cache_path()
+
         if caminho_arquivo.exists():
+            if _cache_atual_valido(caminho_arquivo, caminho_cache):
+                df = _load_df_cache(caminho_cache)
+                if df is not None:
+                    df = _ensure_normalized_columns(df)
+                    print(f"[DB] Base de dados carregada do cache: {len(df)} linhas")
+                    return df
+
             df = _carregar_dataframe_excel_combinado(caminho_arquivo)
-            if df is not None and "CD_CPNT_RSTD" not in df.columns:
-                # Compatibilidade com uploads antigos sem TD_DRE: mantém a base carregada,
-                # mas o cálculo da DRE só usará o que existir no schema disponível.
-                pass
-            print(f"[DB] Base de dados compartilhada carregada: {len(df)} linhas")
-            return df
+            if df is not None:
+                df = _ensure_normalized_columns(df)
+                _save_df_cache(df, caminho_cache)
+                print(f"[DB] Base de dados carregada do Excel e cache salva: {len(df)} linhas")
+                return df
 
         # Fallback histórico: se não houver base compartilhada enviada, tenta o workbook legado do projeto.
         df_original = _carregar_base_original_completa()
         if df_original is not None:
+            df_original = _ensure_normalized_columns(df_original)
             print(f"[DB] Base legado carregada como fallback: {len(df_original)} linhas")
             return df_original
-        
+
         print("[DB] Nenhuma base de dados compartilhada encontrada ainda")
         return None
-        
+
     except Exception as e:
         print(f"[DB] Erro ao carregar base de dados compartilhada: {e}")
         return None
@@ -915,7 +1074,13 @@ def carregar_base_usuario(usuario_id: str) -> Optional[pd.DataFrame]:
         arquivo_usuario = UPLOADS_DIR / obter_nome_arquivo_base_usuario(usuario_id)
         try:
             df = _carregar_dataframe_excel_combinado(arquivo_usuario)
-            if df is not None and ("CD_CPNT_RSTD" in df.columns or "TIP_TD" in df.columns):
+            if df is not None:
+                df = _ensure_normalized_columns(df)
+                if "PROJETADO_AJUSTADO" not in df.columns:
+                    if "PROJETADO_ANALITICO" in df.columns:
+                        df["PROJETADO_AJUSTADO"] = df["PROJETADO_ANALITICO"].copy()
+                    else:
+                        df["PROJETADO_AJUSTADO"] = 0.0
                 print(f"[DB] Base personalizada do usuário {usuario_id} carregada: {len(df)} linhas")
                 return df
         except Exception as e:

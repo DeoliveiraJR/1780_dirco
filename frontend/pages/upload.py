@@ -14,7 +14,14 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data_manager import set_dados_upload, get_dados_upload, salvar_upload_admin, eh_usuario_admin
+from data_manager import (
+    set_dados_upload,
+    get_dados_upload,
+    salvar_upload_admin,
+    eh_usuario_admin,
+    set_base_dre_upload,
+    limpar_base_dre_upload,
+)
 from utils_ext.icons import render_page_header
 
 # ==============================
@@ -201,6 +208,22 @@ def _df_to_json_records(df: pd.DataFrame) -> list[dict]:
     out = out.where(pd.notnull(out), None)
     return out.to_dict("records")
 
+
+def _renderizar_preview_td_dre(df_td_dre: pd.DataFrame, aba_nome: str):
+    """Renderiza a previa da aba TD_DRE no mesmo padrao das demais abas."""
+    total_componentes = df_td_dre["CD_CPNT_RSTD"].nunique() if "CD_CPNT_RSTD" in df_td_dre.columns else 0
+    total_produtos = df_td_dre["PRODUTO"].nunique() if "PRODUTO" in df_td_dre.columns else 0
+    total_anos = df_td_dre["ANO"].nunique() if "ANO" in df_td_dre.columns else 0
+
+    st.info(f"📘 **Aba '{aba_nome}' (DRE Realizada)**: {len(df_td_dre)} registros")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Componentes", total_componentes)
+    c2.metric("Produtos", total_produtos)
+    c3.metric("Anos", total_anos)
+
+    with st.expander(f"📋 Prévia de '{aba_nome}'", expanded=False):
+        st.dataframe(df_td_dre.head(100), use_container_width=True)
+
 def _consolidar_duplicatas(df: pd.DataFrame, metodo: str = "sum") -> pd.DataFrame:
     chaves = ["ANO_NUM", "MES_NUM", "CAT_N", "PROD_N"]
     if "CLI_N" in df.columns:
@@ -297,6 +320,9 @@ def upload_interface():
                         st.info(f"📊 **Aba '{aba_nome}' (Projeções)**: {len(df_raw)} registros")
                         with st.expander(f"📋 Prévia de '{aba_nome}'"):
                             st.dataframe(df_raw.head(100), use_container_width=True)
+                    elif aba_nome.lower().strip() == 'td_dre':
+                        df_td_dre = pd.read_excel(uploaded_file, sheet_name=aba_nome)
+                        _renderizar_preview_td_dre(df_td_dre, aba_nome)
                     
                     elif aba_nome.lower().strip() == 'indices_tesou':
                         df_indices = pd.read_excel(uploaded_file, sheet_name=aba_nome)
@@ -352,18 +378,32 @@ def processar_arquivo_completo(uploaded_file):
         
         # Processa aba de DADOS
         aba_dados = next((a for a in abas if a.lower().strip() in ['dados', 'data']), None)
+        aba_td_dre = next((a for a in abas if a.lower().strip() == 'td_dre'), None)
         if aba_dados:
             st.markdown(f"**ℹ️ Processando aba '{aba_dados}' (Projeções)...**")
             df_raw = pd.read_excel(uploaded_file, sheet_name=aba_dados)
             
             # Processa os dados de projeção (sem mostrar botão de salvar duplicado)
             processar_dados(df_raw, mostrar_botao_salvar=False)
+
+            # Prepara a base ativa da DRE na sessao com o mesmo workbook enviado.
+            if aba_td_dre:
+                df_td_dre = pd.read_excel(uploaded_file, sheet_name=aba_td_dre)
+                df_dre_ativo = pd.concat([df_raw, df_td_dre], ignore_index=True, sort=False)
+                set_base_dre_upload(df_dre_ativo, origem=f"upload_session:{uploaded_file.name}")
+                st.success(
+                    f"✅ Base da DRE preparada na sessao atual com {len(df_td_dre)} registros da aba '{aba_td_dre}'."
+                )
+            else:
+                limpar_base_dre_upload()
+                st.warning("⚠️ Este arquivo nao possui a aba 'TD_DRE'. A DRE realizada pode ficar zerada.")
             
             # Se admin, oferece ÚNICO botão para salvar na base compartilhada
             if eh_usuario_admin():
                 st.markdown("---")
                 st.markdown("#### 💾 Salvar na Base de Dados Compartilhada")
                 st.info("✓ Como administrador, você pode salvar este arquivo completo (com ambas as abas) como a nova base de dados compartilhada para todos os usuários.")
+                st.caption("Enquanto voce nao confirmar este segundo passo, a DRE desta sessao usa o upload atual apenas localmente.")
                 
                 if st.button("💾 Confirmar e Carregar", type="primary", use_container_width=True, key="btn_salvar_completo"):
                     usuario_id = st.session_state.get("usuario_id", "")
@@ -509,6 +549,7 @@ def dados_carregados():
     if st.button("🗑️ Limpar Dados", use_container_width=True):
         st.session_state.dados_carregados = None
         set_dados_upload(pd.DataFrame())
+        limpar_base_dre_upload()
         st.rerun()
 
 def indices_carregados():
