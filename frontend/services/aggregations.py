@@ -1,9 +1,11 @@
 # frontend/services/aggregations.py
 import pandas as pd
 import numpy as np
+import streamlit as st
 
 from utils_ext.series import (
-    _norm_txt, _mes_to_num, _ensure_cli_n, _mask_trailing_zeros
+    _norm_txt, _mes_to_num, _ensure_cli_n, _ensure_normalized_columns, _mask_trailing_zeros,
+    _produto_eh_equivalente
 )
 
 
@@ -15,7 +17,12 @@ def _filtrar_categoria_produto(dff: pd.DataFrame, categoria: str, produto: str) 
     dff = dff[dff["CAT_N"] == _norm_txt(categoria)]
     produto_norm = _norm_txt(produto)
     if produto_norm and produto_norm != "todos":
-        dff = dff[dff["PROD_N"] == produto_norm]
+        if "PROD_N" in dff.columns and produto_norm in set(dff["PROD_N"].dropna().unique()):
+            dff = dff[dff["PROD_N"] == produto_norm]
+        else:
+            # Fallback para equivalencia singular/plural e codificacoes legadas.
+            mask = dff["PRODUTO"].apply(lambda x: _produto_eh_equivalente(x, produto))
+            dff = dff[mask]
     return dff
 
 
@@ -33,7 +40,11 @@ def _aplicar_filtros_dimensao(
         and str(cd_tip_agpd) != "Todos"
     ):
         alvo = _norm_txt(cd_tip_agpd)
-        out = out[out["CD_TIP_AGPD"].astype(str).apply(_norm_txt) == alvo]
+        col_norm = "CD_TIP_AGPD_N" if "CD_TIP_AGPD_N" in out.columns else "CD_TIP_AGPD"
+        if col_norm == "CD_TIP_AGPD_N":
+            out = out[out[col_norm] == alvo]
+        else:
+            out = out[out[col_norm].astype(str).apply(_norm_txt) == alvo]
 
     if (
         "TIP_TD" in out.columns
@@ -42,10 +53,15 @@ def _aplicar_filtros_dimensao(
         and str(tip_td) != "Todos"
     ):
         alvo = _norm_txt(tip_td)
-        out = out[out["TIP_TD"].astype(str).apply(_norm_txt) == alvo]
+        col_norm = "TIP_TD_N" if "TIP_TD_N" in out.columns else "TIP_TD"
+        if col_norm == "TIP_TD_N":
+            out = out[out[col_norm] == alvo]
+        else:
+            out = out[out[col_norm].astype(str).apply(_norm_txt) == alvo]
 
     return out
 
+@st.cache_data(show_spinner=False)
 def _carregar_curvas_base(
     df_upload: pd.DataFrame,
     cliente: str,
@@ -62,17 +78,7 @@ def _carregar_curvas_base(
     if not all(col in df_upload.columns for col in colunas_requeridas):
         return [0.0]*12, [0.0]*12, None
     
-    dff = _ensure_cli_n(df_upload)
-    if "CAT_N" not in dff.columns:
-        dff["CAT_N"] = dff["CATEGORIA"].astype(str).apply(_norm_txt)
-    if "PROD_N" not in dff.columns:
-        dff["PROD_N"] = dff["PRODUTO"].astype(str).apply(_norm_txt)
-    if "MES_NUM" not in dff.columns:
-        dff["MES_NUM"] = dff["MES"].apply(_mes_to_num) if "MES" in dff.columns else np.nan
-    if "ANO_NUM" not in dff.columns and "ANO" in dff.columns:
-        dff["ANO_NUM"] = pd.to_numeric(dff["ANO"], errors="coerce").fillna(0).astype(int)
-    elif "ANO_NUM" not in dff.columns:
-        dff["ANO_NUM"] = 0
+    dff = _ensure_normalized_columns(df_upload)
 
     if cliente and cliente != "Todos":
         dff = dff[dff["CLI_N"] == _norm_txt(cliente)]
@@ -95,6 +101,7 @@ def _carregar_curvas_base(
     mer = (grp["PROJETADO_MERCADO"].astype(float).tolist() + [0.0]*12)[:12]
     return ana, mer, ano
 
+@st.cache_data(show_spinner=False)
 def _carregar_curvas_por_ano(
     df_upload: pd.DataFrame,
     cliente: str,
@@ -111,15 +118,7 @@ def _carregar_curvas_por_ano(
     if df_upload is None or df_upload.empty:
         return [0.0]*12, [0.0]*12, [0.0]*12
     
-    dff = _ensure_cli_n(df_upload)
-    if "CAT_N" not in dff.columns:
-        dff["CAT_N"] = dff["CATEGORIA"].astype(str).apply(_norm_txt)
-    if "PROD_N" not in dff.columns:
-        dff["PROD_N"] = dff["PRODUTO"].astype(str).apply(_norm_txt)
-    if "MES_NUM" not in dff.columns:
-        dff["MES_NUM"] = dff["MES"].apply(_mes_to_num) if "MES" in dff.columns else np.nan
-    if "ANO_NUM" not in dff.columns:
-        dff["ANO_NUM"] = pd.to_numeric(dff.get("ANO", 0), errors="coerce").fillna(0).astype(int)
+    dff = _ensure_normalized_columns(df_upload)
 
     if cliente and cliente != "Todos":
         dff = dff[dff["CLI_N"] == _norm_txt(cliente)]
@@ -144,6 +143,7 @@ def _carregar_curvas_por_ano(
     return ana, mer, ajs
 
 
+@st.cache_data(show_spinner=False)
 def _carregar_proximos_12_meses(
     df_upload: pd.DataFrame,
     cliente: str,
@@ -262,6 +262,7 @@ def _carregar_proximos_12_meses(
     return resultado
 
 
+@st.cache_data(show_spinner=False)
 def _carregar_ajustada_produto(
     df_upload: pd.DataFrame,
     cliente: str,
@@ -302,6 +303,7 @@ def _carregar_ajustada_produto(
             .sum().reindex(range(1,13)).fillna(0.0).astype(float))
     return (s.tolist() + [0.0]*12)[:12]
 
+@st.cache_data(show_spinner=False)
 def _obter_realizados_por_ano(
     df_upload: pd.DataFrame,
     cliente: str,
@@ -345,6 +347,7 @@ def _obter_realizados_por_ano(
         result[int(ano)] = _mask_trailing_zeros(serie) if mascarar_zeros_finais else serie
     return result
 
+@st.cache_data(show_spinner=False)
 def _agregados_por_categoria(
     df_upload: pd.DataFrame,
     cliente: str,

@@ -4,6 +4,88 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
+## 🔧 [v4.0.3] - 2026-07-03 - Semântica Excel para Vazio vs Zero
+
+### ✅ CORRIGIDO - Motor da DRE agora preserva vazio lógico no histórico
+- **Arquivos:** `frontend/pages/dre.py`, `frontend/utils_ext/calc_functions.py`
+- Meses futuros não preenchidos deixam de entrar na `serie_historica` como `0.0`
+- O contexto de cálculo passa a distinguir `0` explícito de célula vazia usando flags de preenchimento por mês
+- A DRE agora mantém `projetado_preenchido`, `valores_base_preenchidos` e `valores_preenchidos` nas linhas editáveis
+
+### ✅ CORRIGIDO - Funções nativas ignoram vazios como o Excel
+- **Arquivo:** `frontend/utils_ext/calc_functions.py`
+- `SOMA`, `MEDIA`, `MEDIA_INTERNA`, `MINIMO`, `MAXIMO` e `DESVIO_PADRAO` passaram a ignorar `None`, `NaN` e meses não preenchidos
+- `0` continua sendo considerado normalmente quando a célula foi explicitamente preenchida
+- A coleta de janelas históricas deixa de usar fallback artificial para `0` quando o mês está ausente
+
+### ✅ CORRIGIDO - Editor e persistência preservam zero digitado
+- **Arquivos:** `frontend/pages/dre.py`, `backend/database.py`
+- O `st.data_editor` da DRE atualiza as flags de preenchimento da linha ao editar células futuras
+- Salvar/restaurar simulações DRE agora persiste também o estado de preenchimento das projeções e do baseline da linha
+- Mantida compatibilidade com payloads antigos que salvavam apenas a lista de `projetado`
+
+### ✅ Validação Técnica
+- `python -m py_compile frontend/pages/dre.py frontend/utils_ext/calc_functions.py backend/database.py` ✅
+- Validação dirigida do motor:
+  - `MEDIA([None, 0.0, 10.0])` → `5.0`
+  - `MEDIA_INTERNA([None, 10.0, 20.0, 30.0, 40.0], 0.4)` → `25.0`
+  - janela histórica com meses vazios passa a ignorar ausências e manter zeros explícitos ✅
+
+---
+
+## 🔧 [v4.0.2] - 2026-07-03 - Motor Temporal Cronológico da DRE
+
+### ✅ CORRIGIDO - Janela temporal agora usa série histórica real
+- **Arquivos:** `frontend/utils_ext/calc_functions.py`, `frontend/pages/dre.py`
+- Substituída a lógica circular de 12 meses por uma linha do tempo cronológica baseada em `ano/mês`
+- Funções com janela agora usam meses reais anteriores/posteriores ao mês base, sem wrap-around artificial
+- O parâmetro `-6` passou a significar "6 meses anteriores reais ao mês base", alinhado ao comportamento esperado na validação com Excel
+
+### ✅ CORRIGIDO - Contexto de cálculo enriquecido com histórico multi-ano
+- **Arquivos:** `frontend/pages/dre.py`, `frontend/utils_ext/calc_functions.py`
+- O contexto de fórmula da DRE agora injeta `serie_historica` para linhas variáveis, `TD21`, `TD62`, metodologias encadeadas e índices econômicos
+- Meses do ano em edição continuam sendo sobrescritos pelos valores ativos da tela, preservando simulação/metodologia atual sem perder o histórico real anterior
+
+### ✅ IMPACTO FUNCIONAL - Todas as funções nativas com janela seguem a nova semântica
+- **Funções afetadas:** `SOMA`, `MEDIA`, `MEDIA_INTERNA`, `MINIMO`, `MAXIMO`, `DESVIO_PADRAO`
+- A sazonalidade variável também passou a ler janelas reais por data, em vez de índices circulares de um array anual
+
+### ✅ Validação Técnica
+- `python -m py_compile frontend/pages/dre.py frontend/utils_ext/calc_functions.py` ✅
+- Caso de validação reproduzido no motor: `MEDIA_INTERNA(TD72; 0.33; -6)` para `MAI/2026` retornou `-887654911.42`, compatível com a planilha de referência
+
+---
+
+## 🔧 [v4.0.1] - 2026-07-01 - Nova Função Nativa MEDIA_INTERNA
+
+### ✅ NOVO - Função nativa `MEDIA_INTERNA` no motor da DRE
+- **Arquivos:** `frontend/utils_ext/calc_functions.py`, `frontend/pages/dre.py`
+- Implementada a nova função nativa `MEDIA_INTERNA`, com comportamento equivalente ao `TRIMMEAN` do Excel
+- Sintaxe suportada:
+  - `=MEDIA_INTERNA(TD21; 0,2)`
+  - `=MEDIA_INTERNA(TD21; 0,2; -6)`
+  - `=MEDIA_INTERNA(TD21; 0,2; -6; 1)`
+- Regras implementadas:
+  - descarte percentual dos extremos de forma simétrica
+  - arredondamento para baixo até o múltiplo de 2 mais próximo
+  - cálculo mensal sobre a janela temporal da linha de referência
+
+### ✅ NOVO - Aliases estilo Excel para média interna
+- **Arquivo:** `frontend/pages/dre.py`
+- Fórmulas com `MEDIA.INTERNA(...)`, `MÉDIA.INTERNA(...)` e `TRIMMEAN(...)` são normalizadas automaticamente para `MEDIA_INTERNA(...)`
+- Mantida a compatibilidade com a sintaxe interna do motor sem perder a familiaridade com Excel
+
+### ✅ NOVO - Referência visual da função na página DRE
+- **Arquivo:** `frontend/pages/dre.py`
+- `MEDIA_INTERNA` adicionada ao autocomplete, exemplos rápidos, documentação da aba de referência e ajuda contextual do campo de fórmula
+
+### ✅ NOVO - Skill dedicada a metodologias da DRE
+- **Arquivo:** `.trae/skills/dre-methodology-guardian/SKILL.md`
+- Criada skill específica para orientar criação, revisão, depuração e documentação de metodologias/funções nativas da DRE
+- Conteúdo cobre regras de cálculo, sintaxe, janelas temporais, aliases e checklist de validação
+
+---
+
 ## 🔧 [v4.0.0] - 2026-06-25 - Sincronização de Filtros, Base DRE Correta e UX DRE
 
 ### ✅ CORRIGIDO - DRE zerada (causa raiz: base compartilhada sem TD_DRE)

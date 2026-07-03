@@ -12,7 +12,7 @@ import unicodedata
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Union
 from pathlib import Path
 
 # Importar schema manager
@@ -1420,7 +1420,7 @@ def _caminho_simulacao_dre(usuario_id: str) -> Path:
 def salvar_simulacao_dre(
     usuario_id: str,
     combo_key: str,
-    projecoes: Dict[str, list],
+    projecoes: Dict[str, Union[list, dict]],
     metodologias: Dict[str, dict],
 ) -> Tuple[bool, str]:
     """
@@ -1429,7 +1429,18 @@ def salvar_simulacao_dre(
     Args:
         usuario_id: ID do usuário
         combo_key: Chave de escopo ("cliente::categoria::produto::ano")
-        projecoes: {codigo_td: [v1..v12]} — apenas valores projetados (pós-corte)
+        projecoes:
+            {
+              codigo_td: [v1..v12]
+              # ou
+              codigo_td: {
+                  "projetado": [v1..v12],
+                  "projetado_preenchido": [bool x12],
+                  "valores_base": [v1..v12],
+                  "valores_base_preenchidos": [bool x12],
+              }
+            }
+            Preserva compatibilidade retroativa com payload antigo e novo.
         metodologias: dre_metodologias do session_state
 
     Returns:

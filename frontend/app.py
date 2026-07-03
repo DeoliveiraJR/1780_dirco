@@ -25,6 +25,7 @@ from data_manager import (
     deletar_simulacao,
 )
 from services.aggregations import _carregar_curvas_base, _carregar_curvas_por_ano
+from utils_ext.series import _produto_eh_equivalente, _ensure_normalized_columns, _norm_txt
 
 # Inicializar data state logo no início
 init_data_state()
@@ -92,7 +93,7 @@ def _norm(s: str) -> str:
 def _recarregar_opcoes(df, cliente_escolhido):
     """Retorna (categorias, map_cat_prod, df_sub) com base no cliente."""
     dff = df.copy()
-    # Garante CLI_N para bases mais antigas
+
     if "CLI_N" not in dff.columns:
         if "TIPO_CLIENTE" in dff.columns:
             dff["CLI_N"] = dff["TIPO_CLIENTE"].astype(str).apply(_norm)
@@ -111,6 +112,78 @@ def _recarregar_opcoes(df, cliente_escolhido):
            .to_dict()
     )
     return categorias, map_cat_prod, dff
+
+
+@st.cache_data(show_spinner=False)
+def _obter_opcoes_sidebar(
+    df: pd.DataFrame,
+    cd_tip_agpd: str = "Todos",
+    tip_td: str = "Todos",
+    cliente: str = "Todos",
+    categoria: str = "",
+):
+    """Precalcula opcoes da sidebar com base nas colunas normalizadas da base."""
+    if df is None or df.empty:
+        return {
+            "vol_opts": ["Todos"],
+            "td_opts": ["Todos"],
+            "cli_opts": ["Todos"],
+            "cat_opts": [""],
+            "prod_opts": ["TODOS"],
+        }
+
+    dff = _ensure_normalized_columns(df)
+
+    def _aplicar_filtros(df_base: pd.DataFrame, ignorar: str = "") -> pd.DataFrame:
+        out = df_base
+        if ignorar != "cd_tip_agpd" and cd_tip_agpd and cd_tip_agpd != "Todos" and "CD_TIP_AGPD_N" in out.columns:
+            out = out[out["CD_TIP_AGPD_N"] == _norm_txt(cd_tip_agpd)]
+        if ignorar != "tip_td" and tip_td and tip_td != "Todos" and "TIP_TD_N" in out.columns:
+            out = out[out["TIP_TD_N"] == _norm_txt(tip_td)]
+        if ignorar != "cliente" and cliente and cliente != "Todos" and "CLI_N" in out.columns:
+            out = out[out["CLI_N"] == _norm_txt(cliente)]
+        if ignorar != "categoria" and categoria and "CAT_N" in out.columns:
+            out = out[out["CAT_N"] == _norm_txt(categoria)]
+        return out
+
+    vol_opts = ["Todos"]
+    td_opts = ["Todos"]
+    cli_opts = ["Todos"]
+    cat_opts = [""]
+    prod_opts = ["TODOS"]
+
+    df_vol = _aplicar_filtros(dff, ignorar="cd_tip_agpd")
+    if "CD_TIP_AGPD" in df_vol.columns:
+        vol_opts += sorted([v for v in df_vol["CD_TIP_AGPD"].dropna().astype(str).unique() if v.strip()])
+
+    df_td = _aplicar_filtros(dff, ignorar="tip_td")
+    if "TIP_TD" in df_td.columns:
+        td_opts += sorted([v for v in df_td["TIP_TD"].dropna().astype(str).unique() if v.strip()])
+
+    df_cli = _aplicar_filtros(dff, ignorar="cliente")
+    if "TIPO_CLIENTE" in df_cli.columns:
+        cli_opts += sorted([v for v in df_cli["TIPO_CLIENTE"].dropna().astype(str).unique() if v.strip()])
+
+    df_cat = _aplicar_filtros(dff, ignorar="categoria")
+    if "CATEGORIA" in df_cat.columns:
+        categorias = sorted([v for v in df_cat["CATEGORIA"].dropna().astype(str).unique() if v.strip()])
+        if categorias:
+            cat_opts = [""] + categorias
+
+    if categoria:
+        df_prod = _aplicar_filtros(dff, ignorar="produto")
+        if "PRODUTO" in df_prod.columns:
+            produtos = sorted([v for v in df_prod["PRODUTO"].dropna().astype(str).unique() if v.strip()])
+            if produtos:
+                prod_opts += produtos
+
+    return {
+        "vol_opts": vol_opts,
+        "td_opts": td_opts,
+        "cli_opts": cli_opts,
+        "cat_opts": cat_opts,
+        "prod_opts": prod_opts,
+    }
 
 if not st.session_state.autenticado:
     autenticacao.renderizar()
@@ -218,11 +291,12 @@ else:
             label_visibility="collapsed",
             key="nav_radio"
         )
+        pagina_simulador = pagina == "Simulador"
         
         st.markdown("---")
         
         # ============== PARÂMETROS DA SIMULAÇÃO ==============
-        with st.expander("⚙️ Parâmetros da Simulação", expanded=True):
+        with st.expander("⚙️ Parâmetros da Simulação", expanded=pagina_simulador):
             # Função auxiliar para formatar valores em R$ (milhões)
             def fmt_reais(valor):
                 """Formata valor em R$ com separador de milhares brasileiro."""
@@ -237,7 +311,7 @@ else:
             
             # ===== CÁLCULO EM TEMPO REAL DOS PARÂMETROS =====
             # Ler dados e filtros - SEMPRE ATUALIZAR para evitar delay
-            df_upload = get_dados_upload()
+            df_upload = get_dados_upload() if pagina_simulador else None
             
             # Ler filtros atuais (SEMPRE dos widgets do simulador, que são a fonte de verdade)
             filtros_atuais = st.session_state.get("filtros", {})
@@ -266,10 +340,19 @@ else:
                         .dropna().astype(str).unique()
                     )
                 
-                # Se produto vazio ou não existe NA CATEGORIA ATUAL, usar primeiro disponível
+                # Se produto vazio ou não existe NA CATEGORIA ATUAL, usar primeiro disponível ou equivalente
                 if (not produto_todos) and (not produto or produto not in prods_disponiveis):
                     if prods_disponiveis:
-                        produto = prods_disponiveis[0]
+                        # Buscar produto equivalente na lista
+                        produto_encontrado = None
+                        for p in prods_disponiveis:
+                            if _produto_eh_equivalente(p, produto):
+                                produto_encontrado = p
+                                break
+                        if produto_encontrado:
+                            produto = produto_encontrado
+                        else:
+                            produto = prods_disponiveis[0]
             
             # Normaliza produto para cálculo (TODOS = agregado da categoria)
             produto_calc = "" if produto_todos else produto
@@ -453,7 +536,7 @@ else:
             # Exibir indicador visual do multiplicador
             mult_color = "#10b981" if mult_rotacao >= 1.0 else "#ef4444"
             mult_icon = "📈" if mult_rotacao >= 1.0 else "📉"
-            rot_feedback = st.session_state.pop("_rotacao_feedback", None)
+            rot_feedback = st.session_state.pop("_rotacao_feedback", None) if pagina_simulador else None
             
             col_display, col_button = st.columns([1.5, 1])
             with col_display:
@@ -481,12 +564,15 @@ else:
                 """, unsafe_allow_html=True)
             
             with col_button:
-                if st.button("✅ Aplicar", use_container_width=True, key="btn_aplicar_rotacao", help="Aplica a rotação à curva ajustada"):
+                if st.button(
+                    "✅ Aplicar",
+                    use_container_width=True,
+                    key="btn_aplicar_rotacao",
+                    help="Aplica a rotação à curva ajustada",
+                    disabled=not pagina_simulador,
+                ):
                     # Função para calcular curva rotacionada (SEMPRE 24 MESES: 2026 + 2027)
                     def _calcular_curva_rotacionada_sidebar(mult_rot):
-                        print(f"\n[ROTACAO-DEBUG] ===== INICIANDO CÁLCULO =====")
-                        print(f"[ROTACAO-DEBUG] mult_rot={mult_rot}, tipo={type(mult_rot)}")
-                        
                         # Monta a curva analítica atual
                         df_upload = get_dados_upload()
                         cliente_atual = st.session_state.get("filtros", {}).get("cliente", "Todos")
@@ -494,10 +580,7 @@ else:
                         produto_raw = st.session_state.get("filtros", {}).get("produto", "")
                         produto_atual = "" if produto_raw == "TODOS" else produto_raw
 
-                        print(f"[ROTACAO-DEBUG] cliente={cliente_atual}, categoria={categoria_atual}, produto={produto_atual}")
-
                         if df_upload is None or df_upload.empty or not categoria_atual:
-                            print(f"[ROTACAO-DEBUG] ❌ ERRO: df_upload vazio ou categoria_atual vazia. Retornando None")
                             return None
 
                         from datetime import datetime
@@ -520,10 +603,7 @@ else:
                         )
 
                         analitica = (ana_ano_atual[:] + ana_ano_proximo[:])[:24]
-                        print(f"[ROTACAO-DEBUG] analitica tamanho={len(analitica)}, primeiros 3: {[f'{v:.0f}' for v in analitica[:3]]}, últimos 3: {[f'{v:.0f}' for v in analitica[-3:]]}")
-                        
                         if len(analitica) < 12:
-                            print(f"[ROTACAO-DEBUG] ❌ ERRO: analitica com menos de 12 elementos. Retornando None")
                             return None
                         
                         # ==================== CALCULA PARA OS 12 PRIMEIROS MESES ====================
@@ -531,10 +611,6 @@ else:
                         primeiro = analitica[0] if analitica[0] else 0
                         ultimo = analitica[11] if analitica[11] else 0
                         incl = (ultimo - primeiro) / (qtd - 1) if qtd > 1 else 0
-                        
-                        print(f"[ROTACAO-DEBUG] 2026 (primeiros 12 meses):")
-                        print(f"[ROTACAO-DEBUG]   primeiro={primeiro:.2f}, ultimo={ultimo:.2f}")
-                        print(f"[ROTACAO-DEBUG]   incl_original=(ultimo-primeiro)/(qtd-1)=({ultimo:.2f}-{primeiro:.2f})/11={incl:.4f}")
                         
                         # Regras de direção (intuitivas para o usuário):
                         #   mult > 1  -> inclina para cima
@@ -545,9 +621,6 @@ else:
                             incl_novo = 0.0
                         else:
                             incl_novo = incl + (mult_rot - 1.0) * abs(incl)
-                        print(f"[ROTACAO-DEBUG]   incl_novo=incl + (mult_rot-1)*abs(incl) = {incl:.4f} + ({mult_rot}-1)*{abs(incl):.4f} = {incl_novo:.4f}")
-                        dir_esperada = "SUBIR" if mult_rot > 1 else ("PLANA" if mult_rot == 0 else "DESCER")
-                        print(f"[ROTACAO-DEBUG]   DELTA_INCLINACAO = {incl_novo - incl:.4f} | direção esperada: {dir_esperada}")
                         
                         # Distribui a nova inclinação linearmente ao longo dos 12 meses
                         curva_rot_12m = []
@@ -556,8 +629,6 @@ else:
                             ajuste = fator * (incl_novo - incl)
                             valor = analitica[i] + ajuste
                             curva_rot_12m.append(max(0, valor))
-                            if i == 0 or i == 6 or i == 11:
-                                print(f"[ROTACAO-DEBUG]   mês[{i}]: fator={fator:.2f}, ajuste={ajuste:.2f}, analitica={analitica[i]:.2f} → rotacionada={valor:.2f}")
                         
                         # ==================== EXPANDE PARA 24 MESES ====================
                         # O simulador SEMPRE usa 24 meses (ano atual + próximo ano)
@@ -572,11 +643,6 @@ else:
                                 incl_novo_2027 = 0.0
                             else:
                                 incl_novo_2027 = incl_2027 + (mult_rot - 1.0) * abs(incl_2027)
-                            
-                            print(f"[ROTACAO-DEBUG] 2027 (próximos 12 meses):")
-                            print(f"[ROTACAO-DEBUG]   primeiro={primeiro_2027:.2f}, ultimo={ultimo_2027:.2f}")
-                            print(f"[ROTACAO-DEBUG]   incl_original={incl_2027:.4f}, incl_novo={incl_novo_2027:.4f}")
-                            
                             for i in range(qtd):
                                 fator = i / (qtd - 1)
                                 ajuste = fator * (incl_novo_2027 - incl_2027)
@@ -585,24 +651,10 @@ else:
                         else:
                             # Sem dados de 2027, replica os 12 primeiros (mesma curva rotacionada)
                             curva_rot_24m.extend(curva_rot_12m[:])
-                        
-                        print(f"[ROTACAO-DEBUG] ✅ RESULTADO FINAL:")
-                        print(f"[ROTACAO-DEBUG]   curva_rot_24m tamanho={len(curva_rot_24m)}")
-                        print(f"[ROTACAO-DEBUG]   primeiros 3: {[f'{v:.0f}' for v in curva_rot_24m[:3]]}")
-                        print(f"[ROTACAO-DEBUG]   últimos 3: {[f'{v:.0f}' for v in curva_rot_24m[-3:]]}")
-                        print(f"[ROTACAO-DEBUG] Comparação 2026 (mês 11):")
-                        print(f"[ROTACAO-DEBUG]   analitica[11]={analitica[11]:.2f} → curva_rot[11]={curva_rot_24m[11]:.2f} (delta={curva_rot_24m[11]-analitica[11]:+.2f})")
-                        
                         return curva_rot_24m if len(curva_rot_24m) == 24 else None
                     
                     # Aplica a rotação
                     curva_rot = _calcular_curva_rotacionada_sidebar(mult_rotacao)
-                    print(f"\n[ROTACAO-DEBUG] Após calcular curva_rot:")
-                    print(f"[ROTACAO-DEBUG] curva_rot is None? {curva_rot is None}")
-                    if curva_rot is not None:
-                        print(f"[ROTACAO-DEBUG] len(curva_rot)={len(curva_rot)}")
-                        print(f"[ROTACAO-DEBUG] curva_rot[11] (último de 2026)={curva_rot[11]:.2f}")
-                    
                     if curva_rot:
                         filtros_rot = st.session_state.get("filtros", {})
                         produto_combo = "" if filtros_rot.get("produto", "") == "TODOS" else filtros_rot.get("produto", "")
@@ -614,21 +666,18 @@ else:
                             f"{filtros_rot.get('tip_td', 'Todos')}"
                         )
 
-                        print(f"[ROTACAO-DEBUG] Atribuindo curva_rot ao session_state['ajustada']")
                         st.session_state["ajustada"] = curva_rot  # Agora com 24 elementos
                         st.session_state["last_combo"] = combo_rot
                         # Persistir em chave privada (não conflita com widget key)
                         st.session_state["_sim_rotacionar_curva_aplicado"] = mult_rotacao
                         # Também salvar em chave pública para uso no simulador
                         st.session_state["sim_rotacionar_curva"] = mult_rotacao
-                        print(f"[ROTACAO-DEBUG] ✅ session_state['ajustada'] atualizado com {len(st.session_state['ajustada'])} elementos")
                         st.session_state["_rotacao_feedback"] = {
                             "tipo": "success",
                             "mensagem": f"Curva rotacionada com {mult_rotacao:+.2f}x de inclinação.",
                         }
                         st.rerun()
                     else:
-                        print(f"[ROTACAO-DEBUG] ❌ curva_rot retornou None ou False")
                         st.session_state["_rotacao_feedback"] = {
                             "tipo": "error",
                             "mensagem": "Não foi possível calcular a rotação. Verifique cliente/categoria/produto e tente novamente.",
@@ -644,125 +693,27 @@ else:
         st.markdown("---")
         
         # ============== FILTROS DA SIMULAÇÃO ==============
-        with st.expander("🎯 Filtros da Simulação", expanded=True):
+        with st.expander("🎯 Filtros da Simulação", expanded=pagina_simulador):
             def _update_filtro(key: str, value):
                 filtros = st.session_state.get("filtros", {})
                 filtros[key] = value
                 st.session_state["filtros"] = filtros
 
-            def _filtrar_df_sidebar(df, ignorar: str = ""):
-                dff = df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame()
-                if dff.empty:
-                    return dff
-
-                def _valor_presente(coluna: str, valor: str) -> bool:
-                    if coluna not in dff.columns:
-                        return False
-                    if valor is None:
-                        return False
-                    alvo = _norm(valor)
-                    if not alvo:
-                        return False
-                    return alvo in set(dff[coluna].dropna().astype(str).apply(_norm).tolist())
-
-                if "CLI_N" not in dff.columns:
-                    if "TIPO_CLIENTE" in dff.columns:
-                        dff["CLI_N"] = dff["TIPO_CLIENTE"].astype(str).apply(_norm)
-                    elif "TP_CLIENTE" in dff.columns:
-                        dff["CLI_N"] = dff["TP_CLIENTE"].astype(str).apply(_norm)
-                    else:
-                        dff["CLI_N"] = ""
-
-                # Lê dos widget keys (valores do render ATUAL) com fallback no dicionário filtros.
-                # Isso garante que ao mudar um filtro, as opções dos demais filtros encadeados
-                # já se atualizam na mesma render, sem atraso de um ciclo.
-                _fb = st.session_state.get("filtros", {})
-                cd_tip_agpd = st.session_state.get("sb_sim_tipo_volume",
-                                                    _fb.get("cd_tip_agpd", "Todos"))
-                tip_td = st.session_state.get("sb_sim_tip_td",
-                                              _fb.get("tip_td", "Todos"))
-                cliente = st.session_state.get("sb_sim_cliente",
-                                               _fb.get("cliente", "Todos"))
-                categoria = st.session_state.get("sb_sim_categoria",
-                                                 _fb.get("categoria", ""))
-                produto = st.session_state.get("sb_sim_produto",
-                                               _fb.get("produto", "TODOS"))
-
-                if (
-                    ignorar != "cd_tip_agpd"
-                    and "CD_TIP_AGPD" in dff.columns
-                    and cd_tip_agpd
-                    and cd_tip_agpd != "Todos"
-                    and _valor_presente("CD_TIP_AGPD", cd_tip_agpd)
-                ):
-                    dff = dff[dff["CD_TIP_AGPD"].astype(str).apply(_norm) == _norm(cd_tip_agpd)]
-                if (
-                    ignorar != "tip_td"
-                    and "TIP_TD" in dff.columns
-                    and tip_td
-                    and tip_td != "Todos"
-                    and _valor_presente("TIP_TD", tip_td)
-                ):
-                    dff = dff[dff["TIP_TD"].astype(str).apply(_norm) == _norm(tip_td)]
-                if (
-                    ignorar != "cliente"
-                    and cliente
-                    and cliente != "Todos"
-                    and _valor_presente("CLI_N", cliente)
-                ):
-                    dff = dff[dff["CLI_N"] == _norm(cliente)]
-                if ignorar != "categoria" and categoria and _valor_presente("CATEGORIA", categoria):
-                    dff = dff[dff["CATEGORIA"].astype(str).apply(_norm) == _norm(categoria)]
-                if (
-                    ignorar != "produto"
-                    and produto
-                    and produto != "TODOS"
-                    and _valor_presente("PRODUTO", produto)
-                ):
-                    dff = dff[dff["PRODUTO"].astype(str).apply(_norm) == _norm(produto)]
-                return dff
-
-            df_upload_sb = get_dados_upload()
+            df_upload_sb = get_dados_upload() if pagina_simulador else None
             filtros_sb = st.session_state.get("filtros", {})
+            opcoes_sidebar = _obter_opcoes_sidebar(
+                df_upload_sb,
+                cd_tip_agpd=st.session_state.get("sb_sim_tipo_volume", filtros_sb.get("cd_tip_agpd", "Todos")),
+                tip_td=st.session_state.get("sb_sim_tip_td", filtros_sb.get("tip_td", "Todos")),
+                cliente=st.session_state.get("sb_sim_cliente", filtros_sb.get("cliente", "Todos")),
+                categoria=st.session_state.get("sb_sim_categoria", filtros_sb.get("categoria", "")),
+            )
 
-            vol_opts = ["Todos"]
-            td_opts = ["Todos"]
-            cli_opts = ["Todos"]
-            cat_opts = []
-            prod_opts = ["TODOS"]
-
-            if isinstance(df_upload_sb, pd.DataFrame) and not df_upload_sb.empty:
-                df_vol = _filtrar_df_sidebar(df_upload_sb, ignorar="cd_tip_agpd")
-                if "CD_TIP_AGPD" in df_vol.columns:
-                    vol_vals = [v for v in df_vol["CD_TIP_AGPD"].dropna().astype(str).unique() if v.strip()]
-                    vol_opts += sorted(vol_vals)
-
-                df_td = _filtrar_df_sidebar(df_upload_sb, ignorar="tip_td")
-                if "TIP_TD" in df_td.columns:
-                    td_vals = [v for v in df_td["TIP_TD"].dropna().astype(str).unique() if v.strip()]
-                    td_opts += sorted(td_vals)
-
-                df_cli = _filtrar_df_sidebar(df_upload_sb, ignorar="cliente")
-                if "TIPO_CLIENTE" in df_cli.columns:
-                    cli_vals = [v for v in df_cli["TIPO_CLIENTE"].dropna().astype(str).unique() if v.strip()]
-                    cli_opts += sorted(cli_vals)
-                elif "TP_CLIENTE" in df_cli.columns:
-                    cli_vals = [v for v in df_cli["TP_CLIENTE"].dropna().astype(str).unique() if v.strip()]
-                    cli_opts += sorted(cli_vals)
-
-                df_cat = _filtrar_df_sidebar(df_upload_sb, ignorar="categoria")
-                if "CATEGORIA" in df_cat.columns:
-                    cat_opts = sorted([v for v in df_cat["CATEGORIA"].dropna().astype(str).unique() if v.strip()])
-
-                df_prod = _filtrar_df_sidebar(df_upload_sb, ignorar="produto")
-                if "PRODUTO" in df_prod.columns:
-                    prod_vals = sorted([v for v in df_prod["PRODUTO"].dropna().astype(str).unique() if v.strip()])
-                    prod_opts += prod_vals
-
-            if not cat_opts:
-                cat_opts = [""]
-            if not prod_opts:
-                prod_opts = ["TODOS"]
+            vol_opts = opcoes_sidebar["vol_opts"]
+            td_opts = opcoes_sidebar["td_opts"]
+            cli_opts = opcoes_sidebar["cli_opts"]
+            cat_opts = opcoes_sidebar["cat_opts"]
+            prod_opts = opcoes_sidebar["prod_opts"]
 
             if filtros_sb.get("cd_tip_agpd", "Todos") not in vol_opts:
                 filtros_sb["cd_tip_agpd"] = "Todos"
@@ -776,97 +727,116 @@ else:
                 filtros_sb["produto"] = "TODOS"
             st.session_state["filtros"] = filtros_sb
             
-            # --- Nome da Simulação ---
-            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📝 NOME DA SIMULAÇÃO</p>", unsafe_allow_html=True)
-            sim_nome_sb = st.text_input(
-                "Nome",
-                value=st.session_state.get("sim_nome", "Simulação 2026"),
-                key="sb_sim_nome",
-                label_visibility="collapsed",
-                placeholder="Ex: Cenário Otimista Q2"
-            )
-            if sim_nome_sb:
-                st.session_state["sim_nome"] = sim_nome_sb
-                filtros = st.session_state.get("filtros", {})
-                filtros["nome"] = sim_nome_sb
-                st.session_state["filtros"] = filtros
-            
-            st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
+            with st.form("sidebar_filtros_simulador", clear_on_submit=False):
+                # --- Nome da Simulação ---
+                st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📝 NOME DA SIMULAÇÃO</p>", unsafe_allow_html=True)
+                sim_nome_sb = st.text_input(
+                    "Nome",
+                    value=st.session_state.get("sim_nome", "Simulação 2026"),
+                    key="sb_sim_nome",
+                    label_visibility="collapsed",
+                    placeholder="Ex: Cenário Otimista Q2"
+                )
+                
+                st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
 
-            # --- Tipo de Volume ---
-            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📊 TIPO DE VOLUME</p>", unsafe_allow_html=True)
-            vol_mem = st.session_state.get("filtros", {}).get("cd_tip_agpd", "Todos")
-            idx_vol = vol_opts.index(vol_mem) if vol_mem in vol_opts else 0
-            sim_tipo_volume_sb = st.selectbox(
-                "Tipo de volume",
-                vol_opts,
-                index=idx_vol,
-                key="sb_sim_tipo_volume",
-                label_visibility="collapsed",
-            )
-            _update_filtro("cd_tip_agpd", sim_tipo_volume_sb)
+                # --- Tipo de Volume ---
+                st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📊 TIPO DE VOLUME</p>", unsafe_allow_html=True)
+                vol_mem = st.session_state.get("filtros", {}).get("cd_tip_agpd", "Todos")
+                idx_vol = vol_opts.index(vol_mem) if vol_mem in vol_opts else 0
+                sim_tipo_volume_sb = st.selectbox(
+                    "Tipo de volume",
+                    vol_opts,
+                    index=idx_vol,
+                    key="sb_sim_tipo_volume",
+                    label_visibility="collapsed",
+                )
 
-            st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
+                st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
 
-            # --- Tipo TD ---
-            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>🏷️ TIPO TD</p>", unsafe_allow_html=True)
-            td_mem = st.session_state.get("filtros", {}).get("tip_td", "Todos")
-            idx_td = td_opts.index(td_mem) if td_mem in td_opts else 0
-            sim_tip_td_sb = st.selectbox(
-                "Tipo TD",
-                td_opts,
-                index=idx_td,
-                key="sb_sim_tip_td",
-                label_visibility="collapsed",
-            )
-            _update_filtro("tip_td", sim_tip_td_sb)
+                # --- Tipo TD ---
+                st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>🏷️ TIPO TD</p>", unsafe_allow_html=True)
+                td_mem = st.session_state.get("filtros", {}).get("tip_td", "Todos")
+                idx_td = td_opts.index(td_mem) if td_mem in td_opts else 0
+                sim_tip_td_sb = st.selectbox(
+                    "Tipo TD",
+                    td_opts,
+                    index=idx_td,
+                    key="sb_sim_tip_td",
+                    label_visibility="collapsed",
+                )
 
-            st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
-            
-            # --- Cliente ---
-            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>👤 CLIENTE</p>", unsafe_allow_html=True)
-            cliente_mem_sb = st.session_state.get("filtros", {}).get("cliente", "Todos")
-            idx_cliente_sb = cli_opts.index(cliente_mem_sb) if cliente_mem_sb in cli_opts else 0
-            sim_cliente_sb = st.selectbox(
-                "Cliente",
-                cli_opts,
-                index=idx_cliente_sb,
-                key="sb_sim_cliente",
-                label_visibility="collapsed"
-            )
-            _update_filtro("cliente", sim_cliente_sb)
-            
-            st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
-            
-            # --- Categoria ---
-            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📁 CATEGORIA</p>", unsafe_allow_html=True)
-            categoria_mem_sb = st.session_state.get("filtros", {}).get("categoria", "")
-            idx_cat_sb = cat_opts.index(categoria_mem_sb) if categoria_mem_sb in cat_opts else (0 if cat_opts else None)
-            sim_categoria_sb = st.selectbox(
-                "Categoria",
-                cat_opts,
-                index=idx_cat_sb,
-                key="sb_sim_categoria",
-                label_visibility="collapsed"
-            )
-            _update_filtro("categoria", sim_categoria_sb)
-            
-            st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
-            
-            # --- Produto (com opção TODOS) ---
-            st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📦 PRODUTO</p>", unsafe_allow_html=True)
-            produto_mem_sb = st.session_state.get("filtros", {}).get("produto", "TODOS")
-            idx_prd_sb = prod_opts.index(produto_mem_sb) if produto_mem_sb in prod_opts else 0
-            sim_produto_sb = st.selectbox(
-                "Produto",
-                prod_opts,
-                index=idx_prd_sb,
-                key="sb_sim_produto",
-                label_visibility="collapsed"
-            )
-            _update_filtro("produto", sim_produto_sb)
-            
-            st.markdown('<div style="height: 12px;"></div>', unsafe_allow_html=True)
+                st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
+                
+                # --- Cliente ---
+                st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>👤 CLIENTE</p>", unsafe_allow_html=True)
+                cliente_mem_sb = st.session_state.get("filtros", {}).get("cliente", "Todos")
+                idx_cliente_sb = cli_opts.index(cliente_mem_sb) if cliente_mem_sb in cli_opts else 0
+                sim_cliente_sb = st.selectbox(
+                    "Cliente",
+                    cli_opts,
+                    index=idx_cliente_sb,
+                    key="sb_sim_cliente",
+                    label_visibility="collapsed"
+                )
+
+                st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
+                
+                # --- Categoria ---
+                st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📁 CATEGORIA</p>", unsafe_allow_html=True)
+                categoria_mem_sb = st.session_state.get("filtros", {}).get("categoria", "")
+                idx_cat_sb = cat_opts.index(categoria_mem_sb) if categoria_mem_sb in cat_opts else (0 if cat_opts else None)
+                sim_categoria_sb = st.selectbox(
+                    "Categoria",
+                    cat_opts,
+                    index=idx_cat_sb,
+                    key="sb_sim_categoria",
+                    label_visibility="collapsed"
+                )
+
+                st.markdown('<div style="height: 8px;"></div>', unsafe_allow_html=True)
+                
+                # --- Produto (com opção TODOS) ---
+                st.markdown("<p style='font-size: 11px; font-weight: 600; color: #0c3a66; margin: 0 0 6px 0;'>📦 PRODUTO</p>", unsafe_allow_html=True)
+                produto_mem_sb = st.session_state.get("filtros", {}).get("produto", "TODOS")
+                idx_prd_sb = prod_opts.index(produto_mem_sb) if produto_mem_sb in prod_opts else 0
+                sim_produto_sb = st.selectbox(
+                    "Produto",
+                    prod_opts,
+                    index=idx_prd_sb,
+                    key="sb_sim_produto",
+                    label_visibility="collapsed"
+                )
+                
+                st.markdown('<div style="height: 12px;"></div>', unsafe_allow_html=True)
+                aplicar_filtros_sb = st.form_submit_button(
+                    "Aplicar filtros",
+                    use_container_width=True,
+                    disabled=not pagina_simulador,
+                )
+
+            if aplicar_filtros_sb:
+                filtros_anteriores = st.session_state.get("filtros", {}).copy()
+                if sim_nome_sb:
+                    st.session_state["sim_nome"] = sim_nome_sb
+                    filtros = st.session_state.get("filtros", {})
+                    filtros["nome"] = sim_nome_sb
+                    st.session_state["filtros"] = filtros
+                _update_filtro("cd_tip_agpd", sim_tipo_volume_sb)
+                _update_filtro("tip_td", sim_tip_td_sb)
+                _update_filtro("cliente", sim_cliente_sb)
+                _update_filtro("categoria", sim_categoria_sb)
+                filtros_base_mudaram = any(
+                    filtros_anteriores.get(chave) != novo_valor
+                    for chave, novo_valor in [
+                        ("cd_tip_agpd", sim_tipo_volume_sb),
+                        ("tip_td", sim_tip_td_sb),
+                        ("cliente", sim_cliente_sb),
+                        ("categoria", sim_categoria_sb),
+                    ]
+                )
+                produto_aplicado = "TODOS" if filtros_base_mudaram else sim_produto_sb
+                _update_filtro("produto", produto_aplicado)
             
             # --- Botão Salvar ---
             def _salvar_simulacao_sidebar():
@@ -901,38 +871,39 @@ else:
                     st.warning(feedback_msg)
 
         # Reordena visualmente os blocos para manter Filtros antes de Parâmetros.
-        components.html(
-            """
-            <script>
-            (function reorderSidebarSections(){
-                const doc = window.parent.document;
-                const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
-                if (!sidebar) return;
+        if pagina_simulador:
+            components.html(
+                """
+                <script>
+                (function reorderSidebarSections(){
+                    const doc = window.parent.document;
+                    const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+                    if (!sidebar) return;
 
-                const expanders = Array.from(sidebar.querySelectorAll('div[data-testid="stExpander"]'));
-                const findExpander = (label) => expanders.find((el) => (el.textContent || '').includes(label));
+                    const expanders = Array.from(sidebar.querySelectorAll('div[data-testid="stExpander"]'));
+                    const findExpander = (label) => expanders.find((el) => (el.textContent || '').includes(label));
 
-                const filtros = findExpander('Filtros da Simulação');
-                const parametros = findExpander('Parâmetros da Simulação');
-                if (!filtros || !parametros) return;
+                    const filtros = findExpander('Filtros da Simulação');
+                    const parametros = findExpander('Parâmetros da Simulação');
+                    if (!filtros || !parametros) return;
 
-                const parent = parametros.parentElement;
-                if (!parent) return;
+                    const parent = parametros.parentElement;
+                    if (!parent) return;
 
-                const filtrosBeforeParametros = filtros.compareDocumentPosition(parametros) & Node.DOCUMENT_POSITION_FOLLOWING;
-                if (!filtrosBeforeParametros) {
-                    parent.insertBefore(filtros, parametros);
-                }
-            })();
-            </script>
-            """,
-            height=0,
-        )
+                    const filtrosBeforeParametros = filtros.compareDocumentPosition(parametros) & Node.DOCUMENT_POSITION_FOLLOWING;
+                    if (!filtrosBeforeParametros) {
+                        parent.insertBefore(filtros, parametros);
+                    }
+                })();
+                </script>
+                """,
+                height=0,
+            )
 
         st.markdown("---")
         
         # ============== HISTÓRICO DE SIMULAÇÕES ==============
-        simulacoes_usuario_sb = get_simulacoes_usuario()
+        simulacoes_usuario_sb = get_simulacoes_usuario() if pagina_simulador else []
         
         with st.expander(f"📂 Histórico ({len(simulacoes_usuario_sb)})", expanded=False):
             if not simulacoes_usuario_sb:

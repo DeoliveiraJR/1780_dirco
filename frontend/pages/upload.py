@@ -12,6 +12,7 @@ import json
 import requests
 import sys
 import os
+from io import BytesIO
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_manager import (
@@ -224,6 +225,19 @@ def _renderizar_preview_td_dre(df_td_dre: pd.DataFrame, aba_nome: str):
     with st.expander(f"📋 Prévia de '{aba_nome}'", expanded=False):
         st.dataframe(df_td_dre.head(100), use_container_width=True)
 
+
+@st.cache_data(show_spinner=False)
+def _carregar_workbook_upload(arquivo_bytes: bytes, nome_arquivo: str) -> tuple[list[str], dict[str, pd.DataFrame]]:
+    """Carrega o workbook uma vez por arquivo e reutiliza as abas em reruns.
+
+    O nome do arquivo entra na chave do cache para evitar colisao entre uploads
+    com bytes similares em sessoes consecutivas.
+    """
+    with pd.ExcelFile(BytesIO(arquivo_bytes)) as xls:
+        abas = list(xls.sheet_names)
+        planilhas = {aba: pd.read_excel(xls, sheet_name=aba) for aba in abas}
+    return abas, planilhas
+
 def _consolidar_duplicatas(df: pd.DataFrame, metodo: str = "sum") -> pd.DataFrame:
     chaves = ["ANO_NUM", "MES_NUM", "CAT_N", "PROD_N"]
     if "CLI_N" in df.columns:
@@ -303,29 +317,24 @@ def upload_interface():
         )
         if uploaded_file is not None:
             try:
-                import openpyxl
-                from io import BytesIO
-                
-                # Detectar abas disponíveis
-                arquivo_io = BytesIO(uploaded_file.getvalue())
-                wb = openpyxl.load_workbook(arquivo_io)
-                abas = wb.sheetnames
+                arquivo_bytes = uploaded_file.getvalue()
+                abas, planilhas = _carregar_workbook_upload(arquivo_bytes, uploaded_file.name)
                 
                 st.success(f"✅ Arquivo carregado com sucesso! Abas detectadas: {', '.join(abas)}")
                 
                 # Lê e mostra prévia de cada aba
                 for aba_nome in abas:
                     if aba_nome.lower().strip() in ['dados', 'data']:
-                        df_raw = pd.read_excel(uploaded_file, sheet_name=aba_nome)
+                        df_raw = planilhas[aba_nome]
                         st.info(f"📊 **Aba '{aba_nome}' (Projeções)**: {len(df_raw)} registros")
                         with st.expander(f"📋 Prévia de '{aba_nome}'"):
                             st.dataframe(df_raw.head(100), use_container_width=True)
                     elif aba_nome.lower().strip() == 'td_dre':
-                        df_td_dre = pd.read_excel(uploaded_file, sheet_name=aba_nome)
+                        df_td_dre = planilhas[aba_nome]
                         _renderizar_preview_td_dre(df_td_dre, aba_nome)
                     
                     elif aba_nome.lower().strip() == 'indices_tesou':
-                        df_indices = pd.read_excel(uploaded_file, sheet_name=aba_nome)
+                        df_indices = planilhas[aba_nome]
                         st.info(f"📈 **Aba '{aba_nome}' (Índices)**: {len(df_indices)} registros")
                         with st.expander(f"📋 Prévia de '{aba_nome}'"):
                             st.dataframe(df_indices.head(100), use_container_width=True)
@@ -366,13 +375,8 @@ Importada sem tratamento, apenas como está no arquivo
 def processar_arquivo_completo(uploaded_file):
     """Processa arquivo com múltiplas abas (dados + índices)"""
     try:
-        import openpyxl
-        from io import BytesIO
-        
         arquivo_bytes = uploaded_file.getvalue()
-        arquivo_io = BytesIO(arquivo_bytes)
-        wb = openpyxl.load_workbook(arquivo_io)
-        abas = wb.sheetnames
+        abas, planilhas = _carregar_workbook_upload(arquivo_bytes, uploaded_file.name)
         
         st.info(f"📋 Abas detectadas no arquivo: {', '.join(abas)}")
         
@@ -381,14 +385,14 @@ def processar_arquivo_completo(uploaded_file):
         aba_td_dre = next((a for a in abas if a.lower().strip() == 'td_dre'), None)
         if aba_dados:
             st.markdown(f"**ℹ️ Processando aba '{aba_dados}' (Projeções)...**")
-            df_raw = pd.read_excel(uploaded_file, sheet_name=aba_dados)
+            df_raw = planilhas[aba_dados]
             
             # Processa os dados de projeção (sem mostrar botão de salvar duplicado)
             processar_dados(df_raw, mostrar_botao_salvar=False)
 
             # Prepara a base ativa da DRE na sessao com o mesmo workbook enviado.
             if aba_td_dre:
-                df_td_dre = pd.read_excel(uploaded_file, sheet_name=aba_td_dre)
+                df_td_dre = planilhas[aba_td_dre]
                 df_dre_ativo = pd.concat([df_raw, df_td_dre], ignore_index=True, sort=False)
                 set_base_dre_upload(df_dre_ativo, origem=f"upload_session:{uploaded_file.name}")
                 st.success(

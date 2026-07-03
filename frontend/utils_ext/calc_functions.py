@@ -13,30 +13,281 @@ Sintaxe Básica:
     MINIMO(TD71:TD90)       # Valor mínimo entre TD71 e TD90 (intervalo)
     MAXIMO(TD71;TD72;TD87)  # Valor máximo dos códigos especificados
 
-Sintaxe com Sazonalidade (Intervalo Temporal):
-    SOMA(TD71; 7)           # Soma dos PRÓXIMOS 7 meses de TD71 (a partir de agora)
-    MEDIA(TD72; -7)         # Média dos ÚLTIMOS 7 meses de TD72 (meses passados)
-    MINIMO(TD71; -12)       # Valor mínimo dos últimos 12 meses (ano anterior)
+Sintaxe com Janela Temporal:
+    SOMA(TD71; 7)           # Soma dos PRÓXIMOS 7 meses reais após o mês base
+    MEDIA(TD72; -7)         # Média dos ÚLTIMOS 7 meses reais antes do mês base
+    MINIMO(TD71; -12)       # Valor mínimo dos últimos 12 meses na linha do tempo real
 
-Novo Sistema de Sazonalidade (Fixo vs Variável):
+Sistema de Sazonalidade (Fixo vs Variável):
     FIXO: Mesmo período para todos os meses
         {tipo: FIXO, mes_inicio: 1, mes_fim: 7}  → Always Jan-Jul
     VARIÁVEL: Período móvel por mês
         {tipo: VARIAVEL, quantidade: 7, tipo_periodo: MES, periodoLinha: ULTIMO}
-        → Cada mês calcula seus últimos 7 meses
+        → Cada mês calcula seus últimos 7 meses reais, sem wrap-around
 """
 
 import numpy as np
-from typing import Dict, List, Union, Tuple, Optional
+import pandas as pd
+from datetime import datetime
+from typing import Any, Dict, List, Union, Tuple, Optional
 
 
 DEBUG_CALC_LOGS = False
 _INDICES_12M_CACHE: Optional[Dict[str, List[float]]] = None
+_INDICES_HIST_CACHE: Optional[Dict[str, List[Dict[str, float]]]] = None
 
 
 def _log_calc(msg: str):
     if DEBUG_CALC_LOGS:
         print(msg)
+
+
+def _coagir_numero_ou_none(valor: Any) -> Optional[float]:
+    """Converte valores numericos preservando vazio logico como None."""
+    if valor is None or isinstance(valor, bool):
+        return None
+
+    try:
+        if pd.isna(valor):
+            return None
+    except Exception:
+        pass
+
+    if isinstance(valor, (int, float, np.number)):
+        return float(valor)
+
+    try:
+        texto = str(valor).strip()
+        if not texto:
+            return None
+        return float(texto)
+    except Exception:
+        return None
+
+
+def _coletar_valores_excel(valores: List[Any]) -> List[float]:
+    """Replica a semantica do Excel: ignora vazios e mantem zeros explicitos."""
+    valores_validos: List[float] = []
+    for valor in valores or []:
+        numero = _coagir_numero_ou_none(valor)
+        if numero is not None:
+            valores_validos.append(numero)
+    return valores_validos
+
+
+def _normalizar_flags_item(item: Dict[str, Any], tamanho: int) -> List[bool]:
+    """Obtém flags de preenchimento quando o contexto expõe vazio vs zero."""
+    if not isinstance(item, dict) or tamanho <= 0:
+        return [True] * max(int(tamanho), 0)
+
+    candidatos = [
+        item.get("valores_preenchidos"),
+        item.get("projetado_preenchido"),
+    ]
+    for flags in candidatos:
+        if isinstance(flags, list) and len(flags) >= tamanho:
+            return [bool(v) for v in flags[:tamanho]]
+
+    return [True] * tamanho
+
+
+def _periodo_para_ordem(ano: int, mes: int) -> int:
+    """Converte ano/mes em um indice cronologico monotônico."""
+    return (int(ano) * 12) + int(mes)
+
+
+def _ordem_para_periodo(ordem: int) -> Tuple[int, int]:
+    """Converte o indice cronologico de volta para ano/mes."""
+    ano = (int(ordem) - 1) // 12
+    mes = (int(ordem) - 1) % 12 + 1
+    return ano, mes
+
+
+def _normalizar_serie_historica(serie: Optional[List[Dict[str, Any]]]) -> List[Dict[str, float]]:
+    """
+    Normaliza e agrega uma série histórica no formato:
+    [{"ano": 2026, "mes": 5, "valor": 123.0}, ...]
+    """
+    if not serie:
+        return []
+
+    acumulado: Dict[Tuple[int, int], float] = {}
+    for item in serie:
+        if not isinstance(item, dict):
+            continue
+
+        try:
+            ano = int(item.get("ano"))
+            mes = int(item.get("mes"))
+        except Exception:
+            continue
+
+        valor = _coagir_numero_ou_none(item.get("valor"))
+        preenchido = bool(item.get("preenchido", valor is not None))
+        if not preenchido or valor is None:
+            continue
+
+        if mes < 1 or mes > 12:
+            continue
+
+        chave = (ano, mes)
+        acumulado[chave] = acumulado.get(chave, 0.0) + valor
+
+    return [
+        {"ano": ano, "mes": mes, "valor": float(valor)}
+        for (ano, mes), valor in sorted(acumulado.items())
+    ]
+
+
+def _serie_historica_para_12_meses(serie_historica: List[Dict[str, float]], ano_referencia: int) -> List[float]:
+    """Converte a série histórica para os 12 meses do ano de referência."""
+    valores = [0.0] * 12
+    for item in _normalizar_serie_historica(serie_historica):
+        if int(item["ano"]) != int(ano_referencia):
+            continue
+        mes_idx = int(item["mes"]) - 1
+        if 0 <= mes_idx < 12:
+            valores[mes_idx] = float(item["valor"])
+    return valores
+
+
+def _obter_ano_referencia(contexto: Dict) -> int:
+    meta = contexto.get("__meta__", {}) if isinstance(contexto, dict) else {}
+    try:
+        return int(meta.get("ano_referencia", datetime.now().year))
+    except Exception:
+        return datetime.now().year
+
+
+def _obter_serie_historica_item(item: Dict[str, Any], ano_referencia: int) -> List[Dict[str, float]]:
+    """Obtém a série histórica de um item do contexto ou usa o array do ano atual como fallback."""
+    if not isinstance(item, dict):
+        return []
+
+    serie_historica = _normalizar_serie_historica(item.get("serie_historica"))
+    if serie_historica:
+        return serie_historica
+
+    valores = item.get("valores", [0.0] * 12) or [0.0] * 12
+    flags = _normalizar_flags_item(item, min(len(valores), 12))
+    serie_fallback: List[Dict[str, float]] = []
+    for idx, valor in enumerate(valores[:12]):
+        if idx >= len(flags) or not flags[idx]:
+            continue
+        numero = _coagir_numero_ou_none(valor)
+        if numero is None:
+            continue
+        serie_fallback.append(
+            {"ano": int(ano_referencia), "mes": idx + 1, "valor": numero}
+        )
+    return serie_fallback
+
+
+def _obter_valor_historico(
+    item: Dict[str, Any],
+    ano: int,
+    mes: int,
+    ano_referencia: int,
+    fallback_mes_idx: Optional[int] = None,
+) -> Optional[float]:
+    """Busca um valor em ano/mes na série histórica, com fallback para o array de 12 meses."""
+    for ponto in _obter_serie_historica_item(item, ano_referencia):
+        if int(ponto["ano"]) == int(ano) and int(ponto["mes"]) == int(mes):
+            return float(ponto["valor"])
+
+    if int(ano) == int(ano_referencia):
+        valores = item.get("valores", [0.0] * 12) or [0.0] * 12
+        flags = _normalizar_flags_item(item, min(len(valores), 12))
+        if fallback_mes_idx is None:
+            fallback_mes_idx = int(mes) - 1
+        if (
+            0 <= fallback_mes_idx < len(valores)
+            and fallback_mes_idx < len(flags)
+            and flags[fallback_mes_idx]
+        ):
+            return _coagir_numero_ou_none(valores[fallback_mes_idx])
+
+    return None
+
+
+def _extrair_janela_historica_por_periodo(
+    item: Dict[str, Any],
+    ano_base: int,
+    mes_base: int,
+    janela: int,
+    lag: int = 0,
+    ano_referencia: Optional[int] = None,
+) -> List[float]:
+    """
+    Extrai janelas cronológicas reais.
+
+    Regras:
+    - `janela < 0`: retorna os últimos N meses ANTERIORES ao mês base.
+    - `janela > 0`: retorna os próximos N meses POSTERIORES ao mês base.
+    - `lag`: desloca o mês base para trás antes de montar a janela.
+    """
+    if janela == 0:
+        return []
+
+    ano_ref = int(ano_referencia or ano_base)
+    base_ord = _periodo_para_ordem(ano_base, mes_base) - int(lag or 0)
+    quantidade = abs(int(janela))
+
+    if janela < 0:
+        ordens = [base_ord - passo for passo in range(quantidade, 0, -1)]
+    else:
+        ordens = [base_ord + passo for passo in range(1, quantidade + 1)]
+
+    valores = []
+    for ordem in ordens:
+        ano, mes = _ordem_para_periodo(ordem)
+        valores.append(_obter_valor_historico(item, ano, mes, ano_ref))
+    return valores
+
+
+def _extrair_sazonalidade_historica(
+    item: Dict[str, Any],
+    saz: Union[Dict, int, None],
+    ano_base: int,
+    mes_base: int,
+    ano_referencia: Optional[int] = None,
+) -> List[float]:
+    """Aplica sazonalidade usando linha do tempo real em vez de um array circular."""
+    saz_normalizada = normalizar_sazonalidade(saz)
+    ano_ref = int(ano_referencia or ano_base)
+    saz_tipo = saz_normalizada.get("tipo", "NENHUM")
+
+    if saz_tipo == "NENHUM":
+        return [_obter_valor_historico(item, ano_base, mes_base, ano_ref, mes_base - 1)]
+
+    if saz_tipo == "FIXO":
+        mes_inicio = max(1, int(saz_normalizada.get("mes_inicio", 1)))
+        mes_fim = min(12, int(saz_normalizada.get("mes_fim", 12)))
+        if mes_fim < mes_inicio:
+            return []
+        return [
+            _obter_valor_historico(item, ano_base, mes, ano_ref, mes - 1)
+            for mes in range(mes_inicio, mes_fim + 1)
+        ]
+
+    quantidade = max(1, int(saz_normalizada.get("quantidade", 1)))
+    tipo_periodo = str(saz_normalizada.get("tipo_periodo", "MES")).upper()
+    periodo_linha = str(saz_normalizada.get("periodoLinha", "ULTIMO")).upper()
+
+    if tipo_periodo == "ANO":
+        quantidade *= 12
+
+    base_ord = _periodo_para_ordem(ano_base, mes_base)
+    if periodo_linha == "ULTIMO":
+        ordens = [base_ord - passo for passo in range(quantidade, 0, -1)]
+    else:
+        ordens = [base_ord + passo for passo in range(1, quantidade + 1)]
+
+    valores = []
+    for ordem in ordens:
+        ano, mes = _ordem_para_periodo(ordem)
+        valores.append(_obter_valor_historico(item, ano, mes, ano_ref))
+    return valores
 
 
 # ============================================================================
@@ -57,7 +308,7 @@ def SOMA(valores: List[float]) -> float:
         SOMA([100, 200, 300]) → 600
     """
     try:
-        return float(sum(v for v in valores if isinstance(v, (int, float))))
+        return float(sum(_coletar_valores_excel(valores)))
     except Exception as e:
         print(f"[CALC] Erro em SOMA: {e}")
         return 0.0
@@ -77,12 +328,49 @@ def MEDIA(valores: List[float]) -> float:
         MEDIA([100, 200, 300]) → 200
     """
     try:
-        valores_validos = [v for v in valores if isinstance(v, (int, float))]
+        valores_validos = _coletar_valores_excel(valores)
         if not valores_validos:
             return 0.0
         return float(sum(valores_validos) / len(valores_validos))
     except Exception as e:
         print(f"[CALC] Erro em MEDIA: {e}")
+        return 0.0
+
+
+def MEDIA_INTERNA(valores: List[float], percentual: float) -> float:
+    """
+    Calcula a media interna seguindo a regra do Excel/TRIMMEAN.
+
+    O percentual indica o descarte total dos extremos. A quantidade descartada
+    e arredondada para baixo ate o multiplo de 2 mais proximo, removendo a
+    mesma quantidade do inicio e do fim da lista ordenada.
+    """
+    try:
+        valores_validos = _coletar_valores_excel(valores)
+        if not valores_validos:
+            return 0.0
+
+        percentual = float(percentual)
+        if percentual < 0 or percentual > 1:
+            _log_calc(f"[CALC] Percentual invalido em MEDIA_INTERNA: {percentual}")
+            return 0.0
+
+        total_valores = len(valores_validos)
+        total_descartado = int(total_valores * percentual)
+        total_descartado -= total_descartado % 2
+
+        if total_descartado <= 0:
+            return MEDIA(valores_validos)
+
+        metade = total_descartado // 2
+        valores_ordenados = sorted(valores_validos)
+        valores_filtrados = valores_ordenados[metade: total_valores - metade]
+        if not valores_filtrados:
+            return 0.0
+
+        return MEDIA(valores_filtrados)
+    except Exception as e:
+        print(f"[CALC] Erro em MEDIA_INTERNA: {e}")
         return 0.0
 
 
@@ -100,7 +388,7 @@ def MINIMO(valores: List[float]) -> float:
         MINIMO([100, 50, 300]) → 50
     """
     try:
-        valores_validos = [v for v in valores if isinstance(v, (int, float))]
+        valores_validos = _coletar_valores_excel(valores)
         if not valores_validos:
             return 0.0
         return float(min(valores_validos))
@@ -123,7 +411,7 @@ def MAXIMO(valores: List[float]) -> float:
         MAXIMO([100, 50, 300]) → 300
     """
     try:
-        valores_validos = [v for v in valores if isinstance(v, (int, float))]
+        valores_validos = _coletar_valores_excel(valores)
         if not valores_validos:
             return 0.0
         return float(max(valores_validos))
@@ -143,7 +431,7 @@ def DESVIO_PADRAO(valores: List[float]) -> float:
         float: Desvio padrão (0 se lista vazia)
     """
     try:
-        valores_validos = [v for v in valores if isinstance(v, (int, float))]
+        valores_validos = _coletar_valores_excel(valores)
         if not valores_validos:
             return 0.0
         return float(np.std(valores_validos, ddof=0))
@@ -407,6 +695,8 @@ def aplicar_sazonalidade_por_mes(
 FUNCOES_NATIVAS = {
     "SOMA": SOMA,
     "MEDIA": MEDIA,
+    "MEDIA_INTERNA": MEDIA_INTERNA,
+    "TRIMMEAN": MEDIA_INTERNA,
     "MINIMO": MINIMO,
     "MAXIMO": MAXIMO,
     "DESVIO_PADRAO": DESVIO_PADRAO,
@@ -415,6 +705,8 @@ FUNCOES_NATIVAS = {
 DESCRICOES_FUNCOES = {
     "SOMA": "Soma todos os valores (com suporte a intervalo temporal)",
     "MEDIA": "Calcula a média aritmética dos valores (com suporte a intervalo temporal)",
+    "MEDIA_INTERNA": "Calcula a média interna estilo Excel/TRIMMEAN, descartando percentuais simétricos dos extremos",
+    "TRIMMEAN": "Alias de MEDIA_INTERNA para compatibilidade com a nomenclatura do Excel em inglês",
     "MINIMO": "Encontra o valor mínimo entre os valores (com suporte a intervalo temporal)",
     "MAXIMO": "Encontra o valor máximo entre os valores (com suporte a intervalo temporal)",
     "DESVIO_PADRAO": "Calcula o desvio padrão populacional (com suporte a janela temporal)",
@@ -423,6 +715,8 @@ DESCRICOES_FUNCOES = {
 EXEMPLOS_FUNCOES = {
     "SOMA": "SOMA(TD71) ou SOMA(TD71; 7)     # Soma dos 12 meses ou próximos 7",
     "MEDIA": "MEDIA(TD71; -7)     # Média dos últimos 7 meses",
+    "MEDIA_INTERNA": "MEDIA_INTERNA(TD21; 0.2; -6) # Media interna dos ultimos 6 meses com descarte de 20%",
+    "TRIMMEAN": "TRIMMEAN(TD21; 0.2; -6)    # Alias da MEDIA_INTERNA",
     "MINIMO": "MINIMO(TD71; -12)   # Mínimo dos últimos 12 meses (ano anterior)",
     "MAXIMO": "MAXIMO(TD71; 7)     # Máximo dos próximos 7 meses",
     "DESVIO_PADRAO": "DESVIO_PADRAO(TD90; -5; 1) # Desvio dos últimos 5 meses com lag=1",
@@ -475,12 +769,35 @@ def parse_argumentos_temporais(argumentos_str: str) -> Tuple[List[str], Optional
     return referencias, janela, lag
 
 
+def parse_argumentos_media_interna(argumentos_str: str) -> Tuple[List[str], float, Optional[int], int]:
+    """
+    Faz parse da sintaxe MEDIA_INTERNA(referencia; percentual; janela_opcional; lag_opcional).
+    """
+    partes = [p.strip() for p in argumentos_str.split(";") if p.strip()]
+    if len(partes) < 2:
+        raise ValueError("MEDIA_INTERNA requer ao menos referencia e percentual.")
+
+    referencia_bruta = partes[0].upper()
+    percentual = float(partes[1].replace(",", "."))
+
+    referencias = [referencia_bruta]
+    janela: Optional[int] = None
+    lag = 0
+
+    if len(partes) >= 3:
+        janela = int(partes[2])
+    if len(partes) >= 4:
+        lag = abs(int(partes[3]))
+
+    return referencias, percentual, janela, lag
+
+
 def extrair_janela_por_mes(valores_12_meses: List[float], mes_idx: int, janela: int, lag: int = 0) -> List[float]:
     """
-    Extrai janela temporal com wrap-around para um mês específico.
+    Helper legado de janela circular de 12 meses.
 
-    janela > 0: próximos N meses a partir do mês base
-    janela < 0: últimos N meses até o mês base
+    Mantido apenas por compatibilidade retroativa; o motor principal agora usa
+    `_extrair_janela_historica_por_periodo()` para operar em série histórica real.
     """
     if not valores_12_meses:
         return []
@@ -617,38 +934,66 @@ def _carregar_dados_indices_para_12_meses() -> Dict[str, List[float]]:
     if _INDICES_12M_CACHE is not None:
         return _INDICES_12M_CACHE
 
+    ano_referencia = datetime.now().year
+    indices_12_meses = {
+        nome_indice: _serie_historica_para_12_meses(serie_historica, ano_referencia)
+        for nome_indice, serie_historica in _carregar_dados_indices_historicos().items()
+    }
+    _INDICES_12M_CACHE = indices_12_meses
+    return indices_12_meses
+
+
+def _carregar_dados_indices_historicos() -> Dict[str, List[Dict[str, float]]]:
+    """Carrega a série histórica mensal dos índices econômicos disponíveis."""
+    global _INDICES_HIST_CACHE
+
+    if _INDICES_HIST_CACHE is not None:
+        return _INDICES_HIST_CACHE
+
     try:
-        # Importar funções de backend
         import sys
         import os
-        
-        # Adicionar caminho do backend
+
         backend_path = os.path.join(os.path.dirname(__file__), "..", "..", "backend")
         if backend_path not in sys.path:
             sys.path.insert(0, backend_path)
-        
-        from database import (
-            obter_lista_indices_disponiveis, 
-            agregar_indice_para_12_meses
-        )
-        
-        # Carregar todos os índices
-        indices_nomes = obter_lista_indices_disponiveis()
-        indices_12_meses = {}
-        
-        for nome_indice in indices_nomes:
+
+        from database import obter_lista_indices_disponiveis, obter_indices_por_nome
+
+        indices_historicos: Dict[str, List[Dict[str, float]]] = {}
+        for nome_indice in obter_lista_indices_disponiveis():
             try:
-                valores_12 = agregar_indice_para_12_meses(nome_indice, metodo="media")
-                if valores_12:
-                    indices_12_meses[nome_indice] = valores_12
+                registros = obter_indices_por_nome(nome_indice) or []
+                agrupado: Dict[Tuple[int, int], List[float]] = {}
+                for registro in registros:
+                    dt_alvo = registro.get("DT_ALVO")
+                    vl_pjtd = registro.get("VL_PJTD", 0.0)
+                    if dt_alvo is None:
+                        continue
+                    try:
+                        data_obj = pd.to_datetime(dt_alvo)
+                        valor = float(vl_pjtd or 0.0)
+                    except Exception:
+                        continue
+                    chave = (int(data_obj.year), int(data_obj.month))
+                    agrupado.setdefault(chave, []).append(valor)
+
+                indices_historicos[nome_indice] = [
+                    {
+                        "ano": ano,
+                        "mes": mes,
+                        "valor": float(np.mean(valores)) if valores else 0.0,
+                    }
+                    for (ano, mes), valores in sorted(agrupado.items())
+                ]
             except Exception as e:
-                _log_calc(f"[CALC] Erro ao carregar índice {nome_indice}: {e}")
-        
-        _INDICES_12M_CACHE = indices_12_meses
-        return indices_12_meses
-    
+                _log_calc(f"[CALC] Erro ao carregar histórico do índice {nome_indice}: {e}")
+
+        _INDICES_HIST_CACHE = indices_historicos
+        return indices_historicos
+
     except Exception as e:
-        _log_calc(f"[CALC] Erro ao carregar índices: {e}")
+        _log_calc(f"[CALC] Erro ao carregar índices históricos: {e}")
         return {}
 
 
@@ -665,23 +1010,26 @@ def _preparar_contexto_com_indices(dre_dados: Dict) -> Dict:
         Dicionário estendido com {**dre_dados, IPCA: [...], TAXA_SELIC: [...], ...}
     """
     contexto = dict(dre_dados)
-    
-    # Carregar índices
-    indices_12_meses = _carregar_dados_indices_para_12_meses()
-    
-    # Adicionar índices como "pseudo-variáveis" no contexto
-    for nome_indice, valores_12 in indices_12_meses.items():
+    ano_referencia = _obter_ano_referencia(contexto)
+
+    for nome_indice, serie_historica in _carregar_dados_indices_historicos().items():
         # Normalizar nome do índice (remover caracteres especiais)
         chave_contexto = nome_indice.upper().replace("-", "_").replace(" ", "_")
         
         contexto[chave_contexto] = {
             "tipo": "indice_economico",
-            "valores": valores_12,
-            "nome": nome_indice
+            "valores": _serie_historica_para_12_meses(serie_historica, ano_referencia),
+            "nome": nome_indice,
+            "serie_historica": serie_historica,
         }
         
         _log_calc(f"[CALC] Índice adicionado ao contexto: {chave_contexto}")
-    
+
+    contexto["__meta__"] = {
+        **(contexto.get("__meta__", {}) if isinstance(contexto.get("__meta__"), dict) else {}),
+        "ano_referencia": ano_referencia,
+    }
+
     return contexto
 
 
@@ -710,7 +1058,8 @@ def evaluar_funcao_em_formula(nome_funcao: str, argumentos: str,
         evaluar_funcao_em_formula('MEDIA', 'IPCA; -7', dre_dados, incluir_indices=True) → média últimos 7 meses
     """
     
-    if nome_funcao.upper() not in FUNCOES_NATIVAS:
+    nome_funcao_upper = nome_funcao.upper()
+    if nome_funcao_upper not in FUNCOES_NATIVAS:
         _log_calc(f"[CALC] Função desconhecida: {nome_funcao}")
         return 0.0
     
@@ -718,8 +1067,17 @@ def evaluar_funcao_em_formula(nome_funcao: str, argumentos: str,
         # ✨ Preparar contexto com índices se permitido
         contexto = _preparar_contexto_com_indices(dre_dados) if incluir_indices else dre_dados
         
-        # ===== ETAPA 1: Extrair código e intervalo temporal =====
-        codigo_str, intervalo_temporal = processar_intervalo_temporal(argumentos.strip())
+        percentual = None
+        janela = None
+        lag = 0
+        ano_referencia = _obter_ano_referencia(contexto)
+        if nome_funcao_upper in {"MEDIA_INTERNA", "TRIMMEAN"}:
+            referencias, percentual, janela, lag = parse_argumentos_media_interna(argumentos.strip())
+            codigo_str = referencias[0]
+            intervalo_temporal = janela or 0
+        else:
+            # ===== ETAPA 1: Extrair código e intervalo temporal =====
+            codigo_str, intervalo_temporal = processar_intervalo_temporal(argumentos.strip())
         
         _log_calc(f"[CALC] {nome_funcao}({argumentos})")
         _log_calc(f"[CALC]  → Código: {codigo_str}, Intervalo: {intervalo_temporal}")
@@ -745,24 +1103,53 @@ def evaluar_funcao_em_formula(nome_funcao: str, argumentos: str,
         
         # ===== ETAPA 3: Coletar valores com filtro temporal =====
         valores_para_funcao = []
+        mes_base = (mes_idx + 1) if mes_idx is not None else 12
         
         for codigo in codigos_a_usar:
             if codigo in contexto:
-                valores_var = contexto[codigo].get("valores", [0.0] * 12)
-                
-                # Aplicar filtro temporal
-                valores_filtrados = aplicar_intervalo_temporal(valores_var, intervalo_temporal)
-                
-                if mes_idx is not None and mes_idx < len(valores_filtrados):
-                    # Se especificou mês, usar valor daquele mês
-                    valores_para_funcao.append(valores_filtrados[mes_idx])
-                else:
-                    # Senão, agregar todos os valores filtrados
+                item_contexto = contexto[codigo]
+
+                if mes_idx is not None and intervalo_temporal:
+                    valores_filtrados = _extrair_janela_historica_por_periodo(
+                        item_contexto,
+                        ano_referencia,
+                        mes_base,
+                        janela=intervalo_temporal,
+                        lag=lag,
+                        ano_referencia=ano_referencia,
+                    )
                     valores_para_funcao.extend(valores_filtrados)
+                elif mes_idx is not None and lag:
+                    ano_lag, mes_lag = _ordem_para_periodo(
+                        _periodo_para_ordem(ano_referencia, mes_base) - lag
+                    )
+                    valores_para_funcao.append(
+                        _obter_valor_historico(item_contexto, ano_lag, mes_lag, ano_referencia, mes_lag - 1)
+                    )
+                elif mes_idx is not None:
+                    valores_para_funcao.append(
+                        _obter_valor_historico(item_contexto, ano_referencia, mes_base, ano_referencia, mes_base - 1)
+                    )
+                else:
+                    valores_para_funcao.extend(
+                        [
+                            _obter_valor_historico(
+                                item_contexto,
+                                ano_referencia,
+                                mes_cursor,
+                                ano_referencia,
+                                mes_cursor - 1,
+                            )
+                            for mes_cursor in range(1, 13)
+                        ]
+                    )
         
         # ===== ETAPA 4: Executar a função =====
-        funcao = FUNCOES_NATIVAS[nome_funcao.upper()]
-        resultado = funcao(valores_para_funcao)
+        funcao = FUNCOES_NATIVAS[nome_funcao_upper]
+        if nome_funcao_upper in {"MEDIA_INTERNA", "TRIMMEAN"}:
+            resultado = funcao(valores_para_funcao, percentual)
+        else:
+            resultado = funcao(valores_para_funcao)
         
         _log_calc(f"[CALC]  → Resultado: {resultado}")
         
@@ -813,7 +1200,8 @@ def evaluar_funcao_dinamica_por_mes(
                                         {tipo: VARIAVEL, quantidade: 3, ...},
                                         incluir_indices=True)
     """
-    if nome_funcao.upper() not in FUNCOES_NATIVAS:
+    nome_funcao_upper = nome_funcao.upper()
+    if nome_funcao_upper not in FUNCOES_NATIVAS:
         _log_calc(f"[CALC] Função desconhecida: {nome_funcao}")
         return [0.0] * 12
     
@@ -827,7 +1215,13 @@ def evaluar_funcao_dinamica_por_mes(
     
     valores_resultado_12_meses = []
     
-    referencias, janela, lag = parse_argumentos_temporais(argumentos)
+    percentual = None
+    if nome_funcao_upper in {"MEDIA_INTERNA", "TRIMMEAN"}:
+        referencias, percentual, janela, lag = parse_argumentos_media_interna(argumentos)
+    else:
+        referencias, janela, lag = parse_argumentos_temporais(argumentos)
+
+    ano_referencia = _obter_ano_referencia(contexto)
 
     # Para cada um dos 12 meses
     for mes_idx in range(12):
@@ -857,34 +1251,59 @@ def evaluar_funcao_dinamica_por_mes(
             
             for codigo in codigos_a_usar:
                 if codigo in contexto:
-                    valores_var = contexto[codigo].get("valores", [0.0] * 12)
+                    item_contexto = contexto[codigo]
+                    ano_base = ano_referencia
+                    mes_base = mes_idx + 1
 
                     if janela is not None:
-                        valores_filtrados = extrair_janela_por_mes(
-                            valores_var,
-                            mes_idx,
+                        valores_filtrados = _extrair_janela_historica_por_periodo(
+                            item_contexto,
+                            ano_base,
+                            mes_base,
                             janela=janela,
-                            lag=lag
+                            lag=lag,
+                            ano_referencia=ano_referencia,
                         )
                     elif lag:
-                        indice_lag = (mes_idx - lag) % 12
-                        valores_filtrados = [valores_var[indice_lag] if indice_lag < len(valores_var) else 0.0]
+                        ano_lag, mes_lag = _ordem_para_periodo(
+                            _periodo_para_ordem(ano_base, mes_base) - lag
+                        )
+                        valores_filtrados = [
+                            _obter_valor_historico(
+                                item_contexto,
+                                ano_lag,
+                                mes_lag,
+                                ano_referencia,
+                                mes_lag - 1,
+                            )
+                        ]
                     elif saz_normalizada.get("tipo") != "NENHUM":
-                        # Mantém sazonalidade explícita da metodologia quando configurada.
-                        valores_filtrados = aplicar_sazonalidade_por_mes(
-                            valores_var,
+                        valores_filtrados = _extrair_sazonalidade_historica(
+                            item_contexto,
                             saz,
-                            mes_idx
+                            ano_base,
+                            mes_base,
+                            ano_referencia=ano_referencia,
                         )
                     else:
-                        # Sem janela e sem sazonalidade: função opera no valor do mês corrente.
-                        valores_filtrados = [valores_var[mes_idx] if mes_idx < len(valores_var) else 0.0]
+                        valores_filtrados = [
+                            _obter_valor_historico(
+                                item_contexto,
+                                ano_base,
+                                mes_base,
+                                ano_referencia,
+                                mes_idx,
+                            )
+                        ]
 
                     valores_para_funcao.extend(valores_filtrados)
             
             # ===== ETAPA 3: Executar função =====
-            funcao = FUNCOES_NATIVAS[nome_funcao.upper()]
-            valor_mes = funcao(valores_para_funcao)
+            funcao = FUNCOES_NATIVAS[nome_funcao_upper]
+            if nome_funcao_upper in {"MEDIA_INTERNA", "TRIMMEAN"}:
+                valor_mes = funcao(valores_para_funcao, percentual)
+            else:
+                valor_mes = funcao(valores_para_funcao)
             valores_resultado_12_meses.append(float(valor_mes))
             
             if mes_idx == 0 or mes_idx == 6 or mes_idx == 11:

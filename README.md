@@ -2,7 +2,7 @@
 
 Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário**, **controle de permissões** e **DRE Gerencial profissional**.
 
-**Versão Atual:** v4.0.0 | **Status:** ✅ Production Ready | **Última Atualização:** 25/06/2026
+**Versão Atual:** v4.0.3 | **Status:** ✅ Production Ready | **Última Atualização:** 03/07/2026
 
 ---
 
@@ -43,6 +43,24 @@ QUANDO PRESO EM LOOP (3+ tentativas falhadas):
 ---
 
 ## 📌 O que foi implementado
+
+### ✅ [v4.0.3] - Vazio vs Zero na DRE
+- **Semântica Excel para células vazias:** funções nativas (`SOMA`, `MEDIA`, `MEDIA_INTERNA`, `MINIMO`, `MAXIMO`, `DESVIO_PADRAO`) agora ignoram meses vazios em vez de convertê-los automaticamente para `0`
+- **Zero explícito preservado:** a DRE passou a guardar flags de preenchimento por mês (`projetado_preenchido`, `valores_base_preenchidos`, `valores_preenchidos`), distinguindo `0` digitado de mês não preenchido
+- **Editor da DRE alinhado ao motor:** ao editar a grade, um `0` digitado continua participando das metodologias; uma célula limpa volta a ser tratada como vazio lógico
+- **Persistência restaurável:** salvar/carregar simulações DRE agora preserva também as flags de preenchimento, evitando reintrodução de zeros artificiais ao restaurar cenários
+
+### ✅ [v4.0.2] - Motor Temporal Cronológico da DRE
+- **Série histórica real nas metodologias:** funções com janela (`SOMA`, `MEDIA`, `MEDIA_INTERNA`, `MINIMO`, `MAXIMO`, `DESVIO_PADRAO`) passaram a operar em linha do tempo cronológica por `ano/mês`, sem wrap-around artificial de 12 meses
+- **Semântica temporal alinhada ao Excel:** `-6` agora significa "6 meses anteriores reais ao mês base", e `+6` usa meses futuros reais após o mês base
+- **Contexto multi-ano enriquecido:** linhas variáveis da DRE, `TD21`, `TD62` e índices econômicos ganharam suporte a `serie_historica` no motor de fórmulas
+- **Cálculo mensal mais fiel:** metodologias que cruzam virada de ano agora leem meses corretos do histórico filtrado do produto/cliente/categoria
+
+### ✅ [v4.0.1] - Nova Função Nativa MEDIA_INTERNA
+- **Nova função nativa:** `MEDIA_INTERNA(...)` implementada no motor da DRE com comportamento estilo Excel `TRIMMEAN`
+- **Aliases aceitos:** `MEDIA.INTERNA(...)`, `MÉDIA.INTERNA(...)` e `TRIMMEAN(...)`
+- **Autocomplete e ajuda da DRE atualizados** para a nova função
+- **Skill dedicada criada:** `.trae/skills/dre-methodology-guardian/SKILL.md`
 
 ### ✅ [v4.0.0] - Sincronização de Filtros, Base DRE Correta e UX DRE
 - **Base DRE correta ativa:** base compartilhada substituída pelo workbook completo (`bd_dados_v9.xlsx`) com `DADOS` + `TD_DRE` + `INDICES_TESOU`; DRE deixou de zerar nas linhas TD71/TD72 e demais componentes
@@ -247,7 +265,11 @@ QUANDO PRESO EM LOOP (3+ tentativas falhadas):
 
 #### **Sistema de Metodologias**
 - Crie fórmulas personalizadas: `=0.05*TD71`, `=TD71+TD72`
-- Funções nativas disponíveis: `SOMA`, `MEDIA`, `MAXIMO`, `MINIMO`, `DESVIO_PADRAO`
+- Funções nativas disponíveis: `SOMA`, `MEDIA`, `MEDIA_INTERNA`, `MAXIMO`, `MINIMO`, `DESVIO_PADRAO`
+- Janelas temporais usam série histórica real por `ano/mês`, sem circularidade artificial
+- Exemplo: `=MEDIA_INTERNA(TD72; 0,33; -6)` usa os 6 meses reais anteriores ao mês base
+- Meses vazios são ignorados nas funções nativas, como no Excel; `0` só entra no cálculo quando foi explicitamente preenchido
+- O editor diferencia célula limpa de zero digitado para preservar a mesma semântica ao salvar e restaurar a DRE
 - Valide antes de salvar
 - Aplique a múltiplas variáveis
 - Aplique por linha com período completo ou intervalo de meses
@@ -517,6 +539,6 @@ Para questões ou problemas:
 
 ---
 
-**Última atualização:** 25/06/2026 | **Versão:** v4.0.0 | **Status:** ✅ Production Ready
+**Última atualização:** 03/07/2026 | **Versão:** v4.0.3 | **Status:** ✅ Production Ready
 
 Mantém este README como documentação única e oficial. Para histórico detalhado, consulte [CHANGELOG.md](CHANGELOG.md).

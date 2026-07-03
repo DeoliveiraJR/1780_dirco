@@ -1,6 +1,8 @@
 # frontend/components/cards.py
-"""Cards de categoria com layout legível e cabeçalhos."""
+"""Cards de categoria com componentes nativos Streamlit (sem HTML custom)."""
+import streamlit as st
 import numpy as np
+import pandas as pd
 from utils_ext.constants import CAT_COLORS, CAT_ICONS
 from utils_ext.formatters import fmt_compact
 
@@ -23,143 +25,13 @@ def _get_cat_icon(cat: str) -> str:
     return "📊"  # Fallback: gráfico de barras
 
 
-_CARD_CSS = """
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body, html { margin: 0; padding: 0; background: transparent; }
-
-.card {
-  border-radius: 12px;
-  padding: 14px 16px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.06);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  color: #1e293b;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.card-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  color: white;
-  font-size: 16px;
-}
-
-.card-title {
-  font-size: 14px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  color: #0f172a;
-}
-
-.data-table {
-  width: 100%;
-  max-width: 430px;
-  margin: 0 auto;
-}
-
-.table-header {
-  display: grid;
-  grid-template-columns: 1.2fr 0.9fr 0.9fr 0.95fr 0.95fr;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0 8px 0;
-  border-bottom: 2px solid #e2e8f0;
-  margin-bottom: 6px;
-}
-
-.th-serie { font-size: 10.8px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.2px; }
-.th-total { font-size: 10.8px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
-.th-media { font-size: 10.8px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
-.th-ref-total { font-size: 9.8px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
-.th-ref-media { font-size: 9.8px; font-weight: 700; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.2px; }
-
-.data-row {
-  display: grid;
-  grid-template-columns: 1.2fr 0.9fr 0.9fr 0.95fr 0.95fr;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid #f8fafc;
-}
-
-.data-row:last-child {
-  border-bottom: none;
-}
-
-.col-serie {
-  font-size: 12px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.col-total {
-  font-size: 12px;
-  font-weight: 700;
-  text-align: right;
-}
-
-.col-media {
-  font-size: 11px;
-  text-align: right;
-  color: #475569;
-}
-
-.col-ref-total {
-  text-align: right;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.col-ref-media {
-  text-align: right;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.badge {
-  padding: 2px 6px;
-  border-radius: 8px;
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.badge-pos { background: #dcfce7; color: #166534; }
-.badge-neg { background: #fee2e2; color: #dc2626; }
-.badge-neu { background: #f1f5f9; color: #64748b; }
-
-.text-real { color: #475569; }
-.text-ana { color: #1d4ed8; }
-.text-mer { color: #d97706; }
-.text-ajs { color: #059669; }
-</style>
-"""
-
-
 def _pct_vs(base, val):
-  """Calcula delta percentual de val vs base."""
-  b = float(base) if base is not None else 0.0
-  v = float(val) if val is not None else 0.0
-  if b == 0.0:
+    """Calcula delta percentual de val vs base."""
+    b = float(base) if base is not None else 0.0
+    v = float(val) if val is not None else 0.0
+    if b == 0.0:
         return None
-  return (v - b) / abs(b)
+    return (v - b) / abs(b)
 
 
 def _badge(v):
@@ -187,7 +59,11 @@ def _safe_array(arr, size=12):
 
 
 def _cards_categoria_html(cat: str, d: dict) -> str:
-    """Gera HTML do card de categoria com cabeçalhos."""
+    """
+    Gera HTML do card de categoria (sem CSS — CSS está em styles.py).
+    
+    CSS deve ser renderizado uma única vez no topo da página usando styles.CSS_CUSTOM
+    """
     prev = d.get("prev", {
         "ana": [0] * 12, "mer": [0] * 12,
         "ajs": [0] * 12, "rlzd": [0] * 12
@@ -225,8 +101,8 @@ def _cards_categoria_html(cat: str, d: dict) -> str:
         <div class="th-serie">Série</div>
         <div class="th-total">Total</div>
         <div class="th-media">Média</div>
-      <div class="th-ref-total">Ref. {rlzd_ref_ano} Tot.</div>
-      <div class="th-ref-media">Ref. {rlzd_ref_ano} Méd.</div>
+        <div class="th-ref-total">Ref. {rlzd_ref_ano} Tot.</div>
+        <div class="th-ref-media">Ref. {rlzd_ref_ano} Méd.</div>
     </div>
     '''
     
@@ -254,9 +130,8 @@ def _cards_categoria_html(cat: str, d: dict) -> str:
         </div>
         '''
 
-    return f'''
-    {_CARD_CSS}
-    <div class="card">
+    # Retorna APENAS o card, sem CSS (CSS está centralizado em styles.py)
+    return f'''<div class="card">
         <div class="card-header">
             <div class="card-icon" style="background:{cor};">{icone}</div>
             <div class="card-title">{cat}</div>
@@ -265,5 +140,4 @@ def _cards_categoria_html(cat: str, d: dict) -> str:
             {header}
             {rows}
         </div>
-    </div>
-    '''
+    </div>'''

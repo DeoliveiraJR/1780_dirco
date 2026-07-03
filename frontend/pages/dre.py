@@ -20,7 +20,7 @@ from urllib.parse import quote, unquote
 import operator as op
 from datetime import datetime
 from copy import deepcopy
-from typing import Union, Dict, List
+from typing import Union, Dict, List, Optional
 
 # Importar utilitários
 from utils_ext.css import make_stylesheet
@@ -92,6 +92,8 @@ def _normalizar_formula_usuario(formula: str) -> str:
     if not formula:
         return ""
     formula = formula.strip()
+    formula = re.sub(r"(?i)M[ÉE]DIA\.INTERNA", "MEDIA_INTERNA", formula)
+    formula = re.sub(r"(?i)TRIMMEAN", "MEDIA_INTERNA", formula)
     # Converte somente vírgula decimal entre dígitos: 0,05 -> 0.05
     formula = re.sub(r"(?<=\d),(?=\d)", ".", formula)
     return formula
@@ -116,6 +118,7 @@ def _resolver_series_metodologias() -> dict:
     NOTA: só disponível após a metodologia ter sido aplicada pelo menos uma vez.
     """
     metodologias = st.session_state.get("dre_metodologias", {})
+    ano_referencia = int(st.session_state.get("dre_filtros", {}).get("ano", datetime.now().year))
     series = {}
     for met_nome, met_dados in metodologias.items():
         serie = met_dados.get("serie_computada")
@@ -128,14 +131,186 @@ def _resolver_series_metodologias() -> dict:
                 "eh_negrito": False,
                 "formula": None,
                 "metodologia": None,
+                "serie_historica": [
+                    {"ano": ano_referencia, "mes": idx + 1, "valor": float(v)}
+                    for idx, v in enumerate(serie[:12])
+                ],
             }
     return series
+
+
+def _agrupar_serie_historica(df_base: pd.DataFrame, col_valor: str) -> list:
+    """Agrupa uma base por ano/mês e retorna a série histórica ordenada."""
+    if df_base is None or df_base.empty or col_valor not in df_base.columns:
+        return []
+
+    vals = _normalizar_valor_monetario_series(df_base[col_valor])
+    hist = (
+        pd.DataFrame(
+            {
+                "ANO_NUM": pd.to_numeric(df_base["ANO_NUM"], errors="coerce"),
+                "MES_NUM": pd.to_numeric(df_base["MES_NUM"], errors="coerce"),
+                "VAL": vals,
+            }
+        )
+        .dropna(subset=["ANO_NUM", "MES_NUM"])
+    )
+
+    if hist.empty:
+        return []
+
+    hist = hist[hist["MES_NUM"].between(1, 12)]
+    grp = (
+        hist.groupby(["ANO_NUM", "MES_NUM"], as_index=False)["VAL"]
+        .sum()
+        .sort_values(["ANO_NUM", "MES_NUM"])
+    )
+
+    return [
+        {"ano": int(row.ANO_NUM), "mes": int(row.MES_NUM), "valor": float(row.VAL)}
+        for row in grp.itertuples(index=False)
+    ]
+
+
+def _normalizar_flags_preenchimento(
+    flags: Optional[list],
+    valores: Optional[list] = None,
+    mes_corte: int = 0,
+    padrao_todos: bool = False,
+) -> list:
+    """Normaliza flags de preenchimento preservando zeros explicitamente informados."""
+    if isinstance(flags, list) and len(flags) >= 12:
+        return [bool(v) for v in flags[:12]]
+
+    if padrao_todos:
+        return [True] * 12
+
+    valores = valores or [0.0] * 12
+    flags_norm = [False] * 12
+    for idx in range(12):
+        if idx < int(mes_corte or 0):
+            flags_norm[idx] = True
+        else:
+            try:
+                flags_norm[idx] = abs(float(valores[idx] or 0.0)) > 0
+            except Exception:
+                flags_norm[idx] = False
+    return flags_norm
+
+
+def _mesclar_serie_historica_com_ano_corrente(
+    serie_base: Optional[list],
+    ano_referencia: int,
+    linha_dados: Optional[dict],
+) -> list:
+    """Sobrescreve o ano corrente preservando vazio lógico vs zero explícito."""
+    mapa = {}
+    for item in serie_base or []:
+        try:
+            mapa[(int(item["ano"]), int(item["mes"]))] = float(item["valor"] or 0.0)
+        except Exception:
+            continue
+
+    linha_dados = linha_dados or {}
+    valores_ano_corrente = (linha_dados.get("valores") or [0.0] * 12)[:12]
+    mes_corte = int(linha_dados.get("mes_corte", 0) or 0)
+
+    if linha_dados.get("tipo") == "variavel":
+        realizado = (linha_dados.get("realizado") or [0.0] * 12)[:12]
+        projetado = (linha_dados.get("projetado") or [0.0] * 12)[:12]
+        flags_proj = _normalizar_flags_preenchimento(
+            linha_dados.get("projetado_preenchido"),
+            valores=projetado,
+            mes_corte=mes_corte,
+        )
+
+        for idx in range(12):
+            mes = idx + 1
+            if mes <= mes_corte:
+                mapa[(int(ano_referencia), mes)] = float(realizado[idx] or 0.0)
+            elif flags_proj[idx]:
+                mapa[(int(ano_referencia), mes)] = float(projetado[idx] or 0.0)
+            else:
+                mapa.pop((int(ano_referencia), mes), None)
+    else:
+        flags = _normalizar_flags_preenchimento(
+            linha_dados.get("valores_preenchidos"),
+            valores=valores_ano_corrente,
+            padrao_todos=True,
+        )
+        for idx, valor in enumerate(valores_ano_corrente, start=1):
+            if flags[idx - 1]:
+                mapa[(int(ano_referencia), idx)] = float(valor or 0.0)
+
+    return [
+        {"ano": ano, "mes": mes, "valor": valor}
+        for (ano, mes), valor in sorted(mapa.items())
+    ]
+
+
+def _serie_historica_por_codigo(dff: pd.DataFrame, codigo: str) -> list:
+    """Retorna série histórica multi-ano para um código da TD_DRE."""
+    if dff is None or dff.empty or "CD_CPNT_RSTD" not in dff.columns:
+        return []
+    if "CURVA_REALIZADO" not in dff.columns:
+        return []
+
+    dff_com_componente = dff[dff["CD_CPNT_RSTD"].notna()]
+    df_comp = dff_com_componente[dff_com_componente["CD_CPNT_RSTD"].astype(str).str.upper() == str(codigo).upper()]
+    df_comp = df_comp[df_comp["CURVA_REALIZADO"].notna() & (df_comp["CURVA_REALIZADO"] != 0)]
+    return _agrupar_serie_historica(df_comp, "CURVA_REALIZADO")
+
+
+def _serie_historica_por_tip_td(dff: pd.DataFrame, codigo: str) -> list:
+    """Retorna série histórica multi-ano a partir da guia DADOS por TIP_TD."""
+    if dff is None or dff.empty or "TIP_TD" not in dff.columns:
+        return []
+
+    col_valor = "CURVA_REALIZADO" if "CURVA_REALIZADO" in dff.columns else None
+    if not col_valor:
+        return []
+
+    df_comp = dff[dff["TIP_TD"].astype(str).str.upper() == str(codigo).upper()]
+    return _agrupar_serie_historica(df_comp, col_valor)
+
+
+def _obter_series_historicas_contexto() -> dict:
+    """Monta e cacheia séries históricas reais para o contexto atual da DRE."""
+    filtros = st.session_state.get("dre_filtros", {})
+    cliente = filtros.get("cliente", "Todos")
+    categoria = filtros.get("categoria", "")
+    produto = filtros.get("produto", "")
+    cache_key = (
+        str(get_origem_base_dre_ativa()),
+        str(cliente),
+        str(categoria),
+        str(produto),
+    )
+
+    if st.session_state.get("_dre_historico_cache_key") == cache_key:
+        return st.session_state.get("_dre_historico_cache_val", {})
+
+    dff_hist = _filtrar_base_dre(cliente=cliente, categoria=categoria, produto=produto, ano=None)
+    series_historicas = {}
+
+    for linha in ESTRUTURA_DRE:
+        if linha.tipo == "variavel":
+            series_historicas[linha.codigo] = _serie_historica_por_codigo(dff_hist, linha.codigo)
+
+    for codigo in ("TD21", "TD62"):
+        series_historicas[codigo] = _serie_historica_por_tip_td(dff_hist, codigo)
+
+    st.session_state["_dre_historico_cache_key"] = cache_key
+    st.session_state["_dre_historico_cache_val"] = series_historicas
+    return series_historicas
 
 
 def _obter_contexto_formula(dre_dados: Dict[str, dict] = None) -> Dict[str, dict]:
     """Combina DRE principal com volumes (TD21/TD62) e metodologias encadeadas para validação e cálculo."""
     base_dre = dre_dados if dre_dados is not None else st.session_state.get("dre_dados", {})
     contexto = deepcopy(base_dre)
+    ano_referencia = int(st.session_state.get("dre_filtros", {}).get("ano", datetime.now().year))
+    series_historicas = _obter_series_historicas_contexto()
 
     for codigo, dados in st.session_state.get("dre_volumes_dados", {}).items():
         if codigo not in contexto:
@@ -144,6 +319,7 @@ def _obter_contexto_formula(dre_dados: Dict[str, dict] = None) -> Dict[str, dict
                 "tipo": dados.get("tipo", "variavel"),
                 "formula": dados.get("formula"),
                 "valores": (dados.get("valores") or [0.0] * 12),
+                "valores_preenchidos": list(dados.get("valores_preenchidos") or [True] * 12),
                 "eh_negrito": dados.get("eh_negrito", False),
                 "metodologia": None,
             }
@@ -153,13 +329,26 @@ def _obter_contexto_formula(dre_dados: Dict[str, dict] = None) -> Dict[str, dict
         if nome_var not in contexto:
             contexto[nome_var] = dados_met
 
+    for codigo, dados in list(contexto.items()):
+        if not isinstance(dados, dict):
+            continue
+        _obter_flags_valores_linha(dados)
+        serie_base = dados.get("serie_historica") or series_historicas.get(codigo, [])
+        dados["serie_historica"] = _mesclar_serie_historica_com_ano_corrente(
+            serie_base,
+            ano_referencia,
+            dados,
+        )
+
+    contexto["__meta__"] = {"ano_referencia": ano_referencia}
+
     return contexto
 
 
 def _classificar_tokens_formula(formula: str, dre_dados: dict):
     """Classifica tokens em funções, variáveis DRE, índices, referências a metodologias e desconhecidos."""
     tokens = _extrair_tokens_formula(formula)
-    funcoes = {"SOMA", "MEDIA", "MINIMO", "MAXIMO", "DESVIO_PADRAO"}
+    funcoes = {"SOMA", "MEDIA", "MEDIA_INTERNA", "TRIMMEAN", "MINIMO", "MAXIMO", "DESVIO_PADRAO"}
     contexto_formula = _obter_contexto_formula(dre_dados)
     contexto = _preparar_contexto_com_indices(contexto_formula)
     vars_dre = set(contexto_formula.keys())
@@ -726,7 +915,7 @@ def _filtrar_base_dre(
     cliente: str = "Todos",
     categoria: str = "",
     produto: str = "",
-    ano: int = 2026,
+    ano: Optional[int] = 2026,
 ) -> pd.DataFrame:
     """Aplica recorte de filtros da DRE na base carregada via upload."""
     # A DRE deve usar a mesma base ativa exibida ao usuario: upload atual da sessao
@@ -786,7 +975,9 @@ def _filtrar_base_dre(
     mes_num = pd.to_numeric(_serie_coluna("MES_NUM"), errors="coerce")
 
     mask_mes = mes_num.between(1, 12)
-    if ano_num.notna().any():
+    if ano is None:
+        mask_final = mask_mes
+    elif ano_num.notna().any():
         mask_final = (ano_num == int(ano)) & mask_mes
     else:
         mask_final = mask_mes
@@ -890,6 +1081,51 @@ def _selecionar_opcao_equivalente(opcoes: list, valor_atual: str) -> int:
     return 0
 
 
+@st.cache_data(show_spinner=False)
+def _obter_catalogo_filtros_dre(df: pd.DataFrame) -> dict:
+    """Precalcula opcoes de filtros da DRE a partir da base ativa normalizada."""
+    if df is None or df.empty:
+        return {
+            "clientes": ["Todos"],
+            "categorias_por_cliente": {"Todos": [""]},
+            "produtos_por_escopo": {},
+        }
+
+    dff = _ensure_normalized_columns(df)
+    col_cliente = "TIPO_CLIENTE" if "TIPO_CLIENTE" in dff.columns else ("TP_CLIENTE" if "TP_CLIENTE" in dff.columns else None)
+
+    clientes = ["Todos"]
+    if col_cliente is not None:
+        clientes += sorted([c for c in dff[col_cliente].dropna().astype(str).unique() if c.strip()])
+
+    categorias_por_cliente = {"Todos": [""]}
+    produtos_por_escopo = {}
+
+    categorias_todos = sorted([c for c in dff.get("CATEGORIA", pd.Series(dtype=str)).dropna().astype(str).unique() if c.strip()])
+    if categorias_todos:
+        categorias_por_cliente["Todos"] = [""] + categorias_todos
+
+    for cliente in clientes:
+        if cliente == "Todos":
+            df_cli = dff
+        else:
+            df_cli = dff[dff["CLI_N"] == _norm_txt(cliente)]
+
+        categorias_cliente = sorted([c for c in df_cli.get("CATEGORIA", pd.Series(dtype=str)).dropna().astype(str).unique() if c.strip()])
+        categorias_por_cliente[cliente] = [""] + categorias_cliente if categorias_cliente else [""]
+
+        for categoria in categorias_cliente:
+            df_cat = df_cli[df_cli["CAT_N"] == _norm_txt(categoria)]
+            produtos = sorted([p for p in df_cat.get("PRODUTO", pd.Series(dtype=str)).dropna().astype(str).unique() if p.strip()])
+            produtos_por_escopo[f"{cliente}::{categoria}"] = [""] + produtos if produtos else [""]
+
+    return {
+        "clientes": clientes,
+        "categorias_por_cliente": categorias_por_cliente,
+        "produtos_por_escopo": produtos_por_escopo,
+    }
+
+
 def _serie_realizada_por_codigo(dff: pd.DataFrame, codigo: str) -> list:
     """Retorna série [12] de realizado para um código TD no recorte filtrado."""
     if dff is None or dff.empty:
@@ -976,6 +1212,120 @@ def _mesclar_realizado_projetado(linha: dict) -> list:
     return merged
 
 
+def _garantir_flags_projetado(linha: dict) -> list:
+    """Garante a presença das flags de preenchimento do projetado."""
+    flags = _normalizar_flags_preenchimento(
+        linha.get("projetado_preenchido"),
+        valores=linha.get("projetado", [0.0] * 12),
+        mes_corte=int(linha.get("mes_corte", 0) or 0),
+    )
+    linha["projetado_preenchido"] = list(flags)
+    return flags
+
+
+def _obter_flags_valores_linha(linha: dict) -> list:
+    """Calcula flags do array visível da linha preservando vazio vs zero."""
+    if not isinstance(linha, dict):
+        return [False] * 12
+
+    if linha.get("tipo") == "variavel":
+        mes_corte = int(linha.get("mes_corte", 0) or 0)
+        flags_proj = _garantir_flags_projetado(linha)
+        flags = [True if idx < mes_corte else bool(flags_proj[idx]) for idx in range(12)]
+    else:
+        flags = _normalizar_flags_preenchimento(
+            linha.get("valores_preenchidos"),
+            valores=linha.get("valores", [0.0] * 12),
+            padrao_todos=True,
+        )
+
+    linha["valores_preenchidos"] = list(flags)
+    return flags
+
+
+def _valor_editado_grade_para_real(valor_bi: object, escala: float) -> Optional[float]:
+    """Converte o valor editado em bi para o valor monetário real."""
+    if valor_bi is None:
+        return None
+    try:
+        if pd.isna(valor_bi):
+            return None
+    except Exception:
+        pass
+    try:
+        return float(valor_bi) * float(escala)
+    except Exception:
+        return None
+
+
+def _aplicar_edicoes_grade_dre(df_editado: pd.DataFrame, colunas_meses: list, escala: float) -> None:
+    """Aplica edições da grade preservando zero digitado e vazio lógico."""
+    if df_editado is None or df_editado.empty:
+        return
+
+    dre_dados = st.session_state.get("dre_dados", {})
+    widget_state = st.session_state.get("dre_grade_editavel", {})
+    edited_rows = widget_state.get("edited_rows", {}) if isinstance(widget_state, dict) else {}
+
+    for row_idx, linha_df in df_editado.iterrows():
+        codigo = str(linha_df.get("TD", "") or "")
+        linha = dre_dados.get(codigo)
+        if not isinstance(linha, dict) or linha.get("tipo") != "variavel":
+            continue
+
+        campos_editados = edited_rows.get(row_idx) or edited_rows.get(str(row_idx)) or {}
+        if not isinstance(campos_editados, dict):
+            campos_editados = {}
+
+        projetado = [float(v or 0.0) for v in (linha.get("projetado") or [0.0] * 12)[:12]]
+        while len(projetado) < 12:
+            projetado.append(0.0)
+
+        proj_flags = list(_garantir_flags_projetado(linha))
+        base = [float(v or 0.0) for v in (linha.get("valores_base") or projetado)[:12]]
+        while len(base) < 12:
+            base.append(0.0)
+
+        base_flags = _normalizar_flags_preenchimento(
+            linha.get("valores_base_preenchidos"),
+            valores=base,
+            mes_corte=int(linha.get("mes_corte", 0) or 0),
+        )
+        possui_metodologias = bool(linha.get("metodologias_aplicadas")) or isinstance(
+            linha.get("metodologia"), dict
+        )
+
+        for idx, mes in enumerate(colunas_meses):
+            if idx < int(linha.get("mes_corte", 0) or 0):
+                continue
+            if mes not in campos_editados:
+                continue
+
+            valor_real = _valor_editado_grade_para_real(campos_editados.get(mes), escala)
+            if valor_real is None:
+                projetado[idx] = 0.0
+                proj_flags[idx] = False
+                if not possui_metodologias:
+                    base[idx] = 0.0
+                    base_flags[idx] = False
+            else:
+                projetado[idx] = float(valor_real)
+                proj_flags[idx] = True
+                if not possui_metodologias:
+                    base[idx] = float(valor_real)
+                    base_flags[idx] = True
+
+        linha["projetado"] = projetado
+        linha["projetado_preenchido"] = proj_flags
+        if not possui_metodologias:
+            linha["valores_base"] = base
+            linha["valores_base_preenchidos"] = base_flags
+        linha["valores"] = _mesclar_realizado_projetado(linha)
+        _obter_flags_valores_linha(linha)
+
+    st.session_state["dre_dados"] = dre_dados
+
+
 def _carregar_realizados_dre_linhas(
     cliente: str = "Todos",
     categoria: str = "",
@@ -997,9 +1347,11 @@ def _carregar_realizados_dre_linhas(
                 ln = st.session_state.dre_dados[linha_struct.codigo]
                 ln["realizado"]  = [0.0] * 12
                 ln["projetado"]  = [0.0] * 12
+                ln["projetado_preenchido"] = [False] * 12
                 ln["mes_corte"]  = 0
                 ln["valores"]    = [0.0] * 12
                 ln["valores_base"] = [0.0] * 12
+                ln["valores_base_preenchidos"] = [False] * 12
         return False
 
     for linha_struct in ESTRUTURA_DRE:
@@ -1014,11 +1366,19 @@ def _carregar_realizados_dre_linhas(
         # Só inicializa projetado se ainda não houver (preserva simulação em andamento)
         if "projetado" not in ln:
             ln["projetado"] = [0.0] * 12
+        ln["projetado_preenchido"] = _normalizar_flags_preenchimento(
+            ln.get("projetado_preenchido"),
+            valores=ln["projetado"],
+            mes_corte=mes_corte,
+        )
         # valores_base = snapshot do projetado (para restauração quando metodologia é removida)
         if "valores_base" not in ln:
             ln["valores_base"] = list(ln["projetado"])
+        if "valores_base_preenchidos" not in ln:
+            ln["valores_base_preenchidos"] = list(ln["projetado_preenchido"])
         # valores = merge para exibição
         ln["valores"] = _mesclar_realizado_projetado(ln)
+        _obter_flags_valores_linha(ln)
     return True
 
 
@@ -1128,7 +1488,7 @@ def _avaliar_formula(formula: str, dre_dados: dict, sazonalidade: Union[Dict, in
     
     # ===== PROCESSAR FUNÇÕES NATIVAS =====
     # Padrão regex para encontrar funções: SOMA(ARGS), MEDIA(ARGS), etc
-    padrao_funcoes = r'(DESVIO_PADRAO|SOMA|MEDIA|MINIMO|MAXIMO)\((.*?)\)'
+    padrao_funcoes = r'(DESVIO_PADRAO|MEDIA_INTERNA|TRIMMEAN|SOMA|MEDIA|MINIMO|MAXIMO)\((.*?)\)'
     
     # Mapeamento de placeholders para resultados das funções
     # ex: __FUNC_0__ → [valores dos 12 meses]
@@ -1237,6 +1597,8 @@ def _aplicar_metodologia_em_linha(
     # (apenas inicializa; mantém se já existir para preservar o baseline correto)
     if "valores_base" not in linha:
         linha["valores_base"] = list(linha.get("projetado", [0.0] * 12))
+    if "valores_base_preenchidos" not in linha:
+        linha["valores_base_preenchidos"] = list(_garantir_flags_projetado(linha))
 
     existentes = linha.get("metodologias_aplicadas", [])
     nomes_existentes = [m.get("nome") for m in existentes]
@@ -1289,7 +1651,13 @@ def _remover_metodologia_da_linha(dre_dados: dict, codigo: str, restaurar_valore
             linha["projetado"] = [float(v) for v in base[:12]]
         else:
             linha["projetado"] = [0.0] * 12
+        linha["projetado_preenchido"] = _normalizar_flags_preenchimento(
+            linha.get("valores_base_preenchidos"),
+            valores=linha["projetado"],
+            mes_corte=int(linha.get("mes_corte", 0) or 0),
+        )
         linha["valores"] = _mesclar_realizado_projetado(linha)
+        _obter_flags_valores_linha(linha)
 
     return True, f"Metodologias removidas da linha {codigo}."
 
@@ -1311,8 +1679,15 @@ def _recalcular_linha_por_metodologias(dre_dados: dict, codigo: str):
     if not isinstance(base_projetado, list) or len(base_projetado) < 12:
         base_projetado = [0.0] * 12
         linha["valores_base"] = list(base_projetado)
+    base_flags = _normalizar_flags_preenchimento(
+        linha.get("valores_base_preenchidos"),
+        valores=base_projetado,
+        mes_corte=mes_corte,
+    )
+    linha["valores_base_preenchidos"] = list(base_flags)
 
     acumulado_projetado = [float(v) for v in base_projetado[:12]]
+    acumulado_flags = list(base_flags)
 
     # Normalização de estado legado
     mets = linha.get("metodologias_aplicadas", [])
@@ -1364,6 +1739,7 @@ def _recalcular_linha_por_metodologias(dre_dados: dict, codigo: str):
             if mes_num <= mes_corte:
                 continue
             acumulado_projetado[i] += float(serie[i])
+            acumulado_flags[i] = True
 
         # Atualiza contexto com o acumulado mais recente
         linha["valores"] = _mesclar_realizado_projetado({
@@ -1375,7 +1751,9 @@ def _recalcular_linha_por_metodologias(dre_dados: dict, codigo: str):
 
     linha["metodologias_aplicadas"] = ativos
     linha["projetado"] = acumulado_projetado
+    linha["projetado_preenchido"] = acumulado_flags
     linha["valores"] = _mesclar_realizado_projetado(linha)
+    _obter_flags_valores_linha(linha)
 
     if ativos:
         nomes = [m.get("nome", "") for m in ativos if m.get("nome")]
@@ -1434,7 +1812,13 @@ def _remover_metodologia_especifica_da_linha(dre_dados: dict, codigo: str, met_n
             linha["projetado"] = [float(v) for v in base[:12]]
         else:
             linha["projetado"] = [0.0] * 12
+        linha["projetado_preenchido"] = _normalizar_flags_preenchimento(
+            linha.get("valores_base_preenchidos"),
+            valores=linha["projetado"],
+            mes_corte=int(linha.get("mes_corte", 0) or 0),
+        )
         linha["valores"] = _mesclar_realizado_projetado(linha)
+        _obter_flags_valores_linha(linha)
     else:
         _recalcular_linha_por_metodologias(dre_dados, codigo)
 
@@ -1555,7 +1939,26 @@ def salvar_dre_usuario():
         for codigo, ln in dre_dados.items():
             projetado = ln.get("projetado")
             if isinstance(projetado, list) and len(projetado) >= 12:
-                projecoes[codigo] = [float(v) for v in projetado[:12]]
+                projecoes[codigo] = {
+                    "projetado": [float(v) for v in projetado[:12]],
+                    "projetado_preenchido": [
+                        bool(v) for v in _normalizar_flags_preenchimento(
+                            ln.get("projetado_preenchido"),
+                            valores=projetado,
+                            mes_corte=int(ln.get("mes_corte", 0) or 0),
+                        )
+                    ],
+                    "valores_base": [
+                        float(v) for v in (ln.get("valores_base") or projetado)[:12]
+                    ],
+                    "valores_base_preenchidos": [
+                        bool(v) for v in _normalizar_flags_preenchimento(
+                            ln.get("valores_base_preenchidos"),
+                            valores=(ln.get("valores_base") or projetado)[:12],
+                            mes_corte=int(ln.get("mes_corte", 0) or 0),
+                        )
+                    ],
+                }
         try:
             ok, msg = _salvar_simulacao_dre_backend(usuario_id, combo_key, projecoes, dre_metodologias)
             if ok:
@@ -1598,10 +2001,29 @@ def _carregar_simulacao_dre_usuario(combo_key: str):
         if codigo not in dre_dados:
             continue
         ln = dre_dados[codigo]
-        if isinstance(projetado_salvo, list) and len(projetado_salvo) >= 12:
-            ln["projetado"] = [float(v) for v in projetado_salvo[:12]]
-            ln["valores_base"] = list(ln["projetado"])
+        payload = projetado_salvo if isinstance(projetado_salvo, dict) else {"projetado": projetado_salvo}
+        projetado_lista = payload.get("projetado")
+        if isinstance(projetado_lista, list) and len(projetado_lista) >= 12:
+            ln["projetado"] = [float(v) for v in projetado_lista[:12]]
+            ln["projetado_preenchido"] = _normalizar_flags_preenchimento(
+                payload.get("projetado_preenchido"),
+                valores=ln["projetado"],
+                mes_corte=int(ln.get("mes_corte", 0) or 0),
+            )
+
+            valores_base = payload.get("valores_base")
+            if isinstance(valores_base, list) and len(valores_base) >= 12:
+                ln["valores_base"] = [float(v) for v in valores_base[:12]]
+            else:
+                ln["valores_base"] = list(ln["projetado"])
+
+            ln["valores_base_preenchidos"] = _normalizar_flags_preenchimento(
+                payload.get("valores_base_preenchidos"),
+                valores=ln["valores_base"],
+                mes_corte=int(ln.get("mes_corte", 0) or 0),
+            )
             ln["valores"] = _mesclar_realizado_projetado(ln)
+            _obter_flags_valores_linha(ln)
 
     if metodologias_salvas:
         st.session_state["dre_metodologias"] = metodologias_salvas
@@ -2327,13 +2749,8 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
             num_rows="fixed",
         )
 
-        # Reverter escala ao salvar: valores editados (bi) × 1e9 → valor real
-        for _, linha_df in df_editado.iterrows():
-            codigo = linha_df["TD"]
-            if dre_dados.get(codigo, {}).get("tipo") == "variavel":
-                dre_dados[codigo]["valores"] = [
-                    float(linha_df[mes]) * _ESCALA_BI for mes in colunas_meses
-                ]
+        _aplicar_edicoes_grade_dre(df_editado, colunas_meses, _ESCALA_BI)
+        dre_dados = st.session_state.get("dre_dados", dre_dados)
 
     if st.session_state.get("dre_msg_sucesso_exclusao_tag"):
         st.success(st.session_state.get("dre_msg_sucesso_exclusao_tag"))
@@ -2526,6 +2943,10 @@ def renderizar():
     # Carregar dados para filtros a partir da mesma fonte usada nos realizados da DRE.
     df_upload = get_base_dre_ativa()
     origem_base_dre = get_origem_base_dre_ativa()
+    catalogo_filtros = _obter_catalogo_filtros_dre(df_upload)
+    base_rows = len(df_upload) if isinstance(df_upload, pd.DataFrame) else 0
+    base_max_ano = int(df_upload["ANO_NUM"].max()) if isinstance(df_upload, pd.DataFrame) and "ANO_NUM" in df_upload.columns and not df_upload.empty else 0
+    base_version_key = f"{origem_base_dre}::{base_rows}::{base_max_ano}"
 
     col_cli, col_cat, col_prod, col_ano, col_modo, col_btn = st.columns([1.2, 1.2, 1.5, 1, 1, 1])
 
@@ -2536,24 +2957,7 @@ def renderizar():
     
     # Cliente
     with col_cli:
-        dff_filtro = _ensure_cli_n(df_upload) if df_upload is not None else None
-
-        clientes = ["Todos"]
-        if dff_filtro is not None:
-            col_cliente = None
-            if "TIPO_CLIENTE" in dff_filtro.columns:
-                col_cliente = "TIPO_CLIENTE"
-            elif "TP_CLIENTE" in dff_filtro.columns:
-                col_cliente = "TP_CLIENTE"
-
-            if col_cliente is not None:
-                cli_list = sorted([
-                    c for c in dff_filtro[col_cliente].dropna().astype(str).unique()
-                    if c.strip() != ""
-                ])
-            else:
-                cli_list = []
-            clientes.extend(cli_list)
+        clientes = catalogo_filtros["clientes"]
 
         _cli_atual = st.session_state.get("dre_cliente_filter", "Todos")
         _idx_cli = clientes.index(_cli_atual) if _cli_atual in clientes else 0
@@ -2569,11 +2973,7 @@ def renderizar():
     
     # Categoria
     with col_cat:
-        categorias = [""]
-        if dff_filtro is not None and "CATEGORIA" in dff_filtro.columns:
-            df_cli = dff_filtro if cliente_sel == "Todos" else dff_filtro[dff_filtro["CLI_N"] == _norm_txt(cliente_sel)]
-            cat_list = sorted([c for c in df_cli["CATEGORIA"].dropna().astype(str).unique() if c.strip() != ""])
-            categorias = [""] + cat_list
+        categorias = catalogo_filtros["categorias_por_cliente"].get(cliente_sel, [""])
         
         # Preserva o valor atual do widget se ainda estiver disponível nas opções
         _cat_atual = st.session_state.get("dre_categoria_filter", "")
@@ -2590,13 +2990,7 @@ def renderizar():
     
     # Produto
     with col_prod:
-        produtos = [""]
-        if dff_filtro is not None and categoria_sel and "CATEGORIA" in dff_filtro.columns:
-            df_cat = dff_filtro[dff_filtro["CATEGORIA"].astype(str) == categoria_sel]
-            if cliente_sel != "Todos":
-                df_cat = df_cat[df_cat["CLI_N"] == _norm_txt(cliente_sel)]
-            prod_list = sorted([p for p in df_cat["PRODUTO"].dropna().astype(str).unique() if p.strip() != ""])
-            produtos = [""] + prod_list
+        produtos = catalogo_filtros["produtos_por_escopo"].get(f"{cliente_sel}::{categoria_sel}", [""])
 
         # Preserva o valor atual do widget se ainda estiver disponível nas opções
         _prod_atual = st.session_state.get("dre_produto_filter", "")
@@ -2646,18 +3040,19 @@ def renderizar():
     
     # ===== DETECTAR MUDANÇA DE FILTRO E PERSISTIR DADOS =====
     # Criar chave única para a combinação atual de filtros
-    combo_filtro_atual = f"{cliente_sel}::{categoria_sel}::{produto_sel}::{ano_sel}"
+    combo_filtro_atual = f"{base_version_key}::{cliente_sel}::{categoria_sel}::{produto_sel}::{ano_sel}"
     combo_filtro_anterior = st.session_state.get("dre_combo_filtro_anterior", "")
     
-    # Sempre recarregar realizados da TD_DRE para garantir dados atualizados
-    _carregar_realizados_dre_linhas(cliente_sel, categoria_sel, produto_sel, ano_sel)
-    _carregar_simulacao_dre_usuario(combo_filtro_atual)
-    
-    # Atualizar chave de filtro anterior
-    st.session_state.dre_combo_filtro_anterior = combo_filtro_atual
-    
-    # Sincronizar volumes com filtros atuais.
-    _carregar_td21_volumes(cliente_sel, categoria_sel, produto_sel, ano_sel)
+    if combo_filtro_atual != combo_filtro_anterior:
+        if combo_filtro_anterior:
+            _persistir_linhas_dre(combo_filtro_anterior)
+
+        if not _restaurar_linhas_dre(combo_filtro_atual):
+            _carregar_realizados_dre_linhas(cliente_sel, categoria_sel, produto_sel, ano_sel)
+            _carregar_simulacao_dre_usuario(combo_filtro_atual)
+
+        _carregar_td21_volumes(cliente_sel, categoria_sel, produto_sel, ano_sel)
+        st.session_state.dre_combo_filtro_anterior = combo_filtro_atual
     
     st.divider()
     
@@ -2842,11 +3237,11 @@ def _renderizar_metodologias():
                 placeholder="ex: =0.60*TD71 ou =TD71*(1+IPCA/100)",
                 label_visibility="collapsed",
                 key="met_criar_formula",
-                help="Use '=' no início. Exemplos: =0.60*TD71, =MEDIA(TD71), =TD71*(1+IPCA/100)"
+                help="Use '=' no início. Exemplos: =0.60*TD71, =MEDIA(TD71), =MEDIA_INTERNA(TD21; 0,2; -6), =TD71*(1+IPCA/100)"
             )
 
         contexto_formula = _obter_contexto_formula(st.session_state.dre_dados)
-        tokens_base = ["SOMA", "MEDIA", "MINIMO", "MAXIMO", "DESVIO_PADRAO"] + list(contexto_formula.keys()) + list(_preparar_contexto_com_indices(contexto_formula).keys())
+        tokens_base = ["SOMA", "MEDIA", "MEDIA_INTERNA", "MINIMO", "MAXIMO", "DESVIO_PADRAO"] + list(contexto_formula.keys()) + list(_preparar_contexto_com_indices(contexto_formula).keys())
         tokens_unicos = sorted(set(t for t in tokens_base if isinstance(t, str) and t))
 
         formula_normalizada = _normalizar_formula_usuario(formula_metodologia)
@@ -2947,6 +3342,7 @@ def _renderizar_metodologias():
             ** Funções Nativas:**
             - `SOMA(TD71)`
             - `MEDIA(TD71;TD72)`
+            - `MEDIA_INTERNA(TD21; 0,2; -6)`
             - `MINIMO(TD71:TD90)`
             - `MAXIMO(TD71)`
             - `DESVIO_PADRAO(TD90; -5; 1)`
@@ -3384,7 +3780,7 @@ def _renderizar_metodologias():
         """)
         
         # ===== CARDS COM CADA FUNÇÃO =====
-        for idx, nome_func in enumerate(["SOMA", "MEDIA", "MINIMO", "MAXIMO", "DESVIO_PADRAO"]):
+        for idx, nome_func in enumerate(["SOMA", "MEDIA", "MEDIA_INTERNA", "MINIMO", "MAXIMO", "DESVIO_PADRAO"]):
             col1, col2 = st.columns([1, 1])
             
             with col1:
@@ -3415,6 +3811,15 @@ def _renderizar_metodologias():
                         =MEDIA(TD71;TD72)
                         =MEDIA(TD71:TD90)
                         =0.5*MEDIA(TD71)
+                        ```
+                        """)
+                    elif nome_func == "MEDIA_INTERNA":
+                        st.markdown("""
+                        ```
+                        =MEDIA_INTERNA(TD21; 0,2)
+                        =MEDIA_INTERNA(TD21; 0,2; -6)
+                        =MEDIA_INTERNA(TD21; 0,2; -6; 1)
+                        =TRIMMEAN(TD21; 0,2; -6)
                         ```
                         """)
                     elif nome_func == "MINIMO":
@@ -3483,6 +3888,18 @@ def _renderizar_metodologias():
             
             Intervalo contínuo de códigos
             """)
+
+        st.markdown("""
+        **Sintaxe especial da MEDIA_INTERNA**
+
+        ```
+        MEDIA_INTERNA(referencia; percentual; janela_opcional; lag_opcional)
+        ```
+
+        Exemplo de uso mensal:
+        - `MEDIA_INTERNA(TD21; 0,2; -6)` → media interna dos ultimos 6 meses de `TD21`
+        - `TRIMMEAN(TD21; 0,2; -6)` → alias equivalente
+        """)
         
         # ===== PROCESSAMENTO =====
         st.divider()
@@ -3492,13 +3909,13 @@ def _renderizar_metodologias():
         As fórmulas são processadas em três etapas:
         
         **1️⃣ Funções Nativas**
-        - Todas as funções (SOMA, MEDIA, etc) são avaliadas PRIMEIRO
-        - Cada função retorna um ÚNICO valor agregado
-        - Exemplo: `SOMA(TD71)` = 1860.0 (soma de 12 meses)
+        - Todas as funções (SOMA, MEDIA, MEDIA_INTERNA etc) são avaliadas PRIMEIRO
+        - Cada função pode usar o valor do mês corrente ou uma janela temporal da referência
+        - Exemplo: `MEDIA_INTERNA(TD21; 0,2; -6)` calcula, em cada mês, a media interna dos ultimos 6 meses de `TD21`
         
         **2️⃣ Substituição**
-        - O resultado de cada função substitui a chamada função
-        - Exemplo: `0.05*SOMA(TD71)` → `0.05*1860.0`
+        - O resultado mensal de cada função substitui a chamada função naquele mês
+        - Exemplo: `0.05*SOMA(TD71)` → `0.05*valor_da_funcao_no_mes`
         
         **3️⃣ Cálculo Mês-a-Mês**
         - A fórmula final é calculada para cada um dos 12 meses
@@ -3507,13 +3924,13 @@ def _renderizar_metodologias():
         
         **Exemplo Completo:**
         ```
-        Fórmula: =0.05*SOMA(TD71)+0.03*MEDIA(TD72)
+        Fórmula: =0.05*SOMA(TD71)+0.03*MEDIA_INTERNA(TD21; 0,2; -6)
         
-        Passo 1: SOMA(TD71) = 1860.0, MEDIA(TD72) = 116.25
-        Passo 2: =0.05*1860.0+0.03*116.25
+        Passo 1: para cada mês, SOMA(TD71) e MEDIA_INTERNA(TD21; 0,2; -6) geram um valor
+        Passo 2: a expressão final usa os dois resultados mensais
         Passo 3: Para cada mês:
-          - Mês 1: 0.05*155.0 + 0.03*9.69 = 8.06
-          - Mês 2: 0.05*160.0 + 0.03*10.00 = 8.30
+          - Mês 1: 0.05*valor_soma_jan + 0.03*valor_media_interna_jan
+          - Mês 2: 0.05*valor_soma_fev + 0.03*valor_media_interna_fev
           - ... (total 12 valores)
         ```
         """)

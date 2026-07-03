@@ -5,6 +5,10 @@ import numpy as np
 import sys
 import os
 
+# IMPORTANTE: st.components.v1 deve ser importado ANTES de streamlit_bokeh
+# pois streamlit_bokeh acessa st.components.v1 na sua inicialização
+import streamlit.components.v1 as st_components
+
 from bokeh.plotting import figure
 from bokeh.models import (
     ColumnDataSource, PointDrawTool, DataTable, TableColumn,
@@ -41,9 +45,7 @@ from services.aggregations import (
 from components.lines import _grafico_visao_anual_linhas, _grafico_serie_historica
 from components.bars import _grafico_barras_categoria
 from components.donut import _grafico_pizza_share_categoria, _grafico_pizza_share_por_projecao
-from components.cards import _cards_categoria_html
-
-import streamlit.components.v1 as st_components
+from components.cards_new import render_card_streamlit
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_manager import (
@@ -191,10 +193,8 @@ def renderizar():
     # IMPORTANTE: Aplicar pending_sync ANTES de checar combo_mudou
     # para que edições sincronizadas não sejam perdidas no reset do combo
     pending_sync_pre = st.session_state.pop("_pending_sync_ajustada12", None)
-    print(f"[DEBUG] Salvou pending_sync_pre: {pending_sync_pre is not None}")
     
     combo_mudou = st.session_state.get("last_combo") != combo
-    print(f"[DEBUG] combo_mudou={combo_mudou}, last_combo={st.session_state.get('last_combo')}, combo={combo}")
     
     if combo_mudou:
         old_combo = st.session_state.get("last_combo")
@@ -213,11 +213,9 @@ def renderizar():
         )
         if curva_salva is not None:
             st.session_state["ajustada"] = curva_salva[:]
-            print(f"[PERSIST] Curva carregada do banco: {combo}")
             st.toast(f"📂 Carregada simulação salva para {produto}", icon="✅")
         else:
             st.session_state["ajustada"] = analitica[:]
-            print(f"[DEBUG] COMBO MUDOU! Usando curva analítica: {combo}")
         
         st.session_state["last_combo"] = combo
         st.session_state["sync_counter"] = 0
@@ -240,8 +238,6 @@ def renderizar():
         st.session_state["_last_bokeh_sync_ts"] = {}
 
     sync_counter = st.session_state.get("sync_counter", 0)
-
-    print(f"[DEBUG] Ciclo de render: combo={combo}, combo_mudou={combo_mudou}")
 
     # ==================== LEITURA DO LOCALSTORAGE (sempre no combo atual) ====================
     # O Enter já provoca rerender neste fluxo. Então lemos o browser em todo render do combo
@@ -2164,29 +2160,34 @@ def renderizar():
     
     agreg_base_ordem = agreg_cards if agreg_cards else agreg_barras
     if agreg_base_ordem:
+        # Categorias prioritárias (serão normalizadas para comparação)
         principais = ["CAPTAÇÕES", "OPERAÇÕES CRÉDITO", "SERVIÇOS", "CRÉDITO"]
-        ordem = [c for c in principais if c in agreg_base_ordem] + [c for c in agreg_base_ordem.keys() if c not in principais]
+        principais_norm = [_norm_txt(c) for c in principais]
+        
+        # Ordenar: principais primeiro (preservando ordem em agreg_base_ordem), depois o resto
+        ordem = []
+        for cat_norm in principais_norm:
+            if cat_norm in agreg_base_ordem:
+                ordem.append(cat_norm)
+        for cat_norm in agreg_base_ordem.keys():
+            if cat_norm not in ordem:
+                ordem.append(cat_norm)
+        
         ordem = ordem[:3]
 
+
         # ===== LINHA 1: Cards das categorias =====
-        cols_cards = st.columns(3, gap="small")
+        # Componentes nativos Streamlit (st.container, st.metric, st.columns)
+        cols_cards = st.columns(3, gap="medium")
         for i, cat in enumerate(ordem):
             with cols_cards[i]:
                 card_data = agreg_cards.get(cat) or agreg_base_ordem.get(cat, {})
-                card_html = _cards_categoria_html(cat, card_data)
-                st_components.html(card_html, height=260, scrolling=False)
-
-        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+                render_card_streamlit(cat, card_data)
         
-        # Layout compacto do filtro de ano
-        col_filter_label, col_filter_select, col_filter_spacer = st.columns([0.45, 1.4, 4.15])
+        st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
         
-        with col_filter_label:
-            st.markdown(
-                "<div style='padding:8px 0 8px 0;font-size:0.9rem;color:#475569;font-weight:600;'>📅 Ano:</div>",
-                unsafe_allow_html=True
-            )
-        
+        # ===== LINHA 1.5: Seletor de ano para as barras =====
+        col_filter_select = st.columns(1)[0]
         with col_filter_select:
             ano_barras = st.selectbox(
                 "Ano - Barras",
