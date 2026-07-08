@@ -2,7 +2,7 @@
 
 Sistema completo de análise e simulação de projeções financeiras desenvolvido para a equipe DIRCO, com **persistência de dados**, **isolamento multi-usuário**, **controle de permissões** e **DRE Gerencial profissional**.
 
-**Versão Atual:** v4.0.3 | **Status:** ✅ Production Ready | **Última Atualização:** 03/07/2026
+**Versão Atual:** v4.0.4 | **Status:** ✅ Production Ready | **Última Atualização:** 08/07/2026
 
 ---
 
@@ -43,6 +43,11 @@ QUANDO PRESO EM LOOP (3+ tentativas falhadas):
 ---
 
 ## 📌 O que foi implementado
+
+### ✅ [v4.0.4] - Encadeamento Cronológico da MEDIA_INTERNA
+- **Autorreferência controlada na linha destino:** quando a fórmula referencia a própria linha com janela histórica, os meses futuros passam a reaproveitar os resultados já calculados da metodologia para preencher lacunas sem realizado
+- **Comportamento aderente à planilha de negócio:** em casos como `MEDIA_INTERNA(TD72; 0,33; -6)`, `JUN/26` pode usar `MAI/26` calculado pela própria metodologia, `JUL/26` usa `MAI/26` e `JUN/26`, e assim por diante
+- **Sem quebrar a série histórica real:** a janela continua cronológica por `ano/mês`; a mudança apenas completa os meses futuros ausentes com o resultado já consolidado da mesma metodologia
 
 ### ✅ [v4.0.3] - Vazio vs Zero na DRE
 - **Semântica Excel para células vazias:** funções nativas (`SOMA`, `MEDIA`, `MEDIA_INTERNA`, `MINIMO`, `MAXIMO`, `DESVIO_PADRAO`) agora ignoram meses vazios em vez de convertê-los automaticamente para `0`
@@ -267,7 +272,7 @@ QUANDO PRESO EM LOOP (3+ tentativas falhadas):
 - Crie fórmulas personalizadas: `=0.05*TD71`, `=TD71+TD72`
 - Funções nativas disponíveis: `SOMA`, `MEDIA`, `MEDIA_INTERNA`, `MAXIMO`, `MINIMO`, `DESVIO_PADRAO`
 - Janelas temporais usam série histórica real por `ano/mês`, sem circularidade artificial
-- Exemplo: `=MEDIA_INTERNA(TD72; 0,33; -6)` usa os 6 meses reais anteriores ao mês base
+- Exemplo: `=MEDIA_INTERNA(TD72; 0,33; -6)` usa os 6 meses anteriores ao mês base; quando a própria linha ainda não tem realizado em meses futuros já calculados, a metodologia reaproveita esses resultados para compor a próxima janela
 - Meses vazios são ignorados nas funções nativas, como no Excel; `0` só entra no cálculo quando foi explicitamente preenchido
 - O editor diferencia célula limpa de zero digitado para preservar a mesma semântica ao salvar e restaurar a DRE
 - Valide antes de salvar
@@ -539,6 +544,6 @@ Para questões ou problemas:
 
 ---
 
-**Última atualização:** 03/07/2026 | **Versão:** v4.0.3 | **Status:** ✅ Production Ready
+**Última atualização:** 08/07/2026 | **Versão:** v4.0.4 | **Status:** ✅ Production Ready
 
 Mantém este README como documentação única e oficial. Para histórico detalhado, consulte [CHANGELOG.md](CHANGELOG.md).

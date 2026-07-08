@@ -110,6 +110,7 @@ Regras atuais:
 - Com janela: aplica janela temporal cronológica por ano/mês, sem wrap-around artificial
 - `janela < 0`: últimos N meses anteriores ao mês base
 - `janela > 0`: próximos N meses posteriores ao mês base
+- Em fórmulas autorreferentes na linha destino, meses futuros já calculados pela própria metodologia podem retroalimentar as próximas janelas quando ainda não houver realizado
 - Com sazonalidade explícita: aplica seleção dinâmica/fixa de meses sobre a série histórica real
 - Meses ausentes na janela histórica devem ser ignorados pelas funções nativas, e não convertidos em `0`
 

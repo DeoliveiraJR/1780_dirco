@@ -118,7 +118,12 @@ def _resolver_series_metodologias() -> dict:
     NOTA: só disponível após a metodologia ter sido aplicada pelo menos uma vez.
     """
     metodologias = st.session_state.get("dre_metodologias", {})
-    ano_referencia = int(st.session_state.get("dre_filtros", {}).get("ano", datetime.now().year))
+    ano_referencia = int(
+        st.session_state.get(
+            "dre_ano_filter",
+            st.session_state.get("dre_filtros", {}).get("ano", datetime.now().year),
+        )
+    )
     series = {}
     for met_nome, met_dados in metodologias.items():
         serie = met_dados.get("serie_computada")
@@ -169,6 +174,26 @@ def _agrupar_serie_historica(df_base: pd.DataFrame, col_valor: str) -> list:
     return [
         {"ano": int(row.ANO_NUM), "mes": int(row.MES_NUM), "valor": float(row.VAL)}
         for row in grp.itertuples(index=False)
+    ]
+
+
+def _mesclar_series_historicas(*series: Optional[list]) -> list:
+    """Mescla múltiplas séries históricas mantendo o último valor por ano/mês."""
+    mapa = {}
+    for serie in series:
+        for item in serie or []:
+            if not isinstance(item, dict):
+                continue
+            try:
+                chave = (int(item.get("ano")), int(item.get("mes")))
+                valor = float(item.get("valor") or 0.0)
+            except Exception:
+                continue
+            mapa[chave] = valor
+
+    return [
+        {"ano": ano, "mes": mes, "valor": valor}
+        for (ano, mes), valor in sorted(mapa.items())
     ]
 
 
@@ -305,11 +330,80 @@ def _obter_series_historicas_contexto() -> dict:
     return series_historicas
 
 
+def _extrair_serie_historica_linha_persistida(
+    linha_dados: Optional[dict],
+    ano_referencia: int,
+) -> list:
+    """Converte uma linha persistida da DRE em série histórica explícita para um ano."""
+    if not isinstance(linha_dados, dict):
+        return []
+
+    valores = list((linha_dados.get("valores") or [0.0] * 12)[:12])
+    if len(valores) < 12:
+        valores.extend([0.0] * (12 - len(valores)))
+
+    flags = _normalizar_flags_preenchimento(
+        linha_dados.get("valores_preenchidos"),
+        valores=valores,
+        mes_corte=int(linha_dados.get("mes_corte", 0) or 0),
+        padrao_todos=linha_dados.get("tipo") != "variavel",
+    )
+
+    serie = []
+    for idx, valor in enumerate(valores):
+        if idx >= len(flags) or not flags[idx]:
+            continue
+        serie.append(
+            {"ano": int(ano_referencia), "mes": idx + 1, "valor": float(valor or 0.0)}
+        )
+    return serie
+
+
+def _obter_serie_historica_escopos_anteriores(codigo: str, ano_referencia: int) -> list:
+    """Busca valores persistidos de anos anteriores do mesmo escopo para manter continuidade."""
+    filtros = st.session_state.get("dre_filtros", {})
+    cliente = str(filtros.get("cliente", "Todos"))
+    categoria = str(filtros.get("categoria", ""))
+    produto = str(filtros.get("produto", ""))
+    if not codigo or not cliente:
+        return []
+
+    series_por_ano: Dict[int, list] = {}
+
+    for combo_key, registro in (st.session_state.get("dre_dados_persistidos", {}) or {}).items():
+        if not isinstance(registro, dict):
+            continue
+        partes = str(combo_key).split("::")
+        if len(partes) < 4:
+            continue
+        cliente_key, categoria_key, produto_key, ano_key = partes[-4:]
+        try:
+            ano_key_int = int(ano_key)
+        except Exception:
+            continue
+        if ano_key_int >= int(ano_referencia):
+            continue
+        if cliente_key != cliente or categoria_key != categoria or produto_key != produto:
+            continue
+
+        linha_salva = (registro.get("dre_dados", {}) or {}).get(codigo)
+        serie = _extrair_serie_historica_linha_persistida(linha_salva, ano_key_int)
+        if serie:
+            series_por_ano[ano_key_int] = serie
+
+    return _mesclar_series_historicas(*[series_por_ano[ano] for ano in sorted(series_por_ano)])
+
+
 def _obter_contexto_formula(dre_dados: Dict[str, dict] = None) -> Dict[str, dict]:
     """Combina DRE principal com volumes (TD21/TD62) e metodologias encadeadas para validação e cálculo."""
     base_dre = dre_dados if dre_dados is not None else st.session_state.get("dre_dados", {})
     contexto = deepcopy(base_dre)
-    ano_referencia = int(st.session_state.get("dre_filtros", {}).get("ano", datetime.now().year))
+    ano_referencia = int(
+        st.session_state.get(
+            "dre_ano_filter",
+            st.session_state.get("dre_filtros", {}).get("ano", datetime.now().year),
+        )
+    )
     series_historicas = _obter_series_historicas_contexto()
 
     for codigo, dados in st.session_state.get("dre_volumes_dados", {}).items():
@@ -334,8 +428,9 @@ def _obter_contexto_formula(dre_dados: Dict[str, dict] = None) -> Dict[str, dict
             continue
         _obter_flags_valores_linha(dados)
         serie_base = dados.get("serie_historica") or series_historicas.get(codigo, [])
+        serie_anos_anteriores = _obter_serie_historica_escopos_anteriores(codigo, ano_referencia)
         dados["serie_historica"] = _mesclar_serie_historica_com_ano_corrente(
-            serie_base,
+            _mesclar_series_historicas(serie_base, serie_anos_anteriores),
             ano_referencia,
             dados,
         )
@@ -789,7 +884,8 @@ def _init_dre_state():
         st.session_state.dre_filtros = {
             "cliente": "Todos",
             "categoria": "",
-            "produto": ""
+            "produto": "",
+            "ano": int(st.session_state.get("dre_ano_filter", 2026)),
         }
     
     # Inicializar rastreamento de mudança de filtro
@@ -1243,17 +1339,37 @@ def _obter_flags_valores_linha(linha: dict) -> list:
     return flags
 
 
-def _valor_editado_grade_para_real(valor_bi: object, escala: float) -> Optional[float]:
-    """Converte o valor editado em bi para o valor monetário real."""
-    if valor_bi is None:
+def _valor_editado_grade_para_real(valor_editado: object, escala: float) -> Optional[float]:
+    """Converte o valor digitado na grade para o valor monetário persistido."""
+    if valor_editado is None:
         return None
     try:
-        if pd.isna(valor_bi):
+        if pd.isna(valor_editado):
             return None
     except Exception:
         pass
     try:
-        return float(valor_bi) * float(escala)
+        if isinstance(valor_editado, str):
+            bruto = valor_editado.strip()
+            if not bruto or bruto == "-":
+                return None
+            bruto = bruto.replace("R$", "").replace(" ", "")
+
+            # Aceita entradas pt-BR e en-US com ou sem separador de milhar.
+            if "," in bruto and "." in bruto:
+                if bruto.rfind(",") > bruto.rfind("."):
+                    bruto = bruto.replace(".", "").replace(",", ".")
+                else:
+                    bruto = bruto.replace(",", "")
+            elif bruto.count(".") > 1:
+                bruto = bruto.replace(".", "")
+            elif bruto.count(",") > 1:
+                bruto = bruto.replace(",", "")
+            elif "," in bruto:
+                bruto = bruto.replace(",", ".")
+
+            valor_editado = bruto
+        return float(valor_editado) * float(escala)
     except Exception:
         return None
 
@@ -1331,6 +1447,7 @@ def _carregar_realizados_dre_linhas(
     categoria: str = "",
     produto: str = "",
     ano: int = 2026,
+    resetar_projetado: bool = False,
 ) -> bool:
     """Inicializa as linhas variáveis da DRE com valores realizados do upload.
 
@@ -1364,22 +1481,53 @@ def _carregar_realizados_dre_linhas(
         ln["realizado"]  = [float(v) for v in serie_realizada]
         ln["mes_corte"]  = mes_corte
         # Só inicializa projetado se ainda não houver (preserva simulação em andamento)
-        if "projetado" not in ln:
+        if resetar_projetado or "projetado" not in ln:
             ln["projetado"] = [0.0] * 12
-        ln["projetado_preenchido"] = _normalizar_flags_preenchimento(
-            ln.get("projetado_preenchido"),
-            valores=ln["projetado"],
-            mes_corte=mes_corte,
-        )
+        if resetar_projetado:
+            ln["projetado_preenchido"] = [False] * 12
+        else:
+            ln["projetado_preenchido"] = _normalizar_flags_preenchimento(
+                ln.get("projetado_preenchido"),
+                valores=ln["projetado"],
+                mes_corte=mes_corte,
+            )
         # valores_base = snapshot do projetado (para restauração quando metodologia é removida)
-        if "valores_base" not in ln:
+        if resetar_projetado or "valores_base" not in ln:
             ln["valores_base"] = list(ln["projetado"])
-        if "valores_base_preenchidos" not in ln:
+        if resetar_projetado or "valores_base_preenchidos" not in ln:
             ln["valores_base_preenchidos"] = list(ln["projetado_preenchido"])
         # valores = merge para exibição
         ln["valores"] = _mesclar_realizado_projetado(ln)
         _obter_flags_valores_linha(ln)
     return True
+
+
+def _reaplicar_metodologias_no_escopo_atual(dre_dados: dict) -> None:
+    """Recalcula metodologias já vinculadas às linhas ao trocar o ano/escopo."""
+    if not isinstance(dre_dados, dict):
+        return
+
+    houve_recalculo = False
+    for linha_struct in ESTRUTURA_DRE:
+        if linha_struct.tipo != "variavel":
+            continue
+
+        codigo = linha_struct.codigo
+        linha = dre_dados.get(codigo, {})
+        if not isinstance(linha, dict):
+            continue
+
+        possui_metodologias = bool(linha.get("metodologias_aplicadas")) or isinstance(
+            linha.get("metodologia"), dict
+        )
+        if not possui_metodologias:
+            continue
+
+        _recalcular_linha_por_metodologias(dre_dados, codigo)
+        houve_recalculo = True
+
+    if houve_recalculo:
+        _calcular_totalizadores()
 
 
 def _carregar_td21_volumes(cliente: str = "Todos", categoria: str = "", produto: str = "", ano: int = 2026):
@@ -1451,7 +1599,12 @@ def _calcular_totalizadores():
     st.session_state.dre_dados = dre_dados
 
 
-def _avaliar_formula(formula: str, dre_dados: dict, sazonalidade: Union[Dict, int, None] = None) -> list:
+def _avaliar_formula(
+    formula: str,
+    dre_dados: dict,
+    sazonalidade: Union[Dict, int, None] = None,
+    linha_destino_codigo: Optional[str] = None,
+) -> list:
     """
     Avalia uma fórmula como '=TD71+TD72' ou '=0.05*TD71' ou '=SOMA(TD71)'
     Retorna lista com 12 valores mensais
@@ -1510,7 +1663,8 @@ def _avaliar_formula(formula: str, dre_dados: dict, sazonalidade: Union[Dict, in
             nome_funcao, 
             argumentos, 
             contexto_formula,
-            saz=sazonalidade
+            saz=sazonalidade,
+            linha_destino_codigo=linha_destino_codigo,
         )
         
         # Armazenar resultado
@@ -1721,6 +1875,7 @@ def _recalcular_linha_por_metodologias(dre_dados: dict, codigo: str):
             _normalizar_formula_usuario(met_cfg.get("formula", "")),
             dre_dados,
             sazonalidade=met_cfg.get("sazonalidade"),
+            linha_destino_codigo=codigo,
         )
 
         periodo = m.get("periodo", "Todos")
@@ -1859,7 +2014,7 @@ def _dialog_confirmar_exclusao_metodologia_linha(codigo: str, met_nome: str):
 
 
 def _fmt_dre_valor(v: float) -> str:
-    """Evita mascarar valores pequenos na tabela da DRE."""
+    """Exibe o valor completo da DRE em pt-BR, sem abreviação e sem casas decimais."""
     try:
         val = float(v)
     except Exception:
@@ -1867,13 +2022,7 @@ def _fmt_dre_valor(v: float) -> str:
 
     if val == 0:
         return "0"
-    if abs(val) >= 1_000_000_000:
-        return f"{val/1_000_000_000:.2f} bi"
-    if abs(val) >= 1_000_000:
-        return f"{val/1_000_000:.2f} mi"
-    if abs(val) < 1:
-        return fmt_br(val, casas=3)
-    return fmt_br(val, casas=2)
+    return fmt_br(val, casas=0)
 
 
 def _diagnosticar_formula_sem_efeito(formula: str, dre_dados: dict) -> str:
@@ -1981,17 +2130,17 @@ def _carregar_simulacao_dre_usuario(combo_key: str):
     - valores[12] é recalculado (merge)
     """
     if not _DRE_BACKEND_OK:
-        return
+        return False
 
     usuario_id = st.session_state.get("usuario_id", st.session_state.get("usuario", "anonimo"))
     try:
         escopo = _carregar_simulacao_dre_backend(usuario_id, combo_key)
     except Exception as e:
         _log_dre(f"[DRE] Exceção ao carregar simulação DRE: {e}")
-        return
+        return False
 
     if not escopo:
-        return
+        return False
 
     projecoes_salvas = escopo.get("projecoes", {})
     metodologias_salvas = escopo.get("metodologias", {})
@@ -2030,6 +2179,7 @@ def _carregar_simulacao_dre_usuario(combo_key: str):
 
     st.session_state["dre_dados"] = dre_dados
     _log_dre(f"[DRE] Simulação restaurada do backend: {combo_key}")
+    return True
 
 
 def carregar_dre_usuario(cliente: str, categoria: str, produto: str):
@@ -2713,14 +2863,17 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
         if isinstance(_del_pending, dict) and _del_pending.get("cod") and _del_pending.get("met"):
             _dialog_confirmar_exclusao_metodologia_linha(_del_pending["cod"], _del_pending["met"])
     else:
-        # Escalar valores para bilhões (÷ 1e9) para alinhar com o modo visual que usa "bi"
-        _ESCALA_BI = 1_000_000_000.0
+        # O modo edição trabalha no valor completo para facilitar leitura e conferência.
+        _ESCALA_EDITOR = 1.0
         df_dre_editor = pd.DataFrame(dados_editor)
         for mes in colunas_meses:
             df_dre_editor[mes] = (
                 pd.to_numeric(df_dre_editor[mes], errors="coerce")
                 .astype(float)
-                .div(_ESCALA_BI)
+                .div(_ESCALA_EDITOR)
+            )
+            df_dre_editor[mes] = df_dre_editor[mes].apply(
+                lambda valor: "" if pd.isna(valor) else fmt_br(valor, casas=0)
             )
 
         column_config_editor = {
@@ -2729,13 +2882,10 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
             "Metodologia": st.column_config.TextColumn("Metodologia", width="small", disabled=True),
         }
         for mes in colunas_meses:
-            # Exibe em bilhões (bi) com 2 casas — mesma escala/unidade do modo visual
-            column_config_editor[mes] = st.column_config.NumberColumn(
-                f"{mes} (bi)",
-                width="small",
-                format="%.2f",
-                step=0.01,
-                help="Valor em bilhões (bi). Ex: 2447.78 = R$ 2.447,78 bilhões",
+            column_config_editor[mes] = st.column_config.TextColumn(
+                mes,
+                width="medium",
+                help="Valor completo sem casas decimais. Aceita formatos como 928980649, 928.980.649 ou 928,980,649.",
             )
 
         df_editado = st.data_editor(
@@ -2749,7 +2899,7 @@ def _renderizar_secao_dre_linhas(dre_dados: dict, modo_viz: bool):
             num_rows="fixed",
         )
 
-        _aplicar_edicoes_grade_dre(df_editado, colunas_meses, _ESCALA_BI)
+        _aplicar_edicoes_grade_dre(df_editado, colunas_meses, _ESCALA_EDITOR)
         dre_dados = st.session_state.get("dre_dados", dre_dados)
 
     if st.session_state.get("dre_msg_sucesso_exclusao_tag"):
@@ -3014,6 +3164,7 @@ def renderizar():
             key="dre_ano_filter",
             label_visibility="collapsed"
         )
+        st.session_state.dre_filtros["ano"] = int(ano_sel)
     
     # Modo Visualização
     with col_modo:
@@ -3048,8 +3199,16 @@ def renderizar():
             _persistir_linhas_dre(combo_filtro_anterior)
 
         if not _restaurar_linhas_dre(combo_filtro_atual):
-            _carregar_realizados_dre_linhas(cliente_sel, categoria_sel, produto_sel, ano_sel)
-            _carregar_simulacao_dre_usuario(combo_filtro_atual)
+            _carregar_realizados_dre_linhas(
+                cliente_sel,
+                categoria_sel,
+                produto_sel,
+                ano_sel,
+                resetar_projetado=True,
+            )
+            carregou_backend = _carregar_simulacao_dre_usuario(combo_filtro_atual)
+            if not carregou_backend:
+                _reaplicar_metodologias_no_escopo_atual(st.session_state.get("dre_dados", {}))
 
         _carregar_td21_volumes(cliente_sel, categoria_sel, produto_sel, ano_sel)
         st.session_state.dre_combo_filtro_anterior = combo_filtro_atual
@@ -3104,7 +3263,8 @@ def _renderizar_editor_dre():
     # ========================================================================
     # SEÇÃO 3: ESTRUTURA DA DRE (EXPANDER) - AGORA TERCEIRO
     # ========================================================================
-    with st.expander("ESTRUTURA DA DRE - Projeção Mensal (2026)", expanded=True):
+    ano_exibicao = int(st.session_state.get("dre_ano_filter", 2026))
+    with st.expander(f"ESTRUTURA DA DRE - Projeção Mensal ({ano_exibicao})", expanded=True):
         _renderizar_secao_dre_linhas(dre_dados, modo_viz)
 
 

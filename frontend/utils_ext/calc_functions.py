@@ -210,6 +210,66 @@ def _obter_valor_historico(
     return None
 
 
+def _aplicar_resultados_parciais_na_referencia(
+    item: Dict[str, Any],
+    resultados_anteriores: List[float],
+    ano_referencia: int,
+    ate_mes_exclusivo: int,
+) -> Dict[str, Any]:
+    """Sobrescreve meses futuros já calculados para permitir encadeamento cronológico."""
+    if not isinstance(item, dict) or not resultados_anteriores:
+        return item
+
+    item_override = dict(item)
+    valores = list(item_override.get("valores") or [0.0] * 12)[:12]
+    projetado = list(item_override.get("projetado") or valores)[:12]
+    flags_valores = _normalizar_flags_item(item_override, 12)
+    flags_proj = list(item_override.get("projetado_preenchido") or flags_valores)[:12]
+    mes_corte = int(item_override.get("mes_corte", 0) or 0)
+    serie_filtrada = []
+
+    while len(valores) < 12:
+        valores.append(0.0)
+    while len(projetado) < 12:
+        projetado.append(0.0)
+    while len(flags_proj) < 12:
+        flags_proj.append(False)
+
+    limite = min(max(int(ate_mes_exclusivo) - 1, 0), 12)
+    for idx in range(limite):
+        mes = idx + 1
+        if mes <= mes_corte:
+            continue
+        numero = _coagir_numero_ou_none(resultados_anteriores[idx])
+        if numero is None:
+            continue
+        valores[idx] = numero
+        projetado[idx] = numero
+        flags_valores[idx] = True
+        flags_proj[idx] = True
+
+    for ponto in list(item_override.get("serie_historica") or []):
+        if not isinstance(ponto, dict):
+            continue
+        try:
+            if int(ponto.get("ano")) == int(ano_referencia) and 1 <= int(ponto.get("mes")) < int(ate_mes_exclusivo):
+                continue
+        except Exception:
+            pass
+        serie_filtrada.append(ponto)
+
+    for idx in range(limite):
+        if flags_valores[idx]:
+            serie_filtrada.append({"ano": int(ano_referencia), "mes": idx + 1, "valor": float(valores[idx]), "preenchido": True})
+
+    item_override["valores"] = valores
+    item_override["valores_preenchidos"] = flags_valores
+    item_override["projetado"] = projetado
+    item_override["projetado_preenchido"] = flags_proj
+    item_override["serie_historica"] = serie_filtrada
+    return item_override
+
+
 def _extrair_janela_historica_por_periodo(
     item: Dict[str, Any],
     ano_base: int,
@@ -1165,7 +1225,8 @@ def evaluar_funcao_dinamica_por_mes(
     argumentos: str, 
     dre_dados: Dict,
     saz: Union[Dict, int, None] = None,
-    incluir_indices: bool = True
+    incluir_indices: bool = True,
+    linha_destino_codigo: Optional[str] = None,
 ) -> List[float]:
     """
     Avalia uma função de forma DINÂMICA para cada mês (com sazonalidade e índices).
@@ -1254,6 +1315,32 @@ def evaluar_funcao_dinamica_por_mes(
                     item_contexto = contexto[codigo]
                     ano_base = ano_referencia
                     mes_base = mes_idx + 1
+
+                    if (
+                        linha_destino_codigo
+                        and codigo == linha_destino_codigo
+                        and mes_base > 1
+                        and valores_resultado_12_meses
+                    ):
+                        item_contexto = _aplicar_resultados_parciais_na_referencia(
+                            item_contexto,
+                            valores_resultado_12_meses,
+                            ano_referencia=ano_referencia,
+                            ate_mes_exclusivo=mes_base,
+                        )
+
+                    if (
+                        linha_destino_codigo
+                        and codigo == linha_destino_codigo
+                        and mes_base > 1
+                        and valores_resultado_12_meses
+                    ):
+                        item_contexto = _aplicar_resultados_parciais_na_referencia(
+                            item_contexto,
+                            valores_resultado_12_meses,
+                            ano_referencia=ano_referencia,
+                            ate_mes_exclusivo=mes_base,
+                        )
 
                     if janela is not None:
                         valores_filtrados = _extrair_janela_historica_por_periodo(

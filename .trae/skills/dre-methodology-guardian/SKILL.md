@@ -70,15 +70,17 @@ Use esta skill quando:
 - Regra de calculo:
   1. coleta os valores da referencia no mes corrente ou na janela temporal
   2. ignora meses vazios, preservando zeros explicitos
-  3. ordena os valores
-  4. calcula `total_descartado = floor(n * percentual)`
-  5. ajusta para multiplo par: `total_descartado -= total_descartado % 2`
-  6. remove metade do inicio e do fim
-  7. calcula a media do miolo restante
+  3. quando a referencia for a mesma linha destino e faltarem meses sem realizado na parte futura da janela, reaproveita os resultados ja calculados da propria metodologia nos meses anteriores
+  4. ordena os valores
+  5. calcula `total_descartado = floor(n * percentual)`
+  6. ajusta para multiplo par: `total_descartado -= total_descartado % 2`
+  7. remove metade do inicio e do fim
+  8. calcula a media do miolo restante
 - Regras de entrada:
   - percentual deve estar entre `0` e `1`
   - o uso prioritario e sobre uma linha com janela mensal
   - exemplo de negocio: `TD71 = MEDIA_INTERNA(TD21; 0,2; -6)`
+  - exemplo autorreferente: `TD72 = MEDIA_INTERNA(TD72; 0,33; -6)`; apos calcular `MAI/26`, esse valor passa a compor a janela de `JUN/26` se ainda nao houver realizado no mes correspondente
 
 ### MINIMO
 - Objetivo: retornar o menor valor do conjunto.

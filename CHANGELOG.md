@@ -4,6 +4,16 @@ Histórico de alterações, bugs fixados e features implementadas.
 
 ---
 
+## 🔧 [v4.0.4] - 2026-07-08 - Encadeamento Cronológico da MEDIA_INTERNA
+
+### ✅ CORRIGIDO - Janela histórica agora reutiliza resultados já calculados da própria metodologia
+- **Arquivos:** `frontend/utils_ext/calc_functions.py`, `frontend/pages/dre.py`
+- Quando a fórmula referencia a mesma linha destino com janela histórica, os meses futuros passam a considerar os resultados já calculados da metodologia nos meses anteriores sem realizado
+- Exemplo validado: em `MEDIA_INTERNA(TD72; 0.33; -6)`, `JUN/26` passa a usar `MAI/26` calculado, `JUL/26` passa a usar `MAI/26` + `JUN/26`, e assim sucessivamente
+- Mantida a regra de série histórica real por `ano/mês`, sem retorno à lógica circular
+
+---
+
 ## 🔧 [v4.0.3] - 2026-07-03 - Semântica Excel para Vazio vs Zero
 
 ### ✅ CORRIGIDO - Motor da DRE agora preserva vazio lógico no histórico
